@@ -225,6 +225,344 @@ def generar_cv():
     return response
 
 
+# ── CONFIGURACIÓN NOTION ───────────────────────────────────────────────────
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+NOTION_VERSION = "2022-06-28"
+NOTION_API_URL = "https://api.notion.com/v1/pages"
+
+
+def call_claude_with_retry(prompt, max_tokens=4000, max_retries=3):
+    """Llama a Claude API con retry logic"""
+    import time
+    for attempt in range(max_retries):
+        try:
+            return call_claude(prompt, max_tokens)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            print(f"Retry {attempt + 1}/{max_retries} after error: {e}")
+            time.sleep(2 ** attempt)
+
+
+def cv_agent_analyze(cv_master, empresa, puesto, descripcion):
+    """
+    CV Agent - Sistema de 3 prompts para optimizar CV
+    Retorna: dict con cv_adaptado, score, bullets_optimizados
+    """
+
+    # Prompt 1: Análisis de matching
+    prompt1 = f"""Eres un experto en reclutamiento tech y optimización de CVs.
+
+Analiza este CV Master y la descripción del trabajo.
+Pull every phrase this company uses to describe success.
+List them next to my closest matching bullet points.
+
+CV Master:
+{cv_master}
+
+Job Description:
+Empresa: {empresa}
+Puesto: {puesto}
+Descripción: {descripcion}
+
+Instrucciones:
+1. Identifica las palabras clave y frases que la empresa usa para describir éxito
+2. Mapea cada requisito con mi experiencia más cercana
+3. Identifica gaps (qué me falta mencionar)
+
+Formato de salida (JSON):
+{{
+  "palabras_clave_empresa": ["palabra1", "palabra2", ...],
+  "mapeo_requisitos": [
+    {{"requisito": "...", "match_cv": "...", "score": 85}},
+    ...
+  ],
+  "gaps": ["experiencia en X", "skill Y"]
+}}"""
+
+    print("🤖 CV Agent - Prompt 1: Analizando matching...")
+    analysis = call_claude_with_retry(prompt1, max_tokens=3000)
+
+    # Prompt 2: Optimización
+    prompt2 = f"""Basado en el análisis anterior, genera un CV adaptado optimizado.
+
+CV Master:
+{cv_master}
+
+Job Description:
+Empresa: {empresa}
+Puesto: {puesto}
+Descripción: {descripcion}
+
+Instrucciones:
+1. Reescribe mis bullet points usando EL MISMO LENGUAJE que la empresa usa
+2. NO mientas sobre lo que hice, pero OPTIMIZA cómo lo describes
+3. Destaca la experiencia más relevante para esta oferta
+4. Prioriza skills que menciona la empresa
+5. Mantén un tono profesional pero humano
+6. Máximo 2 páginas de contenido
+
+Para las secciones donde mi experiencia no es 100% match, usa frases como:
+- "Experiencia aplicable en..."
+- "Background sólido en X relevante para Y"
+- "Habilidades transferibles de Z a este rol"
+
+Genera el CV completo en formato markdown."""
+
+    print("🤖 CV Agent - Prompt 2: Generando CV optimizado...")
+    cv_adaptado = call_claude_with_retry(prompt2, max_tokens=6000)
+
+    # Prompt 3: Scoring
+    prompt3 = f"""Compara el CV adaptado con la descripción del trabajo.
+
+CV Adaptado:
+{cv_adaptado}
+
+Job Description:
+Empresa: {empresa}
+Puesto: {puesto}
+Descripción: {descripcion}
+
+Calcula el porcentaje de overlap de lenguaje entre el CV adaptado y la descripción del trabajo.
+Marca en rojo (lista) cualquier sección que esté por debajo del 60%.
+
+Formato de salida (JSON):
+{{
+  "score_matching": 78,
+  "secciones_bajo_60": ["experiencia_angular", "certificacion_aws"],
+  "bullets_optimizados": [
+    {{"original": "Desarrollé aplicaciones con React", "optimizado": "Construí aplicaciones escalables con React..."}}
+  ],
+  "fortalezas": ["Experiencia en liderazgo", "Stack moderno"],
+  "debilidades": ["Menos experiencia en Angular"]
+}}"""
+
+    print("🤖 CV Agent - Prompt 3: Calculando score...")
+    scoring = call_claude_with_retry(prompt3, max_tokens=2000)
+
+    # Extraer JSON del scoring
+    json_match = re.search(r'\{{[\s\S]*\}}', scoring)
+    if json_match:
+        try:
+            scoring_data = json.loads(json_match.group())
+        except:
+            scoring_data = {
+                "score_matching": 75,
+                "secciones_bajo_60": [],
+                "bullets_optimizados": [],
+                "fortalezas": [],
+                "debilidades": []
+            }
+    else:
+        scoring_data = {
+            "score_matching": 75,
+            "secciones_bajo_60": [],
+            "bullets_optimizados": [],
+            "fortalezas": [],
+            "debilidades": []
+        }
+
+    return {
+        "cv_adaptado_markdown": cv_adaptado,
+        "score_matching": scoring_data.get("score_matching", 75),
+        "secciones_bajo_60": scoring_data.get("secciones_bajo_60", []),
+        "bullets_optimizados": scoring_data.get("bullets_optimizados", []),
+        "analysis": analysis
+    }
+
+
+def actualizar_estado_notion(page_id, estado="Aprobar"):
+    """Actualiza el estado de una página en Notion"""
+    url = f"{NOTION_API_URL}/{page_id}"
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type": "application/json"
+    }
+    data = {
+        "properties": {
+            "Estado": {
+                "select": {
+                    "name": estado
+                }
+            }
+        }
+    }
+    response = requests.patch(url, headers=headers, json=data)
+    return response
+
+
+HTML_APROBADO = '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Oferta Aprobada</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); text-align: center; max-width: 400px; }
+        .icon { font-size: 64px; margin-bottom: 20px; }
+        h1 { color: #22C55E; margin: 0 0 16px 0; }
+        p { color: #666; font-size: 16px; line-height: 1.6; }
+        .info { background: #f3f4f6; padding: 12px; border-radius: 8px; margin-top: 20px; font-size: 14px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">✅</div>
+        <h1>¡Oferta Aprobada!</h1>
+        <p>La oferta ha sido marcada para procesamiento. Recibirás un email con la carta y CV adaptado en la próxima ejecución.</p>
+        <div class="info">Próximas ejecuciones: 10:00 y 18:00</div>
+    </div>
+</body>
+</html>'''
+
+HTML_DESCARTADO = '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Oferta Descartada</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); text-align: center; max-width: 400px; }
+        .icon { font-size: 64px; margin-bottom: 20px; }
+        h1 { color: #6B7280; margin: 0 0 16px 0; }
+        p { color: #666; font-size: 16px; line-height: 1.6; }
+        .info { background: #f3f4f6; padding: 12px; border-radius: 8px; margin-top: 20px; font-size: 14px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">🗑️</div>
+        <h1>Oferta Descartada</h1>
+        <p>La oferta ha sido marcada como descartada. No se procesará.</p>
+        <div class="info">La oferta permanecerá en tu base de datos pero no se generará CV ni carta.</div>
+    </div>
+</body>
+</html>'''
+
+HTML_ERROR = '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Error</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); text-align: center; max-width: 400px; }
+        .icon { font-size: 64px; margin-bottom: 20px; }
+        h1 { color: #EF4444; margin: 0 0 16px 0; }
+        p { color: #666; font-size: 16px; line-height: 1.6; }
+        .error-details { background: #fef2f2; padding: 12px; border-radius: 8px; margin-top: 20px; font-size: 14px; color: #991b1b; border: 1px solid #fecaca; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">❌</div>
+        <h1>Error</h1>
+        <p>{message}</p>
+        {error_details}
+    </div>
+</body>
+</html>'''
+
+
+@app.route('/analizar-cv', methods=['POST'])
+def analizar_cv():
+    """Endpoint CV Agent - Analiza y optimiza CV con 3 prompts"""
+    data = request.get_json()
+    cv_master = data.get('cv_master', '')
+    empresa = data.get('empresa', '')
+    puesto = data.get('puesto', '')
+    descripcion = data.get('descripcion', '')
+
+    if not all([cv_master, empresa, puesto]):
+        return jsonify({"error": "Faltan campos requeridos: cv_master, empresa, puesto"}), 400
+
+    try:
+        resultado = cv_agent_analyze(cv_master, empresa, puesto, descripcion)
+        response = jsonify({"success": True, **resultado})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+    except Exception as e:
+        print(f"Error en /analizar-cv: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/aprobar', methods=['GET'])
+def aprobar():
+    """Endpoint para aprobar oferta - actualiza Notion y devuelve HTML"""
+    page_id = request.args.get('id', '')
+
+    if not page_id:
+        html = HTML_ERROR.format(
+            message="Falta el parámetro 'id'",
+            error_details="<div class='error-details'>Uso: /aprobar?id=PAGE_ID</div>"
+        )
+        return html, 400
+
+    try:
+        print(f"[Notion] Actualizando página {page_id} a estado 'Aprobar'...")
+        response = actualizar_estado_notion(page_id, "Aprobar")
+
+        if response.status_code == 200:
+            print(f"[Notion] ✅ Página {page_id} actualizada correctamente")
+            return HTML_APROBADO, 200
+        else:
+            error_msg = f"Error {response.status_code}: {response.text}"
+            print(f"[Notion] ❌ {error_msg}")
+            html = HTML_ERROR.format(
+                message="Error al actualizar en Notion",
+                error_details=f"<div class='error-details'>{error_msg}</div>"
+            )
+            return html, 500
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[Notion] ❌ Excepción: {error_msg}")
+        html = HTML_ERROR.format(
+            message="Error interno del servidor",
+            error_details=f"<div class='error-details'>{error_msg}</div>"
+        )
+        return html, 500
+
+
+@app.route('/descartar', methods=['GET'])
+def descartar():
+    """Endpoint para descartar oferta - actualiza Notion y devuelve HTML"""
+    page_id = request.args.get('id', '')
+
+    if not page_id:
+        html = HTML_ERROR.format(
+            message="Falta el parámetro 'id'",
+            error_details="<div class='error-details'>Uso: /descartar?id=PAGE_ID</div>"
+        )
+        return html, 400
+
+    try:
+        print(f"[Notion] Actualizando página {page_id} a estado 'Descartado'...")
+        response = actualizar_estado_notion(page_id, "Descartado")
+
+        if response.status_code == 200:
+            print(f"[Notion] ✅ Página {page_id} marcada como descartada")
+            return HTML_DESCARTADO, 200
+        else:
+            error_msg = f"Error {response.status_code}: {response.text}"
+            print(f"[Notion] ❌ {error_msg}")
+            html = HTML_ERROR.format(
+                message="Error al actualizar en Notion",
+                error_details=f"<div class='error-details'>{error_msg}</div>"
+            )
+            return html, 500
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[Notion] ❌ Excepción: {error_msg}")
+        html = HTML_ERROR.format(
+            message="Error interno del servidor",
+            error_details=f"<div class='error-details'>{error_msg}</div>"
+        )
+        return html, 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok"})
