@@ -169,7 +169,7 @@ def generar_y_subir_cv(empresa, puesto, descripcion):
 
         buffer = generar_docx_buffer(cv)
 
-        folder_id = crear_carpeta_drive(service, folder_name, FOLDER_GENERADOS)
+        folder_id = FOLDER_GENERADOS
 
         link = subir_a_drive(service, buffer, file_name, folder_id)
 
