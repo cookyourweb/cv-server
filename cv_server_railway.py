@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 
 from flask import Flask, request, jsonify
-import os, re, requests, io
+import os, re, requests, io, logging
 from datetime import datetime
+
+# Config logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
@@ -42,6 +46,8 @@ def get_drive_service():
     return build("drive", "v3", credentials=creds)
 
 def leer_cv_master(service):
+    logger.info(f"Buscando CV_Master en folder {FOLDER_CV}...")
+
     res = service.files().list(
         q=f"name='CV_Master_Veronica.txt' and '{FOLDER_CV}' in parents and trashed=false",
         fields="files(id)"
@@ -51,6 +57,7 @@ def leer_cv_master(service):
         raise Exception("No se encontró CV_Master")
 
     file_id = res["files"][0]["id"]
+    logger.info(f"CV_Master encontrado: {file_id}")
 
     req = service.files().get_media(fileId=file_id)
     buffer = io.BytesIO()
@@ -61,6 +68,7 @@ def leer_cv_master(service):
         _, done = downloader.next_chunk()
 
     buffer.seek(0)
+    logger.info("CV_Master leído exitosamente")
     return buffer.read().decode("utf-8")
 
 def subir_a_drive(service, file_buffer, file_name, folder_id):
@@ -72,11 +80,13 @@ def subir_a_drive(service, file_buffer, file_name, folder_id):
         fields="id, webViewLink"
     ).execute()
 
+    # Compartir archivo públicamente
     service.permissions().create(
         fileId=archivo["id"],
         body={"type": "anyone", "role": "reader"}
     ).execute()
 
+    logger.info(f"Archivo subido: {archivo.get('webViewLink')}")
     return archivo.get("webViewLink")
 
 # ── CLAUDE ─────────────────────────────────────────────
@@ -93,7 +103,8 @@ def call_claude(prompt):
             "model": "claude-sonnet-4-6",
             "max_tokens": 6000,
             "messages": [{"role": "user", "content": prompt}]
-        }
+        },
+        timeout=120  # 2 minutos timeout
     )
 
     data = response.json()
@@ -139,11 +150,16 @@ def generar_docx_buffer(cv_texto):
 # ── CORE ─────────────────────────────────────────────
 
 def generar_y_subir_cv(empresa, puesto, descripcion):
+    logger.info(f"Iniciando generación de CV para {empresa} - {puesto}")
+
     try:
+        logger.info("Obteniendo servicio de Drive...")
         service = get_drive_service()
 
+        logger.info("Leyendo CV Master...")
         cv_master = leer_cv_master(service)
 
+        logger.info("Generando CV adaptado con Claude...")
         cv = generar_cv_adaptado(cv_master, empresa, puesto, descripcion)
 
         fecha = datetime.now().strftime("%Y-%m-%d")
@@ -152,11 +168,15 @@ def generar_y_subir_cv(empresa, puesto, descripcion):
 
         file_name = f"{fecha}_{empresa_slug}_{puesto_slug}.docx"
 
+        logger.info("Generando DOCX buffer...")
         buffer = generar_docx_buffer(cv)
 
         folder_id = FOLDER_GENERADOS
 
+        logger.info(f"Subiendo a Drive: {file_name}...")
         link = subir_a_drive(service, buffer, file_name, folder_id)
+
+        logger.info(f"CV generado exitosamente: {link}")
 
         return {
             "success": True,
@@ -164,7 +184,7 @@ def generar_y_subir_cv(empresa, puesto, descripcion):
         }
 
     except Exception as e:
-        print("ERROR:", e)
+        logger.error(f"ERROR en generación de CV: {str(e)}", exc_info=True)
         return {
             "success": False,
             "error": str(e)
