@@ -57,26 +57,6 @@ def leer_cv_master(service):
     buffer.seek(0)
     return buffer.read().decode("utf-8")
 
-def crear_carpeta_drive(service, nombre, parent_id):
-    res = service.files().list(
-        q=f"name='{nombre}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
-        fields="files(id)"
-    ).execute()
-
-    if res["files"]:
-        return res["files"][0]["id"]
-
-    folder = service.files().create(
-        body={
-            "name": nombre,
-            "mimeType": "application/vnd.google-apps.folder",
-            "parents": [parent_id]
-        },
-        fields="id"
-    ).execute()
-
-    return folder["id"]
-
 def subir_a_drive(service, file_buffer, file_name, folder_id):
     media = MediaIoBaseUpload(file_buffer, mimetype=MIME_DOCX, resumable=True)
 
@@ -164,8 +144,7 @@ def generar_y_subir_cv(empresa, puesto, descripcion):
         empresa_slug = re.sub(r'[^a-zA-Z0-9]', '-', empresa)
         puesto_slug = re.sub(r'[^a-zA-Z0-9]', '-', puesto)
 
-        folder_name = f"{fecha}_{empresa_slug}_{puesto_slug}"
-        file_name   = f"CV_{empresa_slug}.docx"
+        file_name = f"{fecha}_{empresa_slug}_{puesto_slug}.docx"
 
         buffer = generar_docx_buffer(cv)
 
