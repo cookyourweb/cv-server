@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 from flask import Flask, request, jsonify
-import json, os, re, requests, base64, io
+import os, re, requests, io
 from datetime import datetime
 
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 
@@ -19,7 +19,11 @@ app = Flask(__name__)
 FOLDER_GENERADOS = os.getenv("FOLDER_GENERADOS")
 FOLDER_CV        = os.getenv("FOLDER_CV")
 CLAUDE_API_KEY   = os.getenv("CLAUDE_API_KEY")
-GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
+
+# OAuth credentials (no más service account)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN")
 
 MIME_DOCX     = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -27,10 +31,12 @@ GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 # ── DRIVE ─────────────────────────────────────────────
 
 def get_drive_service():
-    creds_json = base64.b64decode(GOOGLE_CREDENTIALS).decode("utf-8")
-    creds_dict = json.loads(creds_json)
-    creds = service_account.Credentials.from_service_account_info(
-        creds_dict,
+    creds = Credentials(
+        token=None,  # No access token, usamos refresh token
+        refresh_token=GOOGLE_REFRESH_TOKEN,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
         scopes=GOOGLE_SCOPES
     )
     return build("drive", "v3", credentials=creds)
