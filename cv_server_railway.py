@@ -68,52 +68,73 @@ def call_claude(prompt, max_tokens=6000):
 def generar_cv_adaptado(cv_master, empresa, puesto, descripcion):
     prompt = f"""Eres el asistente de Verónica Serna, Senior Frontend Developer con 15+ años de experiencia.
 
-CV Master completo:
+CV Master:
 {cv_master}
 
-Genera un CV adaptado para esta oferta:
+OFERTA:
 - Empresa: {empresa}
 - Puesto: {puesto}
 - Descripción: {descripcion}
 
-INSTRUCCIONES:
-1. Selecciona SOLO la experiencia relevante para esta oferta
-2. Reordena skills por relevancia para el puesto
-3. Adapta el perfil profesional a lo que busca la empresa
-4. Tono directo y profesional, sin frases genéricas
-5. Máximo 2 páginas
-6. NO incluyas cabecera (nombre/contacto) — se añade automáticamente
+TASK: Genera SOLO el contenido del CV adaptado. Sin markdown, sin ```, sin #, sin intro.
 
-FORMATO EXACTO (usa estas secciones tal cual):
+FORMATO DE SALIDA (contenido crudo, una línea por elemento):
 
 PERFIL PROFESIONAL
-[3-4 líneas adaptadas a esta oferta]
+[2-3 líneas adaptadas a la oferta]
 
 EXPERIENCIA PROFESIONAL
-
-CookYourWebAI — Madrid (Remoto)
-Lead Frontend Engineer & AI Integration Specialist
-Mayo 2024 – Actualidad
-- Logro relevante para esta oferta
-- Otro logro
-
-Bitcode Technology (para Ayvens) — Madrid
-Tech Lead & Senior Frontend Developer
-2017 – Mayo 2024
-- Logro relevante
-- Otro logro
+Empresa — Ciudad
+Puesto
+Fecha inicio – Fecha fin
+- Logro 1
+- Logro 2
 
 HABILIDADES TÉCNICAS
-React · TypeScript · Next.js · [ordenadas por relevancia]
+[Skills ordenadas por relevancia]
 
 FORMACIÓN
-Máster en IA aplicada — AiFunnelLabs (En curso 2025)
-Bootcamp Full Stack Mobile — KeepCoding (2023)
+Título — Institución (Año)
 
 IDIOMAS
-Español: Nativo
-Inglés: Alto"""
-    return call_claude(prompt)
+Idioma: Nivel
+
+REGLAS:
+- NO uses markdown (**, #, ```, -)
+- NO incluyas cabecera (nombre/email/teléfono)
+- NO añadas texto introductorio ni conclusiones
+- USA guiones normales (-) para bullets
+- SEPARA secciones con línea en blanco
+- MÁXIMO 2 páginas de contenido"""
+
+    response = call_claude(prompt)
+
+    # Limpiar respuesta: quitar bloques markdown y texto extra
+    lines = response.strip().split('\n')
+    cleaned_lines = []
+
+    in_code_block = False
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip bloques de código markdown
+        if stripped.startswith('```'):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+
+        # Skip líneas introductorias
+        if stripped.lower().startswith(('aquí', 'here', 'este', 'this', 'espero', 'i hope')):
+            continue
+
+        # Limpiar markdown residual
+        clean = stripped.replace('**', '').replace('`', '').replace('#', '').strip()
+
+        if clean:
+            cleaned_lines.append(clean)
+
+    return '\n'.join(cleaned_lines)
 
 
 def add_border_bottom(paragraph):
