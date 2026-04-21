@@ -892,6 +892,8 @@ def registro():
     try:
         payload = {k: v for k, v in data.items() if k != "accion"}
         r = requests.post(N8N_WEBHOOK_NUEVO, json=payload, timeout=15)
+
+        
         if r.status_code >= 400:
             return jsonify({"error": f"Webhook nuevo-usuario falló: {r.status_code}"}), 500
     except Exception as e:
