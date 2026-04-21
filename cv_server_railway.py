@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
 """
-CV Server v2 — MULTI-USER
+CV Server v2 — MULTI-USER (OAuth mode)
 
-Cambios principales vs v1:
-- /generar-cv ahora requiere `email` o `user_id` para identificar al usuario
-- Lee CV Master dinámicamente según usuario
-- Cabecera DOCX dinámica (nombre, email, teléfono, linkedin, ciudad desde Notion)
-- Agente revisor de CV integrado en el prompt (sin llamada extra)
-- Endpoint /registro (HTML + POST handler) para formulario
-- Sin variables hardcoded: todo desde Notion DB Usuarios
-
-URL producción: https://cv-server-ggd8.onrender.com
+Usa Google OAuth (CLIENT_ID + CLIENT_SECRET + REFRESH_TOKEN) en lugar de service account.
 """
 
 from flask import Flask, request, jsonify, render_template_string
@@ -35,7 +27,6 @@ FOLDER_GENERADOS = os.getenv("FOLDER_GENERADOS", "1tHuVOIz3ratjRp8AmHsF0kGVpmy9D
 FOLDER_CV_MASTERS = os.getenv("FOLDER_CV_MASTERS") or os.getenv("FOLDER_CV", "1duJA_G3lLbOqiUYoSJcsXAvbtJUdcmzR")
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 
-# Google OAuth (se usan las 3 vars que ya están en Render)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN")
@@ -55,7 +46,7 @@ GREY = RGBColor(0x66, 0x66, 0x66)
 
 
 # ─────────────────────────────────────────────
-# NOTION — LECTURA DE USUARIOS
+# NOTION
 # ─────────────────────────────────────────────
 def notion_headers():
     return {
@@ -66,7 +57,6 @@ def notion_headers():
 
 
 def buscar_usuario_por_email(email):
-    """Busca un user en DB Usuarios por email. Devuelve el dict plano o None."""
     r = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
         headers=notion_headers(),
@@ -82,7 +72,6 @@ def buscar_usuario_por_email(email):
 
 
 def normalizar_perfil(notion_page):
-    """Convierte una página Notion a un dict plano."""
     p = notion_page.get("properties", {})
     return {
         "user_id": notion_page.get("id", ""),
@@ -97,19 +86,15 @@ def normalizar_perfil(notion_page):
         "ciudad":  (p.get("Ciudad", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
         "linkedin":p.get("LinkedIn", {}).get("url", "") or "",
         "cv_master_url": p.get("CV Master URL", {}).get("url", "") or "",
-        # Teléfono no está en DB Usuarios aún — podemos añadirlo si quieres
         "telefono":(p.get("Telefono", {}).get("phone_number", "") or "")
     }
 
 
 # ─────────────────────────────────────────────
-# GOOGLE DRIVE
+# GOOGLE DRIVE (OAuth)
 # ─────────────────────────────────────────────
 def get_drive_service():
-    """
-    Autentica con Google Drive usando OAuth (CLIENT_ID + CLIENT_SECRET + REFRESH_TOKEN).
-    Genera un access_token válido a partir del refresh_token.
-    """
+    """Autentica con Google Drive usando OAuth (CLIENT_ID + CLIENT_SECRET + REFRESH_TOKEN)."""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET or not GOOGLE_REFRESH_TOKEN:
         raise Exception(
             "Faltan variables Google OAuth. "
@@ -117,7 +102,7 @@ def get_drive_service():
         )
 
     creds = Credentials(
-        token=None,  # se renueva automáticamente con el refresh_token
+        token=None,
         refresh_token=GOOGLE_REFRESH_TOKEN,
         token_uri="https://oauth2.googleapis.com/token",
         client_id=GOOGLE_CLIENT_ID,
@@ -125,7 +110,6 @@ def get_drive_service():
         scopes=GOOGLE_SCOPES
     )
 
-    # Renovar el access_token
     try:
         creds.refresh(Request())
     except Exception as e:
@@ -135,28 +119,17 @@ def get_drive_service():
 
 
 def leer_cv_master_por_email(service, email):
-    """
-    Busca el CV Master del usuario.
-
-    Prioridad:
-    1. Si el usuario tiene cv_master_url en Notion → descarga desde ahí
-    2. Si no, busca en FOLDER_CV_MASTERS un archivo con nombre CV_Master_{email}.txt o {email}.txt
-    3. Si no encuentra nada → exception
-    """
     usuario = buscar_usuario_por_email(email)
     if not usuario:
         raise Exception(f"Usuario {email} no encontrado en Notion DB Usuarios")
 
-    # Opción 1: URL directo en Notion
     if usuario.get("cv_master_url"):
-        # Extraer file ID del link de Drive
         url = usuario["cv_master_url"]
         m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'id=([a-zA-Z0-9_-]+)', url)
         if m:
             file_id = m.group(1)
             return _descargar_txt(service, file_id), usuario
 
-    # Opción 2: por convención de nombre
     email_slug = email.replace("@", "_at_").replace(".", "_")
     nombres_posibles = [
         f"CV_Master_{email_slug}.txt",
@@ -172,20 +145,19 @@ def leer_cv_master_por_email(service, email):
         if files:
             return _descargar_txt(service, files[0]["id"]), usuario
 
-    # Fallback: CV Master legacy (para Verónica mientras migra)
+    # Fallback legacy
     results = service.files().list(
         q=f"name='CV_Master_Veronica.txt' and '{FOLDER_CV_MASTERS}' in parents and trashed=false",
         fields="files(id)"
     ).execute()
     files = results.get("files", [])
     if files and email == "hello.cookyourweb@gmail.com":
-        print(f"⚠️  Usando CV_Master_Veronica.txt (fallback legacy) para {email}")
         return _descargar_txt(service, files[0]["id"]), usuario
 
     raise Exception(
         f"No se encontró CV Master para {email}. "
-        f"Sube un archivo con uno de estos nombres a la carpeta Drive {FOLDER_CV_MASTERS}: "
-        f"{', '.join(nombres_posibles)} — o rellena 'CV Master URL' en Notion DB Usuarios."
+        f"Sube un archivo con nombre CV_Master_{email_slug}.txt a la carpeta Drive {FOLDER_CV_MASTERS} "
+        f"o rellena 'CV Master URL' en Notion DB Usuarios."
     )
 
 
@@ -229,10 +201,6 @@ def call_claude(prompt, max_tokens=6000):
 
 
 def generar_cv_adaptado(cv_master, empresa, puesto, descripcion, usuario):
-    """
-    Prompt AGENTE REVISOR + GENERADOR en una sola llamada.
-    Claude hace primero el análisis de encaje y luego adapta el CV.
-    """
     nombre = usuario["nombre"]
     perfil_libre = usuario.get("perfil", "")
     rol_objetivo = usuario.get("rol", "")
@@ -252,7 +220,7 @@ STEP 2 — OUTPUT: Generate ONLY the adapted CV content following these rules.
 CANDIDATE CONTEXT:
 - Name: {nombre}
 - Target role: {rol_objetivo or 'Not specified'}
-- Candidate's own words about what they want: {perfil_libre or 'Not specified'}
+- Candidate's own words: {perfil_libre or 'Not specified'}
 
 MASTER CV:
 {cv_master}
@@ -263,17 +231,17 @@ OFFER:
 - Description: {descripcion}
 
 NON-NEGOTIABLE RULES:
-1. QUANTIFY EVERY BULLET — numbers, %, $, measurable impact
-2. CUT GENERIC LANGUAGE — no "responsible for", "involved in", "worked on"
-3. LEAD WITH PROOF — strongest achievement first in each role
-4. MATCH OFFER KEYWORDS HONESTLY — use terms from the offer where applicable, never invent experience
-5. ORDER SKILLS BY RELEVANCE TO THIS OFFER (not alphabetical)
+1. QUANTIFY EVERY BULLET
+2. CUT GENERIC LANGUAGE
+3. LEAD WITH PROOF
+4. MATCH OFFER KEYWORDS HONESTLY
+5. ORDER SKILLS BY RELEVANCE
 6. MAXIMUM 2 PAGES
 
 OUTPUT FORMAT (plain text, no markdown):
 
 PERFIL PROFESIONAL
-[2-3 líneas adaptadas específicamente para esta oferta]
+[2-3 líneas]
 
 EXPERIENCIA PROFESIONAL
 Empresa — Ciudad
@@ -283,7 +251,7 @@ Fecha inicio – Fecha fin
 - Logro 2 con métrica
 
 HABILIDADES TÉCNICAS
-[Skills ordenadas por relevancia a esta oferta]
+[Skills ordenadas por relevancia]
 
 FORMACIÓN
 Título — Institución (Año)
@@ -300,7 +268,6 @@ RULES:
 
     response = call_claude(prompt)
 
-    # Limpiar respuesta
     lines = response.strip().split('\n')
     cleaned = []
     in_code = False
@@ -320,7 +287,7 @@ RULES:
 
 
 # ─────────────────────────────────────────────
-# DOCX GENERATION (cabecera dinámica)
+# DOCX
 # ─────────────────────────────────────────────
 def add_border_bottom(paragraph):
     pPr = paragraph._p.get_or_add_pPr()
@@ -335,9 +302,6 @@ def add_border_bottom(paragraph):
 
 
 def generar_docx(cv_texto, output_path, usuario):
-    """
-    Construye el DOCX con la cabecera PERSONALIZADA del usuario.
-    """
     doc = Document()
     style = doc.styles['Normal']
     style.font.name = 'Calibri'
@@ -349,7 +313,6 @@ def generar_docx(cv_texto, output_path, usuario):
         section.left_margin = Cm(2)
         section.right_margin = Cm(2)
 
-    # ─── CABECERA DINÁMICA ───
     nombre = usuario.get("nombre", "Candidato")
     rol = usuario.get("rol", "")
     ciudad = usuario.get("ciudad", "")
@@ -357,7 +320,6 @@ def generar_docx(cv_texto, output_path, usuario):
     email = usuario.get("email", "")
     linkedin = usuario.get("linkedin", "")
 
-    # Nombre en grande
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r = p.add_run(nombre.upper())
@@ -365,7 +327,6 @@ def generar_docx(cv_texto, output_path, usuario):
     r.font.size = Pt(18)
     r.font.color.rgb = DARK
 
-    # Rol / título
     if rol:
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -373,7 +334,6 @@ def generar_docx(cv_texto, output_path, usuario):
         r.font.size = Pt(11)
         r.font.color.rgb = BLUE
 
-    # Línea de contacto
     contact_parts = [c for c in [ciudad, telefono, email, linkedin.replace("https://", "").replace("http://", "")] if c]
     if contact_parts:
         p = doc.add_paragraph()
@@ -382,11 +342,9 @@ def generar_docx(cv_texto, output_path, usuario):
         r.font.size = Pt(8.5)
         r.font.color.rgb = GREY
 
-    # Separador
     p = doc.add_paragraph()
     add_border_bottom(p)
 
-    # ─── CONTENIDO ───
     SECTIONS = ['PERFIL PROFESIONAL', 'EXPERIENCIA PROFESIONAL', 'EXPERIENCIA',
                 'HABILIDADES TÉCNICAS', 'HABILIDADES', 'FORMACIÓN', 'IDIOMAS',
                 'COMPETENCIAS', 'PROYECTOS', 'CERTIFICACIONES', 'EDUCACIÓN']
@@ -395,14 +353,12 @@ def generar_docx(cv_texto, output_path, usuario):
         line = line.strip()
         if not line:
             continue
-        # Skip si Claude generó cabecera por error
         if nombre.upper() in line.upper() or line.startswith('# '):
             continue
 
         clean = re.sub(r'^#{1,3}\s*', '', line).strip().replace('```', '')
         clean_upper = re.sub(r'\*\*', '', clean).upper().strip()
 
-        # Sección
         if any(kw in clean_upper for kw in SECTIONS) and len(clean) < 40:
             p = doc.add_paragraph()
             r = p.add_run(re.sub(r'\*\*', '', clean).upper())
@@ -412,7 +368,6 @@ def generar_docx(cv_texto, output_path, usuario):
             p.paragraph_format.space_after = Pt(6)
             continue
 
-        # Bullet
         if line.startswith(('- ', '• ', '* ')):
             texto = re.sub(r'\*\*(.*?)\*\*', r'\1', line[2:].strip())
             p = doc.add_paragraph()
@@ -422,7 +377,6 @@ def generar_docx(cv_texto, output_path, usuario):
             p.paragraph_format.space_after = Pt(2)
             continue
 
-        # Empresa — Ciudad
         if ('—' in line or ' – ' in line) and len(line) < 100:
             texto = re.sub(r'\*\*(.*?)\*\*', r'\1', line)
             p = doc.add_paragraph()
@@ -432,7 +386,6 @@ def generar_docx(cv_texto, output_path, usuario):
             p.paragraph_format.space_after = Pt(1)
             continue
 
-        # Fechas
         if re.search(r'(20\d{2}|19\d{2})', line) and len(line) < 60:
             texto = re.sub(r'\*\*(.*?)\*\*', r'\1', line).replace('`', '')
             p = doc.add_paragraph()
@@ -441,7 +394,6 @@ def generar_docx(cv_texto, output_path, usuario):
             p.paragraph_format.space_after = Pt(3)
             continue
 
-        # Texto normal
         texto = re.sub(r'\*\*(.*?)\*\*', r'\1', clean).replace('`', '')
         if texto:
             p = doc.add_paragraph()
@@ -475,7 +427,7 @@ def subir_a_drive(service, file_path, file_name, folder_id):
 
 
 # ─────────────────────────────────────────────
-# ORQUESTADOR PRINCIPAL
+# ORQUESTADOR
 # ─────────────────────────────────────────────
 def generar_y_subir_cv(email, empresa, puesto, descripcion):
     steps = []
@@ -492,15 +444,12 @@ def generar_y_subir_cv(email, empresa, puesto, descripcion):
         cv_adaptado = generar_cv_adaptado(cv_master, empresa, puesto, descripcion, usuario)
         steps.append("claude_generate")
 
-        # Carpeta por usuario: {fecha}_{empresa}_{puesto} dentro de subcarpeta del user
         fecha = datetime.now().strftime("%Y-%m-%d")
         email_slug = re.sub(r'[^a-zA-Z0-9]', '-', email)[:30]
         empresa_slug = re.sub(r'[^a-zA-Z0-9]', '-', empresa)[:30]
         puesto_slug = re.sub(r'[^a-zA-Z0-9]', '-', puesto)[:30]
 
-        # Carpeta del usuario
         folder_user = crear_carpeta_drive(service, email_slug, FOLDER_GENERADOS)
-        # Subcarpeta de la oferta
         folder_oferta = crear_carpeta_drive(service, f"{fecha}_{empresa_slug}_{puesto_slug}", folder_user)
 
         nombre_archivo = f"CV_{usuario['nombre'].replace(' ', '_')}_{empresa_slug}.docx"
@@ -587,14 +536,12 @@ def health():
 def debug():
     results = {"version": "v2-multiuser-oauth"}
 
-    # 1. Claude
     try:
         r = call_claude("Say only: OK", max_tokens=10)
         results["claude"] = {"status": "ok", "response": r}
     except Exception as e:
         results["claude"] = {"status": "error", "error": str(e)}
 
-    # 2. Drive
     try:
         service = get_drive_service()
         res = service.files().list(
@@ -608,7 +555,6 @@ def debug():
     except Exception as e:
         results["drive"] = {"status": "error", "error": str(e)}
 
-    # 3. Notion DB Usuarios
     try:
         r = requests.post(
             f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
@@ -670,8 +616,6 @@ HTML_REGISTRO = """<!DOCTYPE html>
   .check-item { padding: 8px 14px; border: 1px solid #ddd; border-radius: 20px; cursor: pointer; font-size: 13px; user-select: none; transition: all 0.2s; }
   .check-item.active { background: #1F5C8B; color: white; border-color: #1F5C8B; }
   .hint { font-size: 12px; color: #888; margin-top: 4px; }
-  .success { background: #ECFDF5; border: 1px solid #22C55E; color: #15803D; padding: 16px; border-radius: 8px; margin-top: 16px; }
-  .error { background: #FEF2F2; border: 1px solid #EF4444; color: #B91C1C; padding: 16px; border-radius: 8px; margin-top: 16px; }
   .button-row { display: flex; gap: 12px; margin-top: 24px; }
   .button-row .btn { margin-top: 0; }
 </style>
@@ -679,7 +623,6 @@ HTML_REGISTRO = """<!DOCTYPE html>
 <body>
 <div class="container">
 
-  <!-- PANTALLA 1: Formulario inicial -->
   <div id="screen1" class="screen active">
     <h1>🎯 BuscarTrabajo</h1>
     <p class="subtitle">Te buscamos trabajo mientras duermes. Cuéntanos qué buscas.</p>
@@ -728,16 +671,15 @@ HTML_REGISTRO = """<!DOCTYPE html>
 
       <label>CV Master (link Google Drive, opcional)</label>
       <input type="url" name="cv_master_url" placeholder="https://drive.google.com/file/d/...">
-      <p class="hint">Deja el enlace de tu CV base en Drive (con permiso de lectura). Si no, sube el archivo con tu email como nombre a nuestra carpeta.</p>
+      <p class="hint">Deja el enlace de tu CV base en Drive con permiso de lectura.</p>
 
       <label>Cuéntanos qué buscas (libre) *</label>
-      <textarea name="perfil" required placeholder="Busco un rol de Tech Lead Frontend en empresa de producto, stack moderno, equipos multidisciplinares. Valoro cultura remote-first y proyectos con impacto..."></textarea>
+      <textarea name="perfil" required placeholder="Busco un rol de Tech Lead Frontend en empresa de producto..."></textarea>
 
       <button type="submit" class="btn" id="btn1">🚀 Empezar</button>
     </form>
   </div>
 
-  <!-- PANTALLA 2: Usuario existente -->
   <div id="screen2" class="screen">
     <h1 id="saludo">¡Hola de nuevo!</h1>
     <p class="subtitle">¿Cuándo quieres que busquemos ofertas?</p>
@@ -747,7 +689,6 @@ HTML_REGISTRO = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- PANTALLA 3: Confirmación -->
   <div id="screen3" class="screen">
     <h1>✅ ¡Listo!</h1>
     <p class="subtitle" id="confirmacion">Todo en orden.</p>
@@ -756,7 +697,6 @@ HTML_REGISTRO = """<!DOCTYPE html>
 </div>
 
 <script>
-  // Multi-select chips
   document.querySelectorAll('.check-group').forEach(group => {
     group.querySelectorAll('.check-item').forEach(item => {
       item.addEventListener('click', () => item.classList.toggle('active'));
@@ -861,10 +801,8 @@ def registro():
     if not email:
         return jsonify({"error": "Email requerido"}), 400
 
-    # Acción del usuario existente
     if accion in ("ahora", "manana"):
         if accion == "ahora":
-            # Disparar webhook buscar-ahora (async, no esperamos)
             try:
                 requests.post(
                     N8N_WEBHOOK_BUSCAR,
@@ -875,7 +813,6 @@ def registro():
                 print(f"⚠️ Webhook buscar-ahora falló: {e}")
         return jsonify({"estado": "ok", "accion": accion})
 
-    # Registro inicial — comprobar si existe
     try:
         usuario = buscar_usuario_por_email(email)
     except Exception as e:
@@ -888,12 +825,9 @@ def registro():
             "email": email
         })
 
-    # Usuario nuevo — disparar webhook (n8n crea en Notion)
     try:
         payload = {k: v for k, v in data.items() if k != "accion"}
         r = requests.post(N8N_WEBHOOK_NUEVO, json=payload, timeout=15)
-
-        
         if r.status_code >= 400:
             return jsonify({"error": f"Webhook nuevo-usuario falló: {r.status_code}"}), 500
     except Exception as e:
