@@ -1,0 +1,32 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# Credentials (NO subir nunca)
+get_token.py
+client_secret.json
+client_secret.json.xml
+credentials.json
+token.pickle
+*.pem
+*.key
+
+# Logs
+*.log
+
+# IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Locales
+*.tmp
+*.temp
