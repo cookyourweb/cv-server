@@ -21,7 +21,8 @@ from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 
@@ -30,14 +31,19 @@ app = Flask(__name__)
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN
 # ─────────────────────────────────────────────
-FOLDER_GENERADOS = os.getenv("FOLDER_GENERADOS")
-FOLDER_CV_MASTERS = os.getenv("FOLDER_CV_MASTERS")
+FOLDER_GENERADOS = os.getenv("FOLDER_GENERADOS", "1tHuVOIz3ratjRp8AmHsF0kGVpmy9DocY")
+FOLDER_CV_MASTERS = os.getenv("FOLDER_CV_MASTERS") or os.getenv("FOLDER_CV", "1duJA_G3lLbOqiUYoSJcsXAvbtJUdcmzR")
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
-GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
-NOTION_TOKEN = os.getenv("NOTION_TOKEN")
-NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS")
-N8N_WEBHOOK_NUEVO = os.getenv("N8N_WEBHOOK_NUEVO")
-N8N_WEBHOOK_BUSCAR = os.getenv("N8N_WEBHOOK_BUSCAR")
+
+# Google OAuth (se usan las 3 vars que ya están en Render)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN")
+
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "ntn_G464872773099dpLY7OzD7I4ZeZee38rKHsoVlmCV2z7A0")
+NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "34811515f4b280f19a42f8da5e91a8fe")
+N8N_WEBHOOK_NUEVO = os.getenv("N8N_WEBHOOK_NUEVO", "https://n8n-qwmu.onrender.com/webhook/nuevo-usuario")
+N8N_WEBHOOK_BUSCAR = os.getenv("N8N_WEBHOOK_BUSCAR", "https://n8n-qwmu.onrender.com/webhook/buscar-ahora")
 
 CLAUDE_MODEL = "claude-sonnet-4-6"
 MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -100,11 +106,31 @@ def normalizar_perfil(notion_page):
 # GOOGLE DRIVE
 # ─────────────────────────────────────────────
 def get_drive_service():
-    if not GOOGLE_CREDENTIALS:
-        raise Exception("Variable GOOGLE_CREDENTIALS no configurada")
-    creds_json = base64.b64decode(GOOGLE_CREDENTIALS).decode("utf-8")
-    creds_dict = json.loads(creds_json)
-    creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=GOOGLE_SCOPES)
+    """
+    Autentica con Google Drive usando OAuth (CLIENT_ID + CLIENT_SECRET + REFRESH_TOKEN).
+    Genera un access_token válido a partir del refresh_token.
+    """
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET or not GOOGLE_REFRESH_TOKEN:
+        raise Exception(
+            "Faltan variables Google OAuth. "
+            "Configura GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET y GOOGLE_REFRESH_TOKEN en Render."
+        )
+
+    creds = Credentials(
+        token=None,  # se renueva automáticamente con el refresh_token
+        refresh_token=GOOGLE_REFRESH_TOKEN,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=GOOGLE_SCOPES
+    )
+
+    # Renovar el access_token
+    try:
+        creds.refresh(Request())
+    except Exception as e:
+        raise Exception(f"No se pudo renovar el access_token Google OAuth: {e}")
+
     return build("drive", "v3", credentials=creds)
 
 
@@ -539,22 +565,27 @@ def endpoint_generar_cv():
 def health():
     return jsonify({
         "status": "ok",
-        "version": "v2-multiuser",
+        "version": "v2-multiuser-oauth",
         "model": CLAUDE_MODEL,
+        "auth_mode": "oauth",
         "env_vars": {
             "CLAUDE_API_KEY":       "✅" if CLAUDE_API_KEY else "❌ FALTA",
-            "GOOGLE_CREDENTIALS":   "✅" if GOOGLE_CREDENTIALS else "❌ FALTA",
+            "GOOGLE_CLIENT_ID":     "✅" if GOOGLE_CLIENT_ID else "❌ FALTA",
+            "GOOGLE_CLIENT_SECRET": "✅" if GOOGLE_CLIENT_SECRET else "❌ FALTA",
+            "GOOGLE_REFRESH_TOKEN": "✅" if GOOGLE_REFRESH_TOKEN else "❌ FALTA",
             "NOTION_TOKEN":         "✅" if NOTION_TOKEN else "❌ FALTA",
             "NOTION_DB_USUARIOS":   NOTION_DB_USUARIOS,
             "FOLDER_GENERADOS":     FOLDER_GENERADOS,
-            "FOLDER_CV_MASTERS":    FOLDER_CV_MASTERS
+            "FOLDER_CV_MASTERS":    FOLDER_CV_MASTERS,
+            "N8N_WEBHOOK_NUEVO":    "✅" if N8N_WEBHOOK_NUEVO else "❌ FALTA",
+            "N8N_WEBHOOK_BUSCAR":   "✅" if N8N_WEBHOOK_BUSCAR else "❌ FALTA"
         }
     })
 
 
 @app.route('/debug', methods=['GET'])
 def debug():
-    results = {"version": "v2-multiuser"}
+    results = {"version": "v2-multiuser-oauth"}
 
     # 1. Claude
     try:
