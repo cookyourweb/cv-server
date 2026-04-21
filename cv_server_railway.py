@@ -56,6 +56,54 @@ def notion_headers():
     }
 
 
+def crear_usuario_en_notion(data):
+    """Crea el usuario directamente en Notion DB Usuarios. Devuelve el page_id."""
+    stack = data.get("stack", [])
+    if isinstance(stack, str):
+        stack = [stack] if stack else []
+    modalidad = data.get("modalidad", [])
+    if isinstance(modalidad, str):
+        modalidad = [modalidad] if modalidad else []
+
+    salario = data.get("salario_min") or data.get("salario") or 0
+    try:
+        salario = int(salario)
+    except (ValueError, TypeError):
+        salario = 0
+
+    linkedin = data.get("linkedin") or None
+    cv_url   = data.get("cv_master_url") or None
+
+    body = {
+        "parent": {"database_id": NOTION_DB_USUARIOS},
+        "properties": {
+            "Name":            {"title":      [{"text": {"content": data.get("nombre", "")}}]},
+            "Email":           {"email":      data.get("email", "").strip().lower()},
+            "Perfil":          {"rich_text":  [{"text": {"content": data.get("perfil", "")}}]},
+            "Activo":          {"checkbox":   True},
+            "Rol objetivo":    {"rich_text":  [{"text": {"content": data.get("rol_objetivo", "") or data.get("rol", "")}}]},
+            "Stack":           {"multi_select": [{"name": s} for s in stack]},
+            "Salario min":     {"number":     salario if salario else None},
+            "Modalidad":       {"multi_select": [{"name": m} for m in modalidad]},
+            "Ciudad":          {"rich_text":  [{"text": {"content": data.get("ciudad", "")}}]},
+        }
+    }
+    if linkedin:
+        body["properties"]["LinkedIn"] = {"url": linkedin}
+    if cv_url:
+        body["properties"]["CV Master URL"] = {"url": cv_url}
+
+    r = requests.post(
+        "https://api.notion.com/v1/pages",
+        headers=notion_headers(),
+        json=body,
+        timeout=30
+    )
+    if r.status_code not in (200, 201):
+        raise Exception(f"Notion crear usuario error {r.status_code}: {r.text[:300]}")
+    return r.json().get("id", "")
+
+
 def buscar_usuario_por_email(email):
     r = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
@@ -584,6 +632,44 @@ def test_claude():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.route('/usuarios', methods=['GET'])
+def listar_usuarios():
+    """Lista todos los usuarios registrados en Notion DB Usuarios."""
+    try:
+        r = requests.post(
+            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
+            headers=notion_headers(),
+            json={"page_size": 100},
+            timeout=30
+        )
+        if r.status_code != 200:
+            return jsonify({"error": f"Notion error {r.status_code}", "details": r.text[:300]}), 500
+
+        results = r.json().get("results", [])
+        usuarios = []
+        for p in results:
+            props = p.get("properties", {})
+            usuarios.append({
+                "id": p.get("id", ""),
+                "nombre": (props.get("Name", {}).get("title") or [{}])[0].get("plain_text", ""),
+                "email": props.get("Email", {}).get("email", ""),
+                "activo": props.get("Activo", {}).get("checkbox", False),
+                "rol": (props.get("Rol objetivo", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+                "ciudad": (props.get("Ciudad", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+                "created_time": p.get("created_time", "")
+            })
+
+        # Ordenar por fecha de creación (más reciente primero)
+        usuarios.sort(key=lambda u: u.get("created_time", ""), reverse=True)
+
+        return jsonify({
+            "total": len(usuarios),
+            "usuarios": usuarios
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ─────────────────────────────────────────────
 # FORMULARIO DE REGISTRO
 # ─────────────────────────────────────────────
@@ -622,6 +708,11 @@ HTML_REGISTRO = """<!DOCTYPE html>
 </head>
 <body>
 <div class="container">
+
+  <!-- Enlace para ver usuarios registrados -->
+  <p style="text-align:center; margin-bottom:20px;">
+    <a href="/usuarios" target="_blank" style="color:#1F5C8B;font-size:14px;text-decoration:none;">📋 Ver usuarios registrados en Notion</a>
+  </p>
 
   <div id="screen1" class="screen active">
     <h1>🎯 BuscarTrabajo</h1>
@@ -825,13 +916,18 @@ def registro():
             "email": email
         })
 
+    # ── Guardar directamente en Notion (sin depender de n8n) ──
+    try:
+        crear_usuario_en_notion(data)
+    except Exception as e:
+        return jsonify({"error": f"Error guardando en Notion: {e}"}), 500
+
+    # ── Disparar búsqueda en n8n en background (best-effort, no bloquea) ──
     try:
         payload = {k: v for k, v in data.items() if k != "accion"}
-        r = requests.post(N8N_WEBHOOK_NUEVO, json=payload, timeout=15)
-        if r.status_code >= 400:
-            return jsonify({"error": f"Webhook nuevo-usuario falló: {r.status_code}"}), 500
+        requests.post(N8N_WEBHOOK_NUEVO, json=payload, timeout=5)
     except Exception as e:
-        return jsonify({"error": f"Error disparando webhook: {e}"}), 500
+        print(f"⚠️ Webhook n8n nuevo-usuario falló (no crítico): {e}")
 
     return jsonify({"estado": "creado", "email": email, "nombre": data.get("nombre", "")})
 
