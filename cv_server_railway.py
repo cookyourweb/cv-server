@@ -32,7 +32,7 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN")
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "ntn_G464872773099dpLY7OzD7I4ZeZee38rKHsoVlmCV2z7A0")
-NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "34811515f4b280f19a42f8da5e91a8fe")
+NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "34911515f4b280f0a58df96736cdbd8b")
 N8N_WEBHOOK_NUEVO = os.getenv("N8N_WEBHOOK_NUEVO", "https://n8n-qwmu.onrender.com/webhook/nuevo-usuario")
 N8N_WEBHOOK_BUSCAR = os.getenv("N8N_WEBHOOK_BUSCAR", "https://n8n-qwmu.onrender.com/webhook/buscar-ahora")
 
