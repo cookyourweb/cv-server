@@ -25,7 +25,9 @@ app = Flask(__name__)
 # ─────────────────────────────────────────────
 FOLDER_GENERADOS = os.getenv("FOLDER_GENERADOS", "1tHuVOIz3ratjRp8AmHsF0kGVpmy9DocY")
 FOLDER_CV_MASTERS = os.getenv("FOLDER_CV_MASTERS") or os.getenv("FOLDER_CV", "1duJA_G3lLbOqiUYoSJcsXAvbtJUdcmzR")
-CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -36,7 +38,6 @@ NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "34811515f4b280f19a42f8da5e
 N8N_WEBHOOK_NUEVO = os.getenv("N8N_WEBHOOK_NUEVO", "https://n8n-qwmu.onrender.com/webhook/nuevo-usuario")
 N8N_WEBHOOK_BUSCAR = os.getenv("N8N_WEBHOOK_BUSCAR", "https://n8n-qwmu.onrender.com/webhook/buscar-ahora")
 
-CLAUDE_MODEL = "claude-sonnet-4-6"
 MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 
@@ -221,31 +222,35 @@ def _descargar_txt(service, file_id):
 
 
 # ─────────────────────────────────────────────
-# CLAUDE
+# LLM — Gemini
 # ─────────────────────────────────────────────
-def call_claude(prompt, max_tokens=6000):
-    if not CLAUDE_API_KEY:
-        raise Exception("CLAUDE_API_KEY no configurada")
+def call_llm(prompt, max_tokens=6000):
+    """Llama a Gemini API. Retorna el texto de la respuesta."""
+    if not GEMINI_API_KEY:
+        raise Exception("GEMINI_API_KEY no configurada")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+
     r = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        headers={
-            "x-api-key": CLAUDE_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json"
-        },
+        url,
+        headers={"Content-Type": "application/json"},
         json={
-            "model": CLAUDE_MODEL,
-            "max_tokens": max_tokens,
-            "messages": [{"role": "user", "content": prompt}]
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "maxOutputTokens": max_tokens,
+                "temperature": 0.7
+            }
         },
         timeout=90
     )
     if r.status_code != 200:
-        raise Exception(f"Claude API error {r.status_code}: {r.text[:500]}")
+        raise Exception(f"Gemini API error {r.status_code}: {r.text[:500]}")
+
     data = r.json()
-    if not data.get("content") or not data["content"][0].get("text"):
-        raise Exception(f"Respuesta Claude vacía: {json.dumps(data)[:300]}")
-    return data["content"][0]["text"]
+    try:
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError):
+        raise Exception(f"Respuesta Gemini inesperada: {json.dumps(data)[:300]}")
 
 
 def generar_cv_adaptado(cv_master, empresa, puesto, descripcion, usuario):
@@ -314,7 +319,7 @@ RULES:
 - Usa guiones normales (-) para bullets
 - Separa secciones con línea en blanco"""
 
-    response = call_claude(prompt)
+    response = call_llm(prompt)
 
     lines = response.strip().split('\n')
     cleaned = []
@@ -490,7 +495,7 @@ def generar_y_subir_cv(email, empresa, puesto, descripcion):
             raise Exception(f"Usuario {email} está inactivo en Notion")
 
         cv_adaptado = generar_cv_adaptado(cv_master, empresa, puesto, descripcion, usuario)
-        steps.append("claude_generate")
+        steps.append("llm_generate")
 
         fecha = datetime.now().strftime("%Y-%m-%d")
         email_slug = re.sub(r'[^a-zA-Z0-9]', '-', email)[:30]
@@ -518,7 +523,7 @@ def generar_y_subir_cv(email, empresa, puesto, descripcion):
             "usuario": usuario["nombre"],
             "email": email,
             "carpeta_usuario": email_slug,
-            "modelo_usado": CLAUDE_MODEL
+            "modelo_usado": GEMINI_MODEL
         }
     except Exception as e:
         import traceback
@@ -562,11 +567,12 @@ def endpoint_generar_cv():
 def health():
     return jsonify({
         "status": "ok",
-        "version": "v2-multiuser-oauth",
-        "model": CLAUDE_MODEL,
+        "version": "v2.2-gemini",
+        "llm_provider": "gemini",
+        "model": GEMINI_MODEL,
         "auth_mode": "oauth",
         "env_vars": {
-            "CLAUDE_API_KEY":       "✅" if CLAUDE_API_KEY else "❌ FALTA",
+            "GEMINI_API_KEY":       "✅" if GEMINI_API_KEY else "❌ FALTA",
             "GOOGLE_CLIENT_ID":     "✅" if GOOGLE_CLIENT_ID else "❌ FALTA",
             "GOOGLE_CLIENT_SECRET": "✅" if GOOGLE_CLIENT_SECRET else "❌ FALTA",
             "GOOGLE_REFRESH_TOKEN": "✅" if GOOGLE_REFRESH_TOKEN else "❌ FALTA",
@@ -582,13 +588,13 @@ def health():
 
 @app.route('/debug', methods=['GET'])
 def debug():
-    results = {"version": "v2-multiuser-oauth"}
+    results = {"version": "v2.2-gemini", "llm_provider": "gemini"}
 
     try:
-        r = call_claude("Say only: OK", max_tokens=10)
-        results["claude"] = {"status": "ok", "response": r}
+        r = call_llm("Say only: OK", max_tokens=10)
+        results["gemini"] = {"status": "ok", "response": r}
     except Exception as e:
-        results["claude"] = {"status": "error", "error": str(e)}
+        results["gemini"] = {"status": "error", "error": str(e)}
 
     try:
         service = get_drive_service()
@@ -623,13 +629,19 @@ def debug():
     return jsonify(results)
 
 
-@app.route('/test-claude', methods=['GET'])
-def test_claude():
+@app.route('/test-llm', methods=['GET'])
+@app.route('/test-claude', methods=['GET'])  # alias retrocompatible
+def test_llm():
     try:
-        r = call_claude("Responde solo: El servidor CV v2 funciona correctamente.", max_tokens=50)
-        return jsonify({"status": "ok", "response": r, "model": CLAUDE_MODEL})
+        r = call_llm("Responde solo: El servidor CV v2 funciona correctamente.", max_tokens=50)
+        return jsonify({
+            "status": "ok",
+            "provider": "gemini",
+            "model": GEMINI_MODEL,
+            "response": r
+        })
     except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
+        return jsonify({"status": "error", "provider": "gemini", "error": str(e)}), 500
 
 
 @app.route('/usuarios', methods=['GET'])
@@ -930,39 +942,6 @@ def registro():
         print(f"⚠️ Webhook n8n nuevo-usuario falló (no crítico): {e}")
 
     return jsonify({"estado": "creado", "email": email, "nombre": data.get("nombre", "")})
-
-
-@app.route('/debug-usuario')
-def debug_usuario():
-    """Endpoint temporal de debug — busca un email en Notion y muestra la respuesta raw."""
-    email = request.args.get("email", "").strip().lower()
-    if not email:
-        return jsonify({"error": "Pasa ?email=xxx"}), 400
-
-    # 1. Query raw a Notion
-    r = requests.post(
-        f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
-        headers=notion_headers(),
-        json={"filter": {"property": "Email", "email": {"equals": email}}, "page_size": 5},
-        timeout=30
-    )
-    raw = r.json()
-
-    # 2. Intentar normalizar si hay resultados
-    normalizado = None
-    if raw.get("results"):
-        try:
-            normalizado = normalizar_perfil(raw["results"][0])
-        except Exception as e:
-            normalizado = {"error_normalizando": str(e)}
-
-    return jsonify({
-        "notion_status":   r.status_code,
-        "db_id_usado":     NOTION_DB_USUARIOS,
-        "total_resultados": len(raw.get("results", [])),
-        "raw_first_result": raw["results"][0] if raw.get("results") else None,
-        "normalizado":     normalizado
-    })
 
 
 if __name__ == '__main__':
