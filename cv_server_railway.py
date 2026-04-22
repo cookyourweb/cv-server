@@ -27,7 +27,7 @@ FOLDER_GENERADOS = os.getenv("FOLDER_GENERADOS", "1tHuVOIz3ratjRp8AmHsF0kGVpmy9D
 FOLDER_CV_MASTERS = os.getenv("FOLDER_CV_MASTERS") or os.getenv("FOLDER_CV", "1duJA_G3lLbOqiUYoSJcsXAvbtJUdcmzR")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -567,7 +567,7 @@ def endpoint_generar_cv():
 def health():
     return jsonify({
         "status": "ok",
-        "version": "v2.2-gemini",
+        "version": "v2.2.1-gemini-2.0",
         "llm_provider": "gemini",
         "model": GEMINI_MODEL,
         "auth_mode": "oauth",
@@ -588,7 +588,7 @@ def health():
 
 @app.route('/debug', methods=['GET'])
 def debug():
-    results = {"version": "v2.2-gemini", "llm_provider": "gemini"}
+    results = {"version": "v2.2.1-gemini-2.0", "llm_provider": "gemini"}
 
     try:
         r = call_llm("Say only: OK", max_tokens=10)
@@ -726,29 +726,16 @@ HTML_REGISTRO = """<!DOCTYPE html>
     <a href="/usuarios" target="_blank" style="color:#1F5C8B;font-size:14px;text-decoration:none;">📋 Ver usuarios registrados en Notion</a>
   </p>
 
-  <!-- Paso 1a: solo email -->
-  <div id="screen1a" class="screen active">
+  <div id="screen1" class="screen active">
     <h1>🎯 BuscarTrabajo</h1>
-    <p class="subtitle">Te buscamos trabajo mientras duermes.</p>
-    <form id="formEmail">
-      <label>Email *</label>
-      <input type="email" name="email" id="emailInput" required placeholder="tu@email.com">
-      <p class="hint">Introduce tu email para continuar.</p>
-      <button type="submit" class="btn" id="btnEmail">Continuar →</button>
-    </form>
-  </div>
-
-  <!-- Paso 1b: resto del formulario (solo si email nuevo) -->
-  <div id="screen1" class="screen">
-    <h1>🎯 Cuéntanos qué buscas</h1>
-    <p class="subtitle">Solo una vez — luego te buscamos ofertas cada día.</p>
+    <p class="subtitle">Te buscamos trabajo mientras duermes. Cuéntanos qué buscas.</p>
 
     <form id="form1">
       <label>Nombre completo *</label>
       <input type="text" name="nombre" required>
 
       <label>Email *</label>
-      <input type="email" name="email" id="emailHidden" required readonly style="background:#f0f0f0;color:#666;">
+      <input type="email" name="email" required>
       <p class="hint">Usaremos este email para enviarte las ofertas cada mañana.</p>
 
       <label>Rol objetivo</label>
@@ -824,54 +811,19 @@ HTML_REGISTRO = """<!DOCTYPE html>
       .map(el => el.dataset.value);
   }
 
-  function showScreen(id) {
+  function showScreen(n) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
+    document.getElementById('screen' + n).classList.add('active');
   }
 
   let currentEmail = '';
   let currentNombre = '';
 
-  // PASO 1a: comprobar si el email ya existe
-  document.getElementById('formEmail').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('btnEmail');
-    btn.disabled = true;
-    btn.textContent = 'Comprobando...';
-
-    const email = document.getElementById('emailInput').value.trim();
-    currentEmail = email;
-
-    try {
-      const r = await fetch('/registro', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ email })
-      });
-      const j = await r.json();
-
-      if (j.estado === 'existente') {
-        currentNombre = j.nombre;
-        document.getElementById('saludo').textContent = `¡Hola de nuevo, ${j.nombre}!`;
-        showScreen('screen2');
-      } else {
-        // Email nuevo → mostrar formulario completo con email ya relleno
-        document.getElementById('emailHidden').value = email;
-        showScreen('screen1');
-      }
-    } catch (err) {
-      btn.disabled = false;
-      btn.textContent = 'Continuar →';
-      alert('Error: ' + err.message);
-    }
-  });
-
-  // PASO 1b: registro completo
   document.getElementById('form1').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('btn1');
     btn.disabled = true;
-    btn.textContent = 'Registrando...';
+    btn.textContent = 'Procesando...';
 
     const fd = new FormData(e.target);
     const data = {
@@ -897,9 +849,13 @@ HTML_REGISTRO = """<!DOCTYPE html>
       });
       const j = await r.json();
 
-      if (j.estado === 'creado' || j.estado === 'existente') {
-        document.getElementById('saludo').textContent = `¡Bienvenida, ${j.nombre || currentNombre}! Ya estás registrada.`;
-        showScreen('screen2');
+      if (j.estado === 'existente') {
+        document.getElementById('saludo').textContent = `¡Hola de nuevo, ${j.nombre}!`;
+        showScreen(2);
+      } else if (j.estado === 'creado') {
+        document.getElementById('confirmacion').textContent =
+          'Te has registrado correctamente. Mañana a las 9:00 recibirás tus primeras 5 ofertas personalizadas.';
+        showScreen(3);
       } else {
         throw new Error(j.error || 'Error desconocido');
       }
@@ -921,12 +877,12 @@ HTML_REGISTRO = """<!DOCTYPE html>
 
       if (accion === 'ahora') {
         document.getElementById('confirmacion').textContent =
-          'Buscando ahora mismo. Recibirás las ofertas en unos minutos en tu email.';
+          'Buscando ahora mismo. Recibirás las ofertas en unos minutos.';
       } else {
         document.getElementById('confirmacion').textContent =
           'De acuerdo. Mañana a las 9:00 recibirás tus ofertas personalizadas.';
       }
-      showScreen('screen3');
+      showScreen(3);
     } catch (err) {
       alert('Error: ' + err.message);
     }
