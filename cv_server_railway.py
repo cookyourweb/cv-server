@@ -294,7 +294,7 @@ FORMULARIO_HTML = """
     <input id="email" type="email" placeholder="ana@ejemplo.com" />
     <label>Perfil profesional <span style="color:#9ca3af">(breve descripción)</span></label>
     <textarea id="perfil" placeholder="Desarrolladora frontend con 5 años de experiencia en React y Vue…"></textarea>
-    <button onclick="irS2()">Continuar →</button>
+    <button type="button" onclick="irS2()">Continuar →</button>
   </div>
 
   <!-- PANTALLA 2 — Preferencias + Buscar ahora -->
@@ -316,7 +316,7 @@ FORMULARIO_HTML = """
     <input id="ciudad" placeholder="Madrid, Barcelona…" />
     <label>LinkedIn <span style="color:#9ca3af">(opcional)</span></label>
     <input id="linkedin" placeholder="https://linkedin.com/in/tu-perfil" />
-    <button onclick="registrar()">🔍 Buscar ahora</button>
+    <button type="button" onclick="registrar()">🔍 Buscar ahora</button>
     <div id="msg"></div>
   </div>
 </div>
