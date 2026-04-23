@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """
-cv_server_railway.py  —  v2.4-groq
+cv_server_railway.py  —  v2.3-groq
 LLM: Groq (primario) → Gemini (fallback) → Claude (fallback)
-Formulario multistep con check de email inicial:
-  - Email existente → pantalla "Buscar ahora / Programar para mañana"
-  - Email nuevo     → formulario completo de registro (2 pasos)
-  - /registro       → deduplicación: no crea si ya existe en Notion
+Todo lo demás sin cambios: formulario, Notion, DOCX, Drive, webhooks n8n.
 """
 
 import os
@@ -213,6 +210,37 @@ def crear_usuario_en_notion(datos: dict) -> dict:
     return resp.json()
 
 
+def buscar_usuario_por_email(email: str) -> dict | None:
+    """Devuelve el perfil normalizado del usuario o None si no existe."""
+    if not NOTION_DB_USUARIOS:
+        return None
+    resp = requests.post(
+        f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
+        headers=notion_headers(),
+        json={"filter": {"property": "Email", "email": {"equals": email.strip().lower()}}, "page_size": 1},
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        return None
+    results = resp.json().get("results", [])
+    if not results:
+        return None
+    p = results[0].get("properties", {})
+    return {
+        "nombre":       (p.get("Name", {}).get("title") or [{}])[0].get("plain_text", ""),
+        "email":        p.get("Email", {}).get("email", ""),
+        "activo":       p.get("Activo", {}).get("checkbox", False),
+        "perfil":       (p.get("Perfil", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "rol":          (p.get("Rol objetivo", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "stack":        [s["name"] for s in p.get("Stack", {}).get("multi_select", [])],
+        "salario_min":  p.get("Salario min", {}).get("number", 0) or 0,
+        "modalidad":    [m["name"] for m in p.get("Modalidad", {}).get("multi_select", [])],
+        "ciudad":       (p.get("Ciudad", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "linkedin":     p.get("LinkedIn", {}).get("url", "") or "",
+        "cv_master_url":p.get("CV Master URL", {}).get("url", "") or "",
+    }
+
+
 # ══════════════════════════════════════════════
 # GENERACIÓN DOCX
 # ══════════════════════════════════════════════
@@ -270,83 +298,56 @@ FORMULARIO_HTML = """
     .sub { color: #6b7280; font-size: .9rem; margin-bottom: 1.5rem; }
     label { display: block; font-size: .85rem; color: #374151; margin-bottom: .25rem; font-weight: 500; }
     input, textarea, select { width: 100%; padding: .6rem .8rem; border: 1px solid #d1d5db;
-      border-radius: 8px; font-size: .95rem; margin-bottom: 1rem; outline: none;
-      transition: border-color .15s; }
-    input:focus, textarea:focus, select:focus { border-color: #1a56db; }
+      border-radius: 8px; font-size: .95rem; margin-bottom: 1rem; transition: border .2s; }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #1a56db; }
     textarea { resize: vertical; min-height: 80px; }
     .screen { display: none; }
     .screen.active { display: block; }
-    .btn { width: 100%; padding: .75rem; background: #1a56db; color: #fff;
-           border: none; border-radius: 8px; font-size: 1rem; cursor: pointer;
-           font-weight: 600; transition: background .15s; margin-bottom: .5rem; }
-    .btn:hover:not(:disabled) { background: #1648c0; }
-    .btn:disabled { opacity: .6; cursor: not-allowed; }
-    .btn-secondary { background: #f3f4f6; color: #374151; }
-    .btn-secondary:hover:not(:disabled) { background: #e5e7eb; }
+    button { width: 100%; padding: .75rem; background: #1a56db; color: #fff;
+             border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; font-weight: 600;
+             transition: background .2s; }
+    button:hover:not(:disabled) { background: #1648c0; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
     .btn-green { background: #059669; }
     .btn-green:hover:not(:disabled) { background: #047857; }
+    .btn-outline { background: white; color: #1a56db; border: 2px solid #1a56db; margin-top: .75rem; }
+    .btn-outline:hover:not(:disabled) { background: #eff6ff; }
     .msg { margin-top: 1rem; padding: .75rem; border-radius: 8px; font-size: .9rem; }
     .ok  { background: #d1fae5; color: #065f46; }
     .err { background: #fee2e2; color: #991b1b; }
     .step { color: #9ca3af; font-size: .8rem; margin-bottom: 1rem; }
-    .back { font-size: .8rem; color: #6b7280; cursor: pointer; margin-bottom: 1rem;
-            display: inline-block; }
-    .back:hover { color: #1a56db; }
-    .nombre-usuario { font-weight: 600; color: #1a56db; }
-    .separador { border: none; border-top: 1px solid #e5e7eb; margin: 1rem 0; }
-    .loading-dots::after { content: ''; animation: dots 1.2s steps(3,end) infinite; }
-    @keyframes dots { 0%,100%{content:''} 33%{content:'.'} 66%{content:'..'} 100%{content:'...'} }
+    .hint { font-size: .78rem; color: #9ca3af; margin-top: -.6rem; margin-bottom: .8rem; }
   </style>
 </head>
 <body>
 <div class="card">
   <h1>🚀 BuscarTrabajo.ai</h1>
-  <p class="sub">Encuentra trabajo con IA — te buscamos ofertas adaptadas a tu perfil.</p>
+  <p class="sub">Encuentra trabajo con IA — nosotros buscamos por ti cada día.</p>
 
-  <!-- ── PANTALLA 0: solo email ── -->
+  <!-- PANTALLA 0 — Solo email (lookup) -->
   <div id="s0" class="screen active">
     <label>Tu email</label>
-    <input id="email0" type="email" placeholder="ana@ejemplo.com"
-           onkeydown="if(event.key==='Enter') checkEmail()" />
-    <button class="btn" type="button" onclick="checkEmail()" id="btnCheck">
-      Continuar →
-    </button>
+    <input id="email0" type="email" placeholder="ana@ejemplo.com" />
+    <button type="button" id="btnEmail" onclick="checkEmail()">Continuar →</button>
     <div id="msg0"></div>
   </div>
 
-  <!-- ── PANTALLA A: usuario existente ── -->
-  <div id="sA" class="screen">
-    <span class="back" onclick="ir('s0')">← Cambiar email</span>
-    <p style="margin-bottom:1rem">
-      ¡Hola de nuevo, <span id="nombreExistente" class="nombre-usuario"></span>! 👋<br>
-      <span style="color:#6b7280;font-size:.9rem">Tu perfil ya está en el sistema.</span>
-    </p>
-    <button class="btn btn-green" type="button" onclick="buscarAhora()">
-      🔍 Buscar ofertas ahora
-    </button>
-    <button class="btn btn-secondary" type="button" onclick="programarManana()">
-      🕐 La IA buscará mañana (automático)
-    </button>
-    <div id="msgA"></div>
-  </div>
-
-  <!-- ── PANTALLA 1: datos básicos (nuevo usuario) ── -->
+  <!-- PANTALLA 1 — Datos básicos (usuario nuevo) -->
   <div id="s1" class="screen">
-    <span class="back" onclick="ir('s0')">← Cambiar email</span>
     <p class="step">Paso 1 de 2 — Datos básicos</p>
     <label>Nombre completo</label>
     <input id="nombre" placeholder="Ana García López" />
     <label>Email</label>
-    <input id="email1" type="email" readonly style="background:#f9fafb;color:#6b7280" />
-    <label>Perfil profesional <span style="color:#9ca3af">(breve descripción)</span></label>
+    <input id="email1" type="email" readonly style="background:#f3f4f6;color:#6b7280;" />
+    <label>Perfil profesional</label>
     <textarea id="perfil" placeholder="Desarrolladora frontend con 5 años de experiencia en React y Vue…"></textarea>
-    <button class="btn" type="button" onclick="irS2()">Continuar →</button>
+    <p class="hint">Cuéntanos brevemente qué buscas y cuál es tu experiencia.</p>
+    <button type="button" onclick="irS2()">Continuar →</button>
   </div>
 
-  <!-- ── PANTALLA 2: preferencias ── -->
+  <!-- PANTALLA 2 — Preferencias (usuario nuevo) -->
   <div id="s2" class="screen">
-    <span class="back" onclick="ir('s1')">← Volver</span>
-    <p class="step">Paso 2 de 2 — Preferencias de búsqueda</p>
+    <p class="step">Paso 2 de 2 — Preferencias</p>
     <label>Rol objetivo</label>
     <input id="rol" placeholder="Senior Frontend Developer" />
     <label>Stack principal <span style="color:#9ca3af">(separado por comas)</span></label>
@@ -355,156 +356,163 @@ FORMULARIO_HTML = """
     <input id="salario" type="number" placeholder="40000" />
     <label>Modalidad</label>
     <select id="modalidad">
-      <option value="Remoto">Remoto</option>
-      <option value="Híbrido">Híbrido</option>
-      <option value="Presencial">Presencial</option>
+      <option value="Remoto">🏠 Remoto</option>
+      <option value="Híbrido">🚇 Híbrido</option>
+      <option value="Presencial">🏢 Presencial</option>
     </select>
     <label>Ciudad (si aplica)</label>
     <input id="ciudad" placeholder="Madrid, Barcelona…" />
     <label>LinkedIn <span style="color:#9ca3af">(opcional)</span></label>
     <input id="linkedin" placeholder="https://linkedin.com/in/tu-perfil" />
-    <button class="btn btn-green" type="button" onclick="registrar()" id="btnRegistrar">
-      🔍 Registrarme y buscar ahora
-    </button>
+    <button type="button" id="btnRegistrar" onclick="registrar()">🚀 Registrarme y buscar ahora</button>
     <div id="msg2"></div>
   </div>
 
+  <!-- PANTALLA 3 — Usuario existente: ¿buscar ahora o mañana? -->
+  <div id="s3" class="screen">
+    <h1 id="saludoExistente">¡Hola de nuevo!</h1>
+    <p class="sub" style="margin-bottom:1.5rem">Ya estás registrado. ¿Qué quieres hacer?</p>
+    <button type="button" class="btn-green" onclick="buscarAhora()">⚡ Buscar ofertas ahora</button>
+    <button type="button" class="btn-outline" onclick="mañana()">🌅 Mañana a las 9:00</button>
+    <div id="msg3"></div>
+  </div>
+
+  <!-- PANTALLA 4 — Confirmación final -->
+  <div id="s4" class="screen">
+    <h1>✅ ¡Listo!</h1>
+    <p class="sub" id="msgFinal">Todo en orden.</p>
+  </div>
 </div>
 
 <script>
-// ─── utilidad pantallas ───────────────────────────────────────────
-function ir(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
+  let _email = '';
+  let _nombre = '';
 
-// ─── PANTALLA 0: check email ──────────────────────────────────────
-async function checkEmail() {
-  const email = document.getElementById('email0').value.trim();
-  if (!email || !email.includes('@')) {
-    document.getElementById('msg0').innerHTML =
-      '<div class="msg err">❌ Introduce un email válido.</div>';
-    return;
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('s' + id).classList.add('active');
   }
 
-  const btn = document.getElementById('btnCheck');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loading-dots">Comprobando</span>';
-  document.getElementById('msg0').innerHTML = '';
+  // ── PANTALLA 0: comprobar email ──────────────────
+  async function checkEmail() {
+    const email = document.getElementById('email0').value.trim();
+    if (!email) { alert('Por favor introduce tu email.'); return; }
 
-  try {
-    const resp = await fetch('/check-email', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email }),
-    });
-    const data = await resp.json();
+    const btn = document.getElementById('btnEmail');
+    btn.disabled = true; btn.textContent = 'Comprobando…';
+    const msg = document.getElementById('msg0');
+    msg.innerHTML = '';
 
-    if (data.existe) {
-      // Usuario conocido → pantalla A
-      document.getElementById('nombreExistente').textContent = data.nombre || email;
-      ir('sA');
-    } else {
-      // Nuevo → formulario completo
-      document.getElementById('email1').value = email;
-      ir('s1');
+    try {
+      const resp = await fetch('/registro', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email }),
+      });
+      const data = await resp.json();
+
+      _email = email;
+
+      if (data.estado === 'existente') {
+        _nombre = data.nombre || '';
+        document.getElementById('saludoExistente').textContent = `¡Hola de nuevo, ${_nombre}! 👋`;
+        show(3);
+      } else {
+        // email nuevo → rellenar campo readonly y pasar a paso 1
+        document.getElementById('email1').value = email;
+        show(1);
+      }
+    } catch(e) {
+      msg.innerHTML = '<div class="msg err">❌ Error de conexión: ' + e.message + '</div>';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Continuar →';
     }
-  } catch(e) {
-    document.getElementById('msg0').innerHTML =
-      '<div class="msg err">❌ Error de conexión: ' + e.message + '</div>';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Continuar →';
   }
-}
 
-// ─── PANTALLA A: buscar ahora ─────────────────────────────────────
-async function buscarAhora() {
-  const email = document.getElementById('email0').value.trim();
-  const btns  = document.querySelectorAll('#sA .btn');
-  btns.forEach(b => b.disabled = true);
-  document.getElementById('msgA').innerHTML = '';
+  // ── PANTALLA 1 → 2 ──────────────────────────────
+  function irS2() {
+    const nombre = document.getElementById('nombre').value.trim();
+    const perfil = document.getElementById('perfil').value.trim();
+    if (!nombre) { alert('Por favor introduce tu nombre completo.'); return; }
+    if (!perfil)  { alert('Por favor cuéntanos brevemente qué buscas.'); return; }
+    _nombre = nombre;
+    show(2);
+  }
 
-  try {
-    const resp = await fetch('/buscar-ahora', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email }),
-    });
-    const data = await resp.json();
-    if (data.ok) {
-      document.getElementById('msgA').innerHTML =
-        '<div class="msg ok">✅ ¡Búsqueda iniciada! Recibirás ofertas en unos minutos.</div>';
-    } else {
-      document.getElementById('msgA').innerHTML =
-        '<div class="msg err">❌ ' + (data.error || 'Error inesperado') + '</div>';
-      btns.forEach(b => b.disabled = false);
+  // ── PANTALLA 2: registro completo ───────────────
+  async function registrar() {
+    const btn = document.getElementById('btnRegistrar');
+    btn.disabled = true; btn.textContent = 'Registrando…';
+    const msg = document.getElementById('msg2');
+    msg.innerHTML = '';
+
+    const payload = {
+      nombre:       document.getElementById('nombre').value.trim(),
+      email:        _email,
+      perfil:       document.getElementById('perfil').value.trim(),
+      rol_objetivo: document.getElementById('rol').value.trim(),
+      stack:        document.getElementById('stack').value.split(',').map(s => s.trim()).filter(Boolean),
+      salario_min:  parseInt(document.getElementById('salario').value) || 0,
+      modalidad:    [document.getElementById('modalidad').value],
+      ciudad:       document.getElementById('ciudad').value.trim(),
+      linkedin:     document.getElementById('linkedin').value.trim(),
+    };
+
+    try {
+      const resp = await fetch('/registro', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+
+      if (data.ok || data.estado === 'creado') {
+        document.getElementById('msgFinal').textContent =
+          '¡Registro completado! Estamos buscando ofertas para ti ahora mismo. Las recibirás en breve.';
+        show(4);
+      } else {
+        msg.innerHTML = '<div class="msg err">❌ ' + (data.error || 'Error inesperado') + '</div>';
+        btn.disabled = false; btn.textContent = '🚀 Registrarme y buscar ahora';
+      }
+    } catch(e) {
+      msg.innerHTML = '<div class="msg err">❌ Error de conexión: ' + e.message + '</div>';
+      btn.disabled = false; btn.textContent = '🚀 Registrarme y buscar ahora';
     }
-  } catch(e) {
-    document.getElementById('msgA').innerHTML =
-      '<div class="msg err">❌ Error de conexión: ' + e.message + '</div>';
-    btns.forEach(b => b.disabled = false);
   }
-}
 
-// ─── PANTALLA A: programar para mañana ───────────────────────────
-function programarManana() {
-  document.getElementById('msgA').innerHTML =
-    '<div class="msg ok">🕐 Perfecto, la IA buscará ofertas mañana automáticamente.</div>';
-}
-
-// ─── PANTALLA 1 → 2 ──────────────────────────────────────────────
-function irS2() {
-  if (!document.getElementById('nombre').value.trim()) {
-    alert('Por favor rellena tu nombre.');
-    return;
+  // ── PANTALLA 3: usuario existente ───────────────
+  async function buscarAhora() {
+    const msg = document.getElementById('msg3');
+    msg.innerHTML = '<div class="msg ok">⏳ Iniciando búsqueda…</div>';
+    try {
+      await fetch('/registro', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email: _email, nombre: _nombre, accion: 'ahora' }),
+      });
+    } catch(e) { /* fire & forget */ }
+    document.getElementById('msgFinal').textContent =
+      'Buscando ofertas ahora mismo. Las recibirás en unos minutos en tu email.';
+    show(4);
   }
-  ir('s2');
-}
 
-// ─── PANTALLA 2: registrar y buscar ──────────────────────────────
-async function registrar() {
-  const btn = document.getElementById('btnRegistrar');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loading-dots">Procesando</span>';
-  document.getElementById('msg2').innerHTML = '';
-
-  const payload = {
-    nombre:       document.getElementById('nombre').value.trim(),
-    email:        document.getElementById('email1').value.trim(),
-    perfil:       document.getElementById('perfil').value.trim(),
-    rol_objetivo: document.getElementById('rol').value.trim(),
-    stack:        document.getElementById('stack').value.split(',').map(s=>s.trim()).filter(Boolean),
-    salario_min:  parseInt(document.getElementById('salario').value) || 0,
-    modalidad:    [document.getElementById('modalidad').value],
-    ciudad:       document.getElementById('ciudad').value.trim(),
-    linkedin:     document.getElementById('linkedin').value.trim(),
-  };
-
-  try {
-    const resp = await fetch('/registro', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json();
-    if (data.ok) {
-      document.getElementById('msg2').innerHTML =
-        '<div class="msg ok">✅ ' + (data.mensaje || '¡Registro completado! En breve recibirás ofertas.') + '</div>';
-      btn.textContent = '✅ Registrado';
-    } else {
-      document.getElementById('msg2').innerHTML =
-        '<div class="msg err">❌ ' + (data.error || 'Error inesperado') + '</div>';
-      btn.disabled = false;
-      btn.textContent = '🔍 Registrarme y buscar ahora';
-    }
-  } catch(e) {
-    document.getElementById('msg2').innerHTML =
-      '<div class="msg err">❌ Error de conexión: ' + e.message + '</div>';
-    btn.disabled = false;
-    btn.textContent = '🔍 Registrarme y buscar ahora';
+  async function mañana() {
+    try {
+      await fetch('/registro', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email: _email, nombre: _nombre, accion: 'manana' }),
+      });
+    } catch(e) { /* fire & forget */ }
+    document.getElementById('msgFinal').textContent =
+      'Perfecto. Mañana a las 9:00 recibirás tus ofertas personalizadas.';
+    show(4);
   }
-}
+
+  // Permitir Enter en el campo de email de la pantalla 0
+  document.getElementById('email0').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') checkEmail();
+  });
 </script>
 </body>
 </html>
@@ -524,7 +532,7 @@ def index():
 def health():
     return jsonify({
         "status":       "ok",
-        "version":      "v2.4-groq",
+        "version":      "v2.3-groq",
         "llm_provider": "groq",
         "groq_model":   GROQ_MODEL,
         "fallbacks":    {
@@ -539,115 +547,60 @@ def health():
 def debug():
     """Prueba rápida del LLM activo (Groq primero)."""
     try:
-        respuesta = call_llm("Responde solo: 'Groq funcionando correctamente en cv_server v2.4'")
+        respuesta = call_llm("Responde solo: 'Groq funcionando correctamente en cv_server v2.3'")
         return jsonify({"ok": True, "respuesta": respuesta, "modelo": GROQ_MODEL})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@app.route("/check-email", methods=["POST"])
-def check_email():
-    """Comprueba si el email ya existe en Notion como usuario activo."""
-    datos = request.get_json(force=True)
-    email = (datos.get("email") or "").strip()
-    if not email:
-        return jsonify({"ok": False, "error": "email requerido"}), 400
-
-    if not NOTION_DB_USUARIOS:
-        # Sin BD configurada → siempre tratar como nuevo
-        return jsonify({"ok": True, "existe": False})
-
-    try:
-        resp = requests.post(
-            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
-            headers=notion_headers(),
-            json={
-                "filter": {
-                    "and": [
-                        {"property": "Email",  "email":    {"equals": email}},
-                        {"property": "Activo", "checkbox": {"equals": True}},
-                    ]
-                },
-                "page_size": 1,
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-        if results:
-            props  = results[0].get("properties", {})
-            nombre = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "")
-            return jsonify({"ok": True, "existe": True, "nombre": nombre})
-        return jsonify({"ok": True, "existe": False})
-    except Exception as e:
-        logger.error("check-email Notion error: %s", e)
-        # En caso de error consultando Notion → dejar pasar como nuevo
-        return jsonify({"ok": True, "existe": False})
-
-
-@app.route("/buscar-ahora", methods=["POST"])
-def buscar_ahora():
-    """Dispara el webhook de búsqueda inmediata para usuario existente."""
-    datos = request.get_json(force=True)
-    email = (datos.get("email") or "").strip()
-    if not email:
-        return jsonify({"ok": False, "error": "email requerido"}), 400
-
-    if WEBHOOK_BUSCAR_AHORA:
-        try:
-            requests.post(WEBHOOK_BUSCAR_AHORA, json={"email": email}, timeout=8)
-        except Exception as e:
-            logger.warning("Webhook buscar-ahora falló (no crítico): %s", e)
-
-    return jsonify({
-        "ok":    True,
-        "mensaje": "Búsqueda iniciada, recibirás ofertas en unos minutos.",
-        "email": email,
-    })
-
-
-
-@app.route("/registro", methods=["POST"])
+@app.route("/registro", methods=["GET", "POST"])
 def registro():
-    """Registra usuario en Notion (sin duplicar) y dispara webhook n8n."""
+    """GET → sirve el formulario. POST → lookup, registro o acción."""
+    if request.method == "GET":
+        return render_template_string(FORMULARIO_HTML)
+
     datos = request.get_json(force=True)
-    email = (datos.get("email") or "").strip()
+    email = (datos.get("email") or "").strip().lower()
     if not email:
         return jsonify({"ok": False, "error": "email requerido"}), 400
 
-    # ── Deduplicación: comprobar si ya existe en Notion ──────────
-    if NOTION_DB_USUARIOS:
-        try:
-            chk = requests.post(
-                f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
-                headers=notion_headers(),
-                json={
-                    "filter": {"property": "Email", "email": {"equals": email}},
-                    "page_size": 1,
-                },
-                timeout=10,
-            )
-            chk.raise_for_status()
-            if chk.json().get("results"):
-                # Ya existe → disparar búsqueda inmediata y devolver ok
-                if WEBHOOK_BUSCAR_AHORA:
-                    try:
-                        requests.post(WEBHOOK_BUSCAR_AHORA, json={"email": email}, timeout=8)
-                    except Exception as e:
-                        logger.warning("Webhook buscar-ahora (duplicado) falló: %s", e)
-                return jsonify({
-                    "ok":    True,
-                    "mensaje": "Tu perfil ya estaba registrado. ¡Búsqueda iniciada!",
-                    "email": email,
-                })
-        except Exception as e:
-            logger.warning("Deduplicación Notion falló (continuando con alta): %s", e)
+    accion = datos.get("accion")
 
+    # ── Acciones para usuario ya existente ────────────────────────────
+    if accion in ("ahora", "manana"):
+        if accion == "ahora" and WEBHOOK_BUSCAR_AHORA:
+            try:
+                requests.post(
+                    WEBHOOK_BUSCAR_AHORA,
+                    json={"email": email, "nombre": datos.get("nombre", "")},
+                    timeout=5,
+                )
+            except Exception as e:
+                logger.warning("Webhook buscar-ahora falló (no crítico): %s", e)
+        return jsonify({"ok": True, "accion": accion})
+
+    # ── Lookup: ¿el email ya existe en Notion? ─────────────────────────
+    try:
+        usuario = buscar_usuario_por_email(email)
+    except Exception as e:
+        logger.error("Notion lookup error: %s", e)
+        return jsonify({"ok": False, "error": f"Error consultando Notion: {e}"}), 500
+
+    if usuario:
+        return jsonify({"estado": "existente", "nombre": usuario["nombre"], "email": email})
+
+    # ── Email solo (sin nombre/perfil) → indicar que es nuevo ─────────
+    nombre = (datos.get("nombre") or "").strip()
+    perfil = (datos.get("perfil") or "").strip()
+    if not nombre or not perfil:
+        return jsonify({"estado": "nuevo", "email": email})
+
+    # ── Registro completo: crear en Notion ────────────────────────────
     try:
         notion_page = crear_usuario_en_notion(datos)
         notion_id = notion_page.get("id", "")
     except Exception as e:
-        logger.error("Notion error: %s", e)
+        logger.error("Notion crear error: %s", e)
         return jsonify({"ok": False, "error": f"Error creando usuario en Notion: {e}"}), 500
 
     # Disparar webhook n8n (fire & forget)
@@ -658,12 +611,11 @@ def registro():
             logger.warning("Webhook nuevo-usuario falló (no crítico): %s", e)
 
     return jsonify({
-        "ok":      True,
-        "mensaje": "Usuario registrado. En breve recibirás ofertas de trabajo.",
-        "email":   email,
+        "ok":     True,
+        "estado": "creado",
+        "email":  email,
+        "nombre": nombre,
     })
-
-
 
 
 @app.route("/generar-cv", methods=["POST"])
