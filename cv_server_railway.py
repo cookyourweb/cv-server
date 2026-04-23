@@ -726,16 +726,29 @@ HTML_REGISTRO = """<!DOCTYPE html>
     <a href="/usuarios" target="_blank" style="color:#1F5C8B;font-size:14px;text-decoration:none;">📋 Ver usuarios registrados en Notion</a>
   </p>
 
-  <div id="screen1" class="screen active">
+  <!-- PASO 1: Solo email -->
+  <div id="screen1a" class="screen active">
     <h1>🎯 BuscarTrabajo</h1>
-    <p class="subtitle">Te buscamos trabajo mientras duermes. Cuéntanos qué buscas.</p>
+    <p class="subtitle">Te buscamos trabajo mientras duermes.</p>
+    <form id="formEmail">
+      <label>Email *</label>
+      <input type="email" id="emailInput" required placeholder="tu@email.com">
+      <p class="hint">Introduce tu email para continuar.</p>
+      <button type="submit" class="btn" id="btnEmail">Continuar →</button>
+    </form>
+  </div>
+
+  <!-- PASO 2: Formulario completo (solo si email nuevo) -->
+  <div id="screen1" class="screen">
+    <h1>🎯 Cuéntanos qué buscas</h1>
+    <p class="subtitle">Solo una vez — luego te buscamos ofertas cada día.</p>
 
     <form id="form1">
       <label>Nombre completo *</label>
       <input type="text" name="nombre" required>
 
       <label>Email *</label>
-      <input type="email" name="email" required>
+      <input type="email" name="email" id="emailHidden" required readonly style="background:#f0f0f0;color:#666;">
       <p class="hint">Usaremos este email para enviarte las ofertas cada mañana.</p>
 
       <label>Rol objetivo</label>
@@ -811,19 +824,54 @@ HTML_REGISTRO = """<!DOCTYPE html>
       .map(el => el.dataset.value);
   }
 
-  function showScreen(n) {
+  function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById('screen' + n).classList.add('active');
+    document.getElementById('screen' + id).classList.add('active');
   }
 
   let currentEmail = '';
   let currentNombre = '';
 
+  // PASO 1: comprobar si el email ya existe
+  document.getElementById('formEmail').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('btnEmail');
+    btn.disabled = true;
+    btn.textContent = 'Comprobando...';
+
+    const email = document.getElementById('emailInput').value.trim();
+    currentEmail = email;
+
+    try {
+      const r = await fetch('/registro', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email })
+      });
+      const j = await r.json();
+
+      if (j.estado === 'existente') {
+        currentNombre = j.nombre;
+        document.getElementById('saludo').textContent = `¡Hola de nuevo, ${j.nombre}!`;
+        showScreen(2);
+      } else {
+        // Email nuevo → mostrar formulario completo con email ya relleno
+        document.getElementById('emailHidden').value = email;
+        showScreen(1);
+      }
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'Continuar →';
+      alert('Error: ' + err.message);
+    }
+  });
+
+  // PASO 2: registro completo
   document.getElementById('form1').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('btn1');
     btn.disabled = true;
-    btn.textContent = 'Procesando...';
+    btn.textContent = 'Registrando...';
 
     const fd = new FormData(e.target);
     const data = {
@@ -849,13 +897,10 @@ HTML_REGISTRO = """<!DOCTYPE html>
       });
       const j = await r.json();
 
-      if (j.estado === 'existente') {
-        document.getElementById('saludo').textContent = `¡Hola de nuevo, ${j.nombre}!`;
-        showScreen(2);
-      } else if (j.estado === 'creado') {
+      if (j.estado === 'creado') {
         document.getElementById('confirmacion').textContent =
           'Te has registrado correctamente. Mañana a las 9:00 recibirás tus primeras 5 ofertas personalizadas.';
-        showScreen(3);
+        showScreen('3');
       } else {
         throw new Error(j.error || 'Error desconocido');
       }
@@ -882,7 +927,7 @@ HTML_REGISTRO = """<!DOCTYPE html>
         document.getElementById('confirmacion').textContent =
           'De acuerdo. Mañana a las 9:00 recibirás tus ofertas personalizadas.';
       }
-      showScreen(3);
+      showScreen('3');
     } catch (err) {
       alert('Error: ' + err.message);
     }
