@@ -907,31 +907,38 @@ def registro():
     if accion in ("ahora", "manana"):
         if accion == "ahora":
             try:
-                # Buscar perfil completo en Notion para pasarlo al webhook
-                usuario = buscar_usuario_por_email(email)
-                if usuario:
-                    payload = {
-                        "email":         usuario["email"],
-                        "nombre":        usuario["nombre"],
-                        "perfil":        usuario.get("perfil", ""),
-                        "rol":           usuario.get("rol", ""),
-                        "stack":         usuario.get("stack", []),
-                        "salario":       usuario.get("salario_min", 0),
-                        "modalidad":     usuario.get("modalidad", []),
-                        "ciudad":        usuario.get("ciudad", ""),
-                        "linkedin":      usuario.get("linkedin", ""),
-                        "cv_master_url": usuario.get("cv_master_url", ""),
-                        "source":        "buscar-ahora"
-                    }
-                else:
-                    payload = {"email": email, "nombre": data.get("nombre", ""), "source": "buscar-ahora"}
+                # Ruta normal: WF1 /buscar-ahora (lee Notion y dispara WF2)
                 requests.post(
-                    "https://n8n-qwmu.onrender.com/webhook/buscar-para-user",
-                    json=payload,
+                    N8N_WEBHOOK_BUSCAR,
+                    json={"email": email, "nombre": data.get("nombre", "")},
                     timeout=5
                 )
             except Exception as e:
-                print(f"⚠️ Webhook buscar-para-user falló: {e}")
+                print(f"⚠️ Webhook buscar-ahora (WF1) falló: {e} — intentando ruta directa")
+                # Fallback: buscar perfil en Notion y llamar a WF2 directo
+                try:
+                    usuario_perfil = buscar_usuario_por_email(email)
+                    if usuario_perfil:
+                        payload_fallback = {
+                            "email":         usuario_perfil["email"],
+                            "nombre":        usuario_perfil["nombre"],
+                            "perfil":        usuario_perfil.get("perfil", ""),
+                            "rol":           usuario_perfil.get("rol", ""),
+                            "stack":         usuario_perfil.get("stack", []),
+                            "salario":       usuario_perfil.get("salario_min", 0),
+                            "modalidad":     usuario_perfil.get("modalidad", []),
+                            "ciudad":        usuario_perfil.get("ciudad", ""),
+                            "linkedin":      usuario_perfil.get("linkedin", ""),
+                            "cv_master_url": usuario_perfil.get("cv_master_url", ""),
+                            "source":        "buscar-ahora"
+                        }
+                        requests.post(
+                            "https://n8n-qwmu.onrender.com/webhook/buscar-para-user",
+                            json=payload_fallback,
+                            timeout=5
+                        )
+                except Exception as e2:
+                    print(f"⚠️ Fallback buscar-para-user también falló: {e2}")
         return jsonify({"estado": "ok", "accion": accion})
 
     try:
