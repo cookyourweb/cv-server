@@ -897,9 +897,11 @@ HTML_REGISTRO = """<!DOCTYPE html>
       });
       const j = await r.json();
 
-      if (j.estado === 'creado') {
+      if (j.estado === 'creado' || j.estado === 'existente') {
         document.getElementById('confirmacion').textContent =
-          'Te has registrado correctamente. Mañana a las 9:00 recibirás tus primeras 5 ofertas personalizadas.';
+          j.estado === 'creado'
+            ? 'Te has registrado correctamente. Mañana a las 9:00 recibirás tus primeras 5 ofertas personalizadas.'
+            : '¡Ya estabas registrado! Mañana a las 9:00 recibirás tus ofertas.';
         showScreen('3');
       } else {
         throw new Error(j.error || 'Error desconocido');
@@ -997,6 +999,12 @@ def registro():
             "nombre": usuario["nombre"],
             "email": email
         })
+
+    # ── Solo comprobación de email (sin nombre ni perfil) → devolver nuevo sin crear ──
+    nombre = (data.get("nombre") or "").strip()
+    perfil = (data.get("perfil") or "").strip()
+    if not nombre or not perfil:
+        return jsonify({"estado": "nuevo", "email": email})
 
     # ── Guardar directamente en Notion (sin depender de n8n) ──
     try:
