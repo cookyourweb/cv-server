@@ -197,7 +197,7 @@ def buscar_usuario_por_email(email: str) -> dict | None:
     resp = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
         headers=notion_headers(),
-        json={"filter": {"property": "Email", "email": {"equals": email}}, "page_size": 1},
+        json={"filter": {"property": "Email Usuario", "email": {"equals": email}}, "page_size": 1},
         timeout=15,
     )
     if resp.status_code != 200:
@@ -211,7 +211,7 @@ def buscar_usuario_por_email(email: str) -> dict | None:
     return {
         "notion_id": page.get("id", ""),
         "nombre":    (props.get("Name", {}).get("title") or [{}])[0].get("plain_text", ""),
-        "email":     props.get("Email", {}).get("email", ""),
+        "email":     props.get("Email Usuario", {}).get("email", ""),
         "activo":    props.get("Activo", {}).get("checkbox", False),
     }
 
@@ -223,7 +223,7 @@ def crear_usuario_en_notion(datos: dict) -> dict:
         "parent": {"database_id": NOTION_DB_USUARIOS},
         "properties": {
             "Name":           {"title":  [{"text": {"content": datos.get("nombre", "")}}]},
-            "Email":          {"email":   datos.get("email", "")},
+            "Email Usuario":   {"email":   datos.get("email", "")},
             "Perfil":         {"rich_text": [{"text": {"content": datos.get("perfil", "")}}]},
             "Rol objetivo":   {"rich_text": [{"text": {"content": datos.get("rol_objetivo", "") or datos.get("rol", "")}}]},
             "Stack":          {"multi_select": [{"name": s} for s in datos.get("stack", [])]},
@@ -735,7 +735,7 @@ def usuarios():
             usuarios_list.append({
                 "id":     p["id"],
                 "nombre": props.get("Name", {}).get("title", [{}])[0].get("plain_text", ""),
-                "email":  props.get("Email", {}).get("email", ""),
+                "email":  props.get("Email Usuario", {}).get("email", ""),
                 "activo": props.get("Activo", {}).get("checkbox", False),
             })
         return jsonify({"ok": True, "usuarios": usuarios_list, "total": len(usuarios_list)})
