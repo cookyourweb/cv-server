@@ -28,6 +28,9 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+# Búsqueda de ofertas reales (Fase 3.0)
+from real_jobs import buscar_ofertas_reales
+
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN — solo variables de entorno
 # ─────────────────────────────────────────────
@@ -741,6 +744,64 @@ def usuarios():
         return jsonify({"ok": True, "usuarios": usuarios_list, "total": len(usuarios_list)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/buscar-ofertas-reales", methods=["POST"])
+def buscar_ofertas_reales_endpoint():
+    """
+    Busca ofertas REALES en Remotive (sustituye al LLM inventando ofertas).
+
+    Body esperado:
+    {
+        "perfil":      "Senior Frontend con experiencia en React...",
+        "rol":         "Senior Frontend Developer",
+        "stack":       ["React", "TypeScript", "Vue"],
+        "salario_min": 50000,
+        "modalidad":   ["Remoto"],
+        "ciudad":      "Madrid",
+        "top_n":       1
+    }
+
+    Devuelve:
+    {
+        "ok": true,
+        "ofertas": [{...}],
+        "total_encontradas": 21,
+        "total_filtradas": 8,
+        "fuente": "remotive"
+    }
+    """
+    datos = request.get_json(force=True) or {}
+
+    perfil      = datos.get("perfil", "")
+    rol         = datos.get("rol", "")
+    stack       = datos.get("stack") or []
+    salario_min = int(datos.get("salario_min") or datos.get("salario") or 0)
+    modalidad   = datos.get("modalidad") or []
+    ciudad      = datos.get("ciudad", "")
+    top_n       = int(datos.get("top_n") or 1)
+
+    if not stack and not rol:
+        return jsonify({
+            "ok":    False,
+            "error": "Se requiere al menos 'rol' o 'stack' para buscar"
+        }), 400
+
+    try:
+        resultado = buscar_ofertas_reales(
+            perfil=perfil,
+            rol=rol,
+            stack=stack if isinstance(stack, list) else [stack],
+            salario_min=salario_min,
+            modalidad=modalidad if isinstance(modalidad, list) else [modalidad],
+            ciudad=ciudad,
+            top_n=top_n,
+        )
+    except Exception as e:
+        logger.error("Error en /buscar-ofertas-reales: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify(resultado)
 
 
 # ══════════════════════════════════════════════
