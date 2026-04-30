@@ -1,32 +1,90 @@
+# ══════════════════════════════════════════════
 # Python
+# ══════════════════════════════════════════════
 venv/
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-*.egg-info/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
 .eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Credentials (NO subir nunca)
+# ══════════════════════════════════════════════
+# Variables de entorno — NUNCA subir
+# ══════════════════════════════════════════════
+.env
+.env.*
+.env.local
+.env.production
+.env.staging
+!.env.example
+
+# ══════════════════════════════════════════════
+# Credenciales — NUNCA subir
+# ══════════════════════════════════════════════
 get_token.py
 client_secret.json
 client_secret.json.xml
 credentials.json
 token.pickle
+service-account.json
 *.pem
 *.key
+*.key.pub
 
+# ══════════════════════════════════════════════
+# N8N workflows con credenciales hardcodeadas
+# ══════════════════════════════════════════════
+BuscarTrabajo-*.json
+workflow-*.json
+n8n/*.json
+cv-server/*.json
+workflows/*.json
+workflows/**/*.json
+
+# ══════════════════════════════════════════════
+# CVs y documentos generados
+# ══════════════════════════════════════════════
+cv/*.docx
+cv/*.pdf
+*.pdf
+
+# ══════════════════════════════════════════════
 # Logs
+# ══════════════════════════════════════════════
 *.log
+cv_server.log
 
-# IDE
+# ══════════════════════════════════════════════
+# IDE y sistema
+# ══════════════════════════════════════════════
 .DS_Store
 .vscode/
 .idea/
 *.swp
 *.swo
+Thumbs.db
 
-# Locales
+# ══════════════════════════════════════════════
+# Directorios locales
+# ══════════════════════════════════════════════
+
+# ══════════════════════════════════════════════
+# Temporales
+# ══════════════════════════════════════════════
 *.tmp
 *.temp
