@@ -11,10 +11,9 @@ Formulario multi-pantalla:
 
 import os
 import io
-import json
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Flask, request, jsonify, render_template_string
 
 # Google Drive / OAuth
@@ -142,7 +141,7 @@ def call_llm(prompt: str) -> str:
 
 
 # ══════════════════════════════════════════════
-# GOOGLE DRIVE ver si funciona
+# GOOGLE DRIVE
 # ══════════════════════════════════════════════
 
 def get_drive_service():
@@ -181,6 +180,40 @@ def subir_cv_a_drive(docx_bytes: bytes, nombre_archivo: str) -> str:
     return file.get("webViewLink", "")
 
 
+def leer_cv_master_desde_drive(usuario: dict) -> str:
+    """Descarga el CV master en texto plano desde Drive usando cv_master_file_id o cv_master_url."""
+    service = get_drive_service()
+
+    # Prioridad 1: cv_master_file_id (campo nuevo en Notion)
+    file_id = usuario.get("cv_master_file_id", "").strip()
+
+    # Prioridad 2: extraer file_id de cv_master_url (Drive share link)
+    if not file_id:
+        url = usuario.get("cv_master_url", "")
+        if url:
+            import re
+            m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'id=([a-zA-Z0-9_-]+)', url)
+            if m:
+                file_id = m.group(1)
+
+    if not file_id:
+        return ""
+
+    try:
+        req = service.files().get_media(fileId=file_id)
+        buf = io.BytesIO()
+        from googleapiclient.http import MediaIoBaseDownload
+        dl = MediaIoBaseDownload(buf, req)
+        done = False
+        while not done:
+            _, done = dl.next_chunk()
+        buf.seek(0)
+        return buf.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        logger.warning("No se pudo leer CV master (file_id=%s): %s", file_id, e)
+        return ""
+
+
 # ══════════════════════════════════════════════
 # NOTION
 # ══════════════════════════════════════════════
@@ -194,7 +227,7 @@ def notion_headers():
 
 
 def buscar_usuario_por_email(email: str) -> dict | None:
-    """Consulta Notion por email. Devuelve datos del usuario o None."""
+    """Consulta Notion por email. Devuelve perfil completo del usuario o None."""
     if not NOTION_DB_USUARIOS:
         return None
     resp = requests.post(
@@ -210,12 +243,21 @@ def buscar_usuario_por_email(email: str) -> dict | None:
     if not results:
         return None
     page = results[0]
-    props = page.get("properties", {})
+    p = page.get("properties", {})
     return {
-        "notion_id": page.get("id", ""),
-        "nombre":    (props.get("Name", {}).get("title") or [{}])[0].get("plain_text", ""),
-        "email":     props.get("Email", {}).get("email", ""),
-        "activo":    props.get("Activo", {}).get("checkbox", False),
+        "notion_id":          page.get("id", ""),
+        "nombre":             (p.get("Name", {}).get("title") or [{}])[0].get("plain_text", ""),
+        "email":              p.get("Email", {}).get("email", ""),
+        "activo":             p.get("Activo", {}).get("checkbox", False),
+        "perfil":             (p.get("Perfil", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "rol":                (p.get("Rol objetivo", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "stack":              [s["name"] for s in p.get("Stack", {}).get("multi_select", [])],
+        "salario_min":        p.get("Salario min", {}).get("number", 0) or 0,
+        "modalidad":          [m["name"] for m in p.get("Modalidad", {}).get("multi_select", [])],
+        "ciudad":             (p.get("Ciudad", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "linkedin":           p.get("LinkedIn", {}).get("url", "") or "",
+        "cv_master_url":      p.get("CV Master URL", {}).get("url", "") or "",
+        "cv_master_file_id":  (p.get("cv_master_file_id", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
     }
 
 
@@ -248,31 +290,124 @@ def crear_usuario_en_notion(datos: dict) -> dict:
 # ══════════════════════════════════════════════
 
 def generar_docx(contenido_cv: str, nombre_candidato: str) -> bytes:
+    """Wrapper legacy — usar generar_docx_con_cabecera() para nuevos CVs."""
+    return generar_docx_con_cabecera(contenido_cv, {"nombre": nombre_candidato})
+
+
+def generar_docx_con_cabecera(contenido_cv: str, usuario: dict) -> bytes:
+    """Genera DOCX con cabecera profesional estructurada usando datos reales del usuario."""
+    from docx.shared import Cm
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+
+    BLUE = RGBColor(0x1A, 0x56, 0xDB)
+    DARK = RGBColor(0x1A, 0x1A, 0x1A)
+    GREY = RGBColor(0x66, 0x66, 0x66)
+
     doc = Document()
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(10)
 
-    # Título
-    titulo = doc.add_heading(nombre_candidato, level=1)
-    titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    for run in titulo.runs:
-        run.font.color.rgb = RGBColor(0x1A, 0x56, 0xDB)
+    for section in doc.sections:
+        section.top_margin    = Cm(1.5)
+        section.bottom_margin = Cm(1.5)
+        section.left_margin   = Cm(2)
+        section.right_margin  = Cm(2)
 
-    doc.add_paragraph()
+    # ── Cabecera ──────────────────────────────────────────────────
+    nombre   = usuario.get("nombre", "Candidato")
+    rol      = usuario.get("rol", "")
+    ciudad   = usuario.get("ciudad", "")
+    email    = usuario.get("email", "")
+    linkedin = (usuario.get("linkedin", "") or "").replace("https://", "").replace("http://", "")
 
-    # Contenido generado por LLM (texto plano con secciones por líneas)
-    for linea in contenido_cv.split("\n"):
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run(nombre.upper())
+    r.bold = True; r.font.size = Pt(18); r.font.color.rgb = DARK
+
+    if rol:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = p.add_run(rol)
+        r.font.size = Pt(11); r.font.color.rgb = BLUE
+
+    contacto = " · ".join(c for c in [ciudad, email, linkedin] if c)
+    if contacto:
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = p.add_run(contacto)
+        r.font.size = Pt(8.5); r.font.color.rgb = GREY
+
+    # Línea separadora
+    p = doc.add_paragraph()
+    pPr = p._p.get_or_add_pPr()
+    pBdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single"); bottom.set(qn("w:sz"), "4")
+    bottom.set(qn("w:space"), "2"); bottom.set(qn("w:color"), "1A56DB")
+    pBdr.append(bottom); pPr.append(pBdr)
+
+    # ── Cuerpo del CV ────────────────────────────────────────────
+    SECCIONES = ["PERFIL PROFESIONAL", "EXPERIENCIA PROFESIONAL", "EXPERIENCIA",
+                 "HABILIDADES TÉCNICAS", "HABILIDADES", "FORMACIÓN", "IDIOMAS",
+                 "PROYECTOS", "CERTIFICACIONES", "COMPETENCIAS"]
+
+    for linea in contenido_cv.strip().split("\n"):
         linea = linea.strip()
         if not linea:
-            doc.add_paragraph()
             continue
-        if linea.startswith("##"):
-            h = doc.add_heading(linea.lstrip("# "), level=2)
-            for run in h.runs:
-                run.font.color.rgb = RGBColor(0x1A, 0x56, 0xDB)
-        elif linea.startswith("#"):
-            doc.add_heading(linea.lstrip("# "), level=1)
-        else:
-            p = doc.add_paragraph(linea)
-            p.style.font.size = Pt(11)
+
+        limpia = linea.upper().strip()
+
+        # Sección
+        if any(limpia.startswith(s) for s in SECCIONES) and len(linea) < 50:
+            p = doc.add_paragraph()
+            r = p.add_run(linea.upper())
+            r.bold = True; r.font.size = Pt(10); r.font.color.rgb = BLUE
+            p.paragraph_format.space_before = Pt(14)
+            p.paragraph_format.space_after  = Pt(4)
+            pPr = p._p.get_or_add_pPr()
+            pBdr = OxmlElement("w:pBdr")
+            bottom = OxmlElement("w:bottom")
+            bottom.set(qn("w:val"), "single"); bottom.set(qn("w:sz"), "4")
+            bottom.set(qn("w:space"), "2"); bottom.set(qn("w:color"), "1A56DB")
+            pBdr.append(bottom); pPr.append(pBdr)
+            continue
+
+        # Bullet
+        if linea.startswith(("- ", "• ", "* ")):
+            p = doc.add_paragraph()
+            r = p.add_run("• " + linea[2:].strip())
+            r.font.size = Pt(9.5); r.font.color.rgb = DARK
+            p.paragraph_format.left_indent = Cm(0.5)
+            p.paragraph_format.space_after  = Pt(2)
+            continue
+
+        # Empresa / puesto (línea con — o –)
+        if ("—" in linea or "–" in linea) and len(linea) < 100:
+            p = doc.add_paragraph()
+            r = p.add_run(linea)
+            r.bold = True; r.font.size = Pt(10); r.font.color.rgb = DARK
+            p.paragraph_format.space_before = Pt(8)
+            p.paragraph_format.space_after  = Pt(1)
+            continue
+
+        # Fecha (línea corta con año)
+        import re
+        if re.search(r"(20\d{2}|19\d{2})", linea) and len(linea) < 60:
+            p = doc.add_paragraph()
+            r = p.add_run(linea)
+            r.italic = True; r.font.size = Pt(9); r.font.color.rgb = GREY
+            p.paragraph_format.space_after = Pt(2)
+            continue
+
+        # Texto normal
+        p = doc.add_paragraph()
+        r = p.add_run(linea)
+        r.font.size = Pt(9.5); r.font.color.rgb = DARK
+        p.paragraph_format.space_after = Pt(3)
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -510,7 +645,7 @@ async function registrar() {
     }
   } catch(e) {
     msg.innerHTML = '<div class="msg err">❌ Error de conexión: ' + e.message + '</div>';
-    btn.disabled = false; btn.textContent = '🔍 Registrarme y buscar ahora';
+      btn.disabled = false; btn.textContent = '🔍 Registrarme y buscar ahora';
   }
 }
 </script>
@@ -539,7 +674,7 @@ def health():
             "gemini":  bool(GEMINI_API_KEY),
             "claude":  bool(CLAUDE_API_KEY),
         },
-        "timestamp":    datetime.utcnow().isoformat() + "Z",
+        "timestamp":    datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -655,54 +790,118 @@ def registro():
 
 @app.route("/generar-cv", methods=["POST"])
 def generar_cv():
-    """Genera un CV personalizado con LLM y lo sube a Drive."""
+    """Genera un CV personalizado con CV master real y lo sube a Drive."""
     datos = request.get_json(force=True)
-    email   = datos.get("email", "")
-    empresa = datos.get("empresa", "")
-    puesto  = datos.get("puesto", "")
-    perfil  = datos.get("perfil", "")
-    nombre  = datos.get("nombre", email.split("@")[0] if email else "candidato")
+    email       = datos.get("email", "")
+    empresa     = datos.get("empresa", "")
+    puesto      = datos.get("puesto", "")
+    descripcion = datos.get("descripcion", "")
 
     if not email or not empresa or not puesto:
         return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
 
-    # Prompt para el LLM
-    prompt = f"""Eres un experto redactor de CVs para el mercado español.
-Genera un CV profesional y conciso para el candidato siguiente, adaptado a la oferta.
+    # 1. Leer perfil completo del usuario desde Notion
+    usuario = buscar_usuario_por_email(email)
+    if not usuario:
+        return jsonify({"ok": False, "error": f"Usuario {email} no encontrado en Notion"}), 404
 
-CANDIDATO:
+    nombre = usuario.get("nombre") or email.split("@")[0]
+
+    # 2. Leer CV master desde Drive
+    cv_master = leer_cv_master_desde_drive(usuario)
+    if cv_master:
+        logger.info("CV master leído (%d chars) para %s", len(cv_master), email)
+    else:
+        logger.warning("CV master no encontrado para %s — usando solo perfil de Notion", email)
+
+    # 3. Construir contexto del candidato
+    ciudad = usuario.get("ciudad", "Madrid")
+    rol    = usuario.get("rol", "")
+    stack  = ", ".join(usuario.get("stack", [])) or "React, TypeScript"
+
+    # 4. Prompt con 4 fases + CV master real
+    if cv_master:
+        contexto_candidato = f"""CV MASTER COMPLETO (usa SOLO esta experiencia, NO inventes):
+{cv_master}"""
+    else:
+        contexto_candidato = f"""PERFIL DEL CANDIDATO (sin CV master disponible):
 - Nombre: {nombre}
-- Perfil: {perfil}
+- Rol objetivo: {rol}
+- Stack: {stack}
+- Ciudad: {ciudad}
+- Perfil: {usuario.get("perfil", "")}"""
 
-OFERTA:
+    prompt = f"""Act as a senior tech recruiter who screens 200+ CVs daily. Adapt this candidate's CV for a specific job offer.
+
+{contexto_candidato}
+
+OFERTA TARGET:
 - Empresa: {empresa}
 - Puesto: {puesto}
+- Descripción: {descripcion or "No disponible"}
 
-Formato de salida (usa ## para secciones):
-## Perfil profesional
-(2-3 frases impactantes)
+FASE 1 — ANÁLISIS INTERNO (no mostrar en output):
+- ¿Qué skills del CV master encajan mejor con esta oferta?
+- ¿Qué keywords de la oferta deben aparecer en el CV?
+- ¿Qué logros demuestran mejor el fit?
+- NO inventar experiencia, métricas ni logros
 
-## Experiencia relevante
-(lista de logros adaptados al puesto)
+FASE 2 — CV ADAPTADO (este es el output):
+Genera el CV adaptado siguiendo estas reglas ESTRICTAS:
+1. USA SOLO experiencia real del CV master — NO inventar métricas ni logros
+2. Adapta el ORDEN y ÉNFASIS según la oferta, no el contenido
+3. Keywords de la oferta integradas honestamente
+4. Bullets con fórmula X-Y-Z cuando los datos lo permitan
+5. Máximo 2 páginas
+6. Sin frases AI-típicas ("emocionado", "passionate about", "I'd love to")
 
-## Habilidades clave
-(lista concisa)
+FORMATO DE SALIDA (texto plano, sin markdown):
 
-## Formación
-(breve)
+PERFIL PROFESIONAL
+[2-3 líneas adaptadas a la oferta — basadas en el resumen ejecutivo del CV master]
 
-Sé directo, usa lenguaje activo, adapta el CV al puesto. Máximo 400 palabras."""
+EXPERIENCIA PROFESIONAL
+[Empresa] — [Ciudad]
+[Puesto]
+[Fecha inicio] – [Fecha fin]
+- Logro real del CV master adaptado en relevancia
+- Logro real del CV master adaptado en relevancia
+
+HABILIDADES TÉCNICAS
+[Skills ordenadas por relevancia para esta oferta]
+
+FORMACIÓN
+[Del CV master]
+
+IDIOMAS
+[Del CV master]
+
+REGLAS FINALES:
+- NO incluir cabecera (nombre/email/tel) — se añade programáticamente
+- NO usar markdown (**texto**, ##, ```)
+- NO inventar nada que no esté en el CV master
+- Idioma: español (salvo que la oferta sea en inglés)"""
 
     try:
         contenido_cv = call_llm(prompt)
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503
 
-    # Generar DOCX
-    nombre_archivo = f"CV_{nombre.replace(' ', '_')}_{empresa.replace(' ', '_')}.docx"
-    docx_bytes = generar_docx(contenido_cv, nombre)
+    # 5. Limpiar output del LLM
+    lineas_limpias = []
+    for linea in contenido_cv.split("\n"):
+        limpia = linea.strip().replace("**", "").replace("`", "").replace("##", "").replace("# ", "")
+        # Filtrar frases introductorias del LLM
+        if limpia.lower().startswith(("aquí", "here is", "here's", "a continuación", "claro", "por supuesto")):
+            continue
+        lineas_limpias.append(limpia)
+    contenido_cv = "\n".join(lineas_limpias)
 
-    # Subir a Drive
+    # 6. Generar DOCX con cabecera estructurada
+    nombre_archivo = f"CV_{nombre.replace(' ', '_')}_{empresa.replace(' ', '_')}.docx"
+    docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario)
+
+    # 7. Subir a Drive
     try:
         link_drive = subir_cv_a_drive(docx_bytes, nombre_archivo)
     except Exception as e:
@@ -710,11 +909,12 @@ Sé directo, usa lenguaje activo, adapta el CV al puesto. Máximo 400 palabras."
         return jsonify({"ok": False, "error": f"Error subiendo a Drive: {e}"}), 500
 
     return jsonify({
-        "ok":           True,
-        "link":         link_drive,
-        "modelo_usado": GROQ_MODEL,
-        "archivo":      nombre_archivo,
-        "email":        email,
+        "ok":              True,
+        "link":            link_drive,
+        "modelo_usado":    GROQ_MODEL,
+        "archivo":         nombre_archivo,
+        "email":           email,
+        "cv_master_usado": bool(cv_master),
     })
 
 
@@ -753,55 +953,24 @@ def buscar_ofertas_reales_endpoint():
 
     Body esperado:
     {
-        "perfil":      "Senior Frontend con experiencia en React...",
-        "rol":         "Senior Frontend Developer",
-        "stack":       ["React", "TypeScript", "Vue"],
-        "salario_min": 50000,
-        "modalidad":   ["Remoto"],
-        "ciudad":      "Madrid",
-        "top_n":       1
-    }
-
-    Devuelve:
-    {
-        "ok": true,
-        "ofertas": [{...}],
-        "total_encontradas": 21,
-        "total_filtradas": 8,
-        "fuente": "remotive"
+        "rol": "frontend developer",        // opcional, default del perfil
+        "stack": ["react", "typescript"],    // opcional
+        "modalidad": ["Remoto"],             // opcional
+        "ciudad": "Madrid",                  // opcional
     }
     """
-    datos = request.get_json(force=True) or {}
-
-    perfil      = datos.get("perfil", "")
-    rol         = datos.get("rol", "")
-    stack       = datos.get("stack") or []
-    salario_min = int(datos.get("salario_min") or datos.get("salario") or 0)
-    modalidad   = datos.get("modalidad") or []
-    ciudad      = datos.get("ciudad", "")
-    top_n       = int(datos.get("top_n") or 1)
-
-    if not stack and not rol:
-        return jsonify({
-            "ok":    False,
-            "error": "Se requiere al menos 'rol' o 'stack' para buscar"
-        }), 400
+    datos = request.get_json(force=True)
+    rol = datos.get("rol", "")
+    stack = datos.get("stack", [])
+    modalidad = datos.get("modalidad", [])
+    ciudad = datos.get("ciudad", "")
 
     try:
-        resultado = buscar_ofertas_reales(
-            perfil=perfil,
-            rol=rol,
-            stack=stack if isinstance(stack, list) else [stack],
-            salario_min=salario_min,
-            modalidad=modalidad if isinstance(modalidad, list) else [modalidad],
-            ciudad=ciudad,
-            top_n=top_n,
-        )
+        ofertas = buscar_ofertas_reales(rol=rol, stack=stack, modalidad=modalidad, ciudad=ciudad)
+        return jsonify({"ok": True, "ofertas": ofertas, "total": len(ofertas)})
     except Exception as e:
-        logger.error("Error en /buscar-ofertas-reales: %s", e)
+        logger.error("Error buscando ofertas reales: %s", e)
         return jsonify({"ok": False, "error": str(e)}), 500
-
-    return jsonify(resultado)
 
 
 # ══════════════════════════════════════════════
