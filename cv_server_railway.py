@@ -1001,13 +1001,16 @@ def buscar_ofertas_reales_endpoint():
     }
     """
     datos = request.get_json(force=True)
+    perfil = datos.get("perfil", "")
     rol = datos.get("rol", "")
     stack = datos.get("stack", [])
     modalidad = datos.get("modalidad", [])
     ciudad = datos.get("ciudad", "")
+    salario_min = datos.get("salario_min", 0)
+    top_n = datos.get("top_n", 5)
 
     try:
-        ofertas = buscar_ofertas_reales(rol=rol, stack=stack, modalidad=modalidad, ciudad=ciudad)
+        ofertas = buscar_ofertas_reales(perfil=perfil, rol=rol, stack=stack, salario_min=salario_min, modalidad=modalidad, ciudad=ciudad, top_n=top_n)
         return jsonify({"ok": True, "ofertas": ofertas, "total": len(ofertas)})
     except Exception as e:
         logger.error("Error buscando ofertas reales: %s", e)
