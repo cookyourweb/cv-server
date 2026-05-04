@@ -280,24 +280,37 @@ def buscar_usuario_por_email(email: str) -> dict | None:
     }
 
 
+def _extraer_drive_file_id(url: str) -> str:
+    """Extrae el file ID de una URL de Google Drive."""
+    import re
+    m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'id=([a-zA-Z0-9_-]+)', url)
+    return m.group(1) if m else ""
+
+
 def crear_usuario_en_notion(datos: dict) -> dict:
     """Crea un usuario en la BD de Notion."""
     url = "https://api.notion.com/v1/pages"
+    cv_master_url = datos.get("cv_master_url") or ""
+    cv_master_file_id = _extraer_drive_file_id(cv_master_url) if cv_master_url else ""
+    props = {
+        "Name":           {"title":  [{"text": {"content": datos.get("nombre", "")}}]},
+        "Email":          {"email":   datos.get("email", "")},
+        "Perfil":         {"rich_text": [{"text": {"content": datos.get("perfil", "")}}]},
+        "Rol objetivo":   {"rich_text": [{"text": {"content": datos.get("rol_objetivo", "") or datos.get("rol", "")}}]},
+        "Stack":          {"multi_select": [{"name": s} for s in datos.get("stack", [])]},
+        "Salario min":    {"number": datos.get("salario_min") or datos.get("salario") or 0},
+        "Modalidad":      {"multi_select": [{"name": m} for m in datos.get("modalidad", [])]},
+        "Ciudad":         {"rich_text": [{"text": {"content": datos.get("ciudad", "")}}]},
+        "LinkedIn":       {"url": datos.get("linkedin") or None},
+        "CV Master URL":  {"url": cv_master_url or None},
+        "Activo":         {"checkbox": True},
+    }
+    if cv_master_file_id:
+        props["cv_master_file_id"] = {"rich_text": [{"text": {"content": cv_master_file_id}}]}
+    # Filtrar propiedades con valor None que Notion rechaza
     payload = {
         "parent": {"database_id": NOTION_DB_USUARIOS},
-        "properties": {
-            "Name":           {"title":  [{"text": {"content": datos.get("nombre", "")}}]},
-            "Email":          {"email":   datos.get("email", "")},
-            "Perfil":         {"rich_text": [{"text": {"content": datos.get("perfil", "")}}]},
-            "Rol objetivo":   {"rich_text": [{"text": {"content": datos.get("rol_objetivo", "") or datos.get("rol", "")}}]},
-            "Stack":          {"multi_select": [{"name": s} for s in datos.get("stack", [])]},
-            "Salario min":    {"number": datos.get("salario_min") or datos.get("salario") or 0},
-            "Modalidad":      {"multi_select": [{"name": m} for m in datos.get("modalidad", [])]},
-            "Ciudad":         {"rich_text": [{"text": {"content": datos.get("ciudad", "")}}]},
-            "LinkedIn":       {"url": datos.get("linkedin") or None},
-            "CV Master URL":  {"url": datos.get("cv_master_url") or None},
-            "Activo":         {"checkbox": True},
-        },
+        "properties": {k: v for k, v in props.items() if v is not None and v != {"url": None}},
     }
     resp = requests.post(url, headers=notion_headers(), json=payload, timeout=15)
     resp.raise_for_status()
