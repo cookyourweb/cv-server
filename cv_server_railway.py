@@ -180,6 +180,14 @@ def subir_cv_a_drive(docx_bytes: bytes, nombre_archivo: str) -> str:
     return file.get("webViewLink", "")
 
 
+# MimeTypes de Google Docs que necesitan export en vez de get_media
+_GDOC_EXPORT = {
+    "application/vnd.google-apps.document":       "text/plain",
+    "application/vnd.google-apps.presentation":   "text/plain",
+    "application/vnd.google-apps.spreadsheet":    "text/csv",
+}
+
+
 def leer_cv_master_desde_drive(usuario: dict) -> str:
     """Descarga el CV master en texto plano desde Drive usando cv_master_file_id o cv_master_url."""
     service = get_drive_service()
@@ -200,7 +208,18 @@ def leer_cv_master_desde_drive(usuario: dict) -> str:
         return ""
 
     try:
-        req = service.files().get_media(fileId=file_id)
+        # Detectar mimeType para saber si hay que exportar (Google Docs nativos)
+        file_meta = service.files().get(fileId=file_id, fields="mimeType", supportsAllDrives=True).execute()
+        mime = file_meta.get("mimeType", "")
+
+        if mime in _GDOC_EXPORT:
+            # Google Docs nativos → exportar a texto
+            export_mime = _GDOC_EXPORT[mime]
+            req = service.files().export_media(fileId=file_id, mimeType=export_mime)
+        else:
+            # Archivos binarios (DOCX, PDF, etc.) → get_media
+            req = service.files().get_media(fileId=file_id)
+
         buf = io.BytesIO()
         from googleapiclient.http import MediaIoBaseDownload
         dl = MediaIoBaseDownload(buf, req)
@@ -840,25 +859,34 @@ OFERTA TARGET:
 - Puesto: {puesto}
 - Descripción: {descripcion or "No disponible"}
 
-FASE 1 — ANÁLISIS INTERNO (no mostrar en output):
-- ¿Qué skills del CV master encajan mejor con esta oferta?
-- ¿Qué keywords de la oferta deben aparecer en el CV?
-- ¿Qué logros demuestran mejor el fit?
+PASO 1 — ANÁLISIS INTERNO (no mostrar en output):
+- Skills del CV master que encajan con esta oferta
+- Keywords de la oferta que deben aparecer
+- Logros que mejor demuestran el fit
 - NO inventar experiencia, métricas ni logros
 
-FASE 2 — CV ADAPTADO (este es el output):
-Genera el CV adaptado siguiendo estas reglas ESTRICTAS:
-1. USA SOLO experiencia real del CV master — NO inventar métricas ni logros
+PASO 2 — CV ADAPTADO (output principal):
+Genera el CV adaptado con estas reglas ESTRICTAS:
+1. USA SOLO experiencia real del CV master, NO inventar métricas ni logros
 2. Adapta el ORDEN y ÉNFASIS según la oferta, no el contenido
 3. Keywords de la oferta integradas honestamente
 4. Bullets con fórmula X-Y-Z cuando los datos lo permitan
 5. Máximo 2 páginas
-6. Sin frases AI-típicas ("emocionado", "passionate about", "I'd love to")
+
+PASO 3 — REVISION ANTI-IA (aplicar al output antes de entregar):
+Elimina TODO rastro de texto generado por IA:
+- Cero guiones largos (—) ni dobles guiones (--)
+- Cero frases tipo "responsable de...", "encargada de...", "orientada a..."
+- Cero adjetivos vacíos ("dinámico", "proactivo", "apasionado", "motivado")
+- Cero "passionate about", "I'd love to", "excited to"
+- Cero verbos pasivos innecesarios ("fue responsable de..." → "lideró...")
+- Si suena a IA, reescríbelo con lenguaje humano y directo
+- Mantener tono profesional pero natural, como lo escribiría una persona
 
 FORMATO DE SALIDA (texto plano, sin markdown):
 
 PERFIL PROFESIONAL
-[2-3 líneas adaptadas a la oferta — basadas en el resumen ejecutivo del CV master]
+[2-3 líneas adaptadas a la oferta, basadas en el resumen ejecutivo del CV master]
 
 EXPERIENCIA PROFESIONAL
 [Empresa] — [Ciudad]
@@ -877,7 +905,7 @@ IDIOMAS
 [Del CV master]
 
 REGLAS FINALES:
-- NO incluir cabecera (nombre/email/tel) — se añade programáticamente
+- NO incluir cabecera (nombre/email/tel), se añade programáticamente
 - NO usar markdown (**texto**, ##, ```)
 - NO inventar nada que no esté en el CV master
 - Idioma: español (salvo que la oferta sea en inglés)"""
