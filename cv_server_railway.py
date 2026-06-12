@@ -956,6 +956,7 @@ REGLAS FINALES:
         "archivo":         nombre_archivo,
         "email":           email,
         "cv_master_usado": bool(cv_master),
+        "cv_master_url":   usuario.get("cv_master_url", "") or "",
     })
 
 
