@@ -208,9 +208,10 @@ def leer_cv_master_desde_drive(usuario: dict) -> str:
         return ""
 
     try:
-        # Detectar mimeType para saber si hay que exportar (Google Docs nativos)
-        file_meta = service.files().get(fileId=file_id, fields="mimeType", supportsAllDrives=True).execute()
+        # Detectar mimeType para saber cómo extraer el texto
+        file_meta = service.files().get(fileId=file_id, fields="mimeType, name", supportsAllDrives=True).execute()
         mime = file_meta.get("mimeType", "")
+        name = file_meta.get("name", "")
 
         if mime in _GDOC_EXPORT:
             # Google Docs nativos → exportar a texto
@@ -227,6 +228,23 @@ def leer_cv_master_desde_drive(usuario: dict) -> str:
         while not done:
             _, done = dl.next_chunk()
         buf.seek(0)
+
+        # DOCX es un ZIP, NO texto plano: hay que parsearlo con python-docx.
+        # Decodificar sus bytes como utf-8 devuelve basura ("PK...word/document.xml")
+        # y el LLM nunca ve la experiencia real → CV genérico.
+        DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if mime == DOCX_MIME or name.lower().endswith(".docx"):
+            doc = Document(buf)
+            partes = [p.text for p in doc.paragraphs if p.text.strip()]
+            # Las skills suelen ir en tablas → también hay que extraerlas
+            for tabla in doc.tables:
+                for fila in tabla.rows:
+                    for celda in fila.cells:
+                        if celda.text.strip():
+                            partes.append(celda.text)
+            return "\n".join(partes)
+
+        # Texto plano u otros formatos legibles
         return buf.read().decode("utf-8", errors="replace")
     except Exception as e:
         logger.warning("No se pudo leer CV master (file_id=%s): %s", file_id, e)
