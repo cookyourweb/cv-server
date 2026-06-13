@@ -52,6 +52,8 @@ CLAUDE_MODEL   = os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307")
 # ── Claude para el CV (calidad — va a empresas; Groq queda de fallback) ──
 # Haiku 4.5: barato (~$0,02/CV) y sigue bien el prompt de adaptación.
 CV_MODEL = os.getenv("CV_MODEL", "claude-haiku-4-5")
+# Carta de presentación: Sonnet 4.6 (mejor prosa, ~$0,04/carta). Va a empresas.
+CARTA_MODEL = os.getenv("CARTA_MODEL", "claude-sonnet-4-6")
 
 # ── Google Drive ──────────────────────────────
 GOOGLE_CLIENT_ID     = os.environ["GOOGLE_CLIENT_ID"]
@@ -1043,6 +1045,90 @@ REGLAS FINALES:
         "email":           email,
         "cv_master_usado": bool(cv_master),
         "cv_master_url":   usuario.get("cv_master_url", "") or "",
+    })
+
+
+@app.route("/generar-carta", methods=["POST"])
+def generar_carta():
+    """Genera la carta de presentación con la experiencia real del CV master.
+    Usa Claude Sonnet (calidad) — la carta va a la empresa."""
+    datos = request.get_json(force=True)
+    email       = datos.get("email", "")
+    empresa     = datos.get("empresa", "")
+    puesto      = datos.get("puesto", "")
+    descripcion = datos.get("descripcion", "")
+
+    if not email or not empresa or not puesto:
+        return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
+
+    usuario = buscar_usuario_por_email(email)
+    if not usuario:
+        return jsonify({"ok": False, "error": f"Usuario {email} no encontrado en Notion"}), 404
+
+    nombre = usuario.get("nombre") or email.split("@")[0]
+
+    # Leer CV master real (misma lógica + guardrail que /generar-cv)
+    tiene_master = bool((usuario.get("cv_master_file_id") or "").strip()
+                        or (usuario.get("cv_master_url") or "").strip())
+    cv_master = leer_cv_master_desde_drive(usuario)
+
+    def _es_legible(t: str) -> bool:
+        if not t:
+            return False
+        if t.lstrip().startswith("PK"):
+            return False
+        imprimibles = sum(1 for c in t if c.isprintable() or c in "\n\r\t")
+        return imprimibles / len(t) >= 0.85
+
+    if tiene_master and not _es_legible(cv_master):
+        logger.error("CV master ILEGIBLE para carta de %s — abortando", email)
+        return jsonify({
+            "ok": False,
+            "error": ("No se pudo leer tu CV master desde Drive. NO se generó la carta "
+                      "para evitar inventar datos. Revisá el archivo y permisos en Drive."),
+        }), 502
+
+    contexto = (f"CV MASTER (usa SOLO esta experiencia real, NO inventes nada):\n{cv_master}"
+                if cv_master else
+                f"PERFIL: {nombre} — {usuario.get('rol','')} — {usuario.get('perfil','')}")
+
+    prompt = f"""Eres un experto en cartas de presentación para ofertas de trabajo.
+Escribe una carta de presentación profesional para {nombre}.
+
+{contexto}
+
+OFERTA:
+- Empresa: {empresa}
+- Puesto: {puesto}
+- Descripción: {descripcion or "No disponible"}
+
+REGLAS:
+- Máximo 250 palabras, en español (salvo que la oferta esté en inglés → escríbela en inglés).
+- Usa SOLO experiencia real del CV master; conecta esa experiencia con lo que pide la oferta. NO inventes.
+- Tono profesional, directo y humano. Cero frases vacías de IA: nada de "apasionada",
+  "proactiva", "soluciones innovadoras", "emocionada de la oportunidad", "dinámica".
+- Menciona logros o tecnologías concretas del CV que encajen con la oferta.
+- Formato: "Estimados/as," ... cuerpo ... "Atentamente,\\n{nombre}".
+- Devuelve SOLO el texto de la carta, sin encabezados ni comentarios."""
+
+    try:
+        carta = call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500)
+    except RuntimeError as e:
+        return jsonify({"ok": False, "error": str(e)}), 503
+
+    # Limpiar frases introductorias del LLM
+    carta = carta.strip()
+    for pref in ("aquí tienes", "aquí está", "here is", "here's", "claro", "por supuesto"):
+        if carta.lower().startswith(pref):
+            carta = carta.split("\n", 1)[-1].strip()
+            break
+
+    return jsonify({
+        "ok":              True,
+        "carta":           carta,
+        "modelo_usado":    CARTA_MODEL,
+        "email":           email,
+        "cv_master_usado": bool(cv_master),
     })
 
 
