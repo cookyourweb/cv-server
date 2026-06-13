@@ -22,6 +22,9 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
+# Claude (calidad — CV y textos que van a empresas)
+import anthropic
+
 # DOCX
 from docx import Document
 from docx.shared import Pt, RGBColor
@@ -45,6 +48,10 @@ GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 # ── LLM: Claude (fallback opcional) ──────────
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
 CLAUDE_MODEL   = os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307")
+
+# ── Claude para el CV (calidad — va a empresas; Groq queda de fallback) ──
+# Haiku 4.5: barato (~$0,02/CV) y sigue bien el prompt de adaptación.
+CV_MODEL = os.getenv("CV_MODEL", "claude-haiku-4-5")
 
 # ── Google Drive ──────────────────────────────
 GOOGLE_CLIENT_ID     = os.environ["GOOGLE_CLIENT_ID"]
@@ -138,6 +145,40 @@ def call_llm(prompt: str) -> str:
             logger.error("Claude fallback falló: %s", e)
 
     raise RuntimeError("Todos los LLMs fallaron. Revisa las API keys y el estado de los servicios.")
+
+
+# ── Capa CALIDAD: Claude primario para el CV (lo que va a empresas) ──
+_anthropic_client = None
+
+def get_anthropic_client():
+    global _anthropic_client
+    if _anthropic_client is None:
+        if not CLAUDE_API_KEY:
+            raise RuntimeError("CLAUDE_API_KEY no configurada")
+        _anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    return _anthropic_client
+
+
+def call_claude(prompt: str, model: str, max_tokens: int = 4096) -> str:
+    """Llama a Claude vía SDK oficial. Para CV/carta donde la calidad importa."""
+    resp = get_anthropic_client().messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return "".join(b.text for b in resp.content if b.type == "text")
+
+
+def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096) -> str:
+    """Claude primario; si falla (rate limit, red o sin key) cae a Groq.
+    Para el CV y textos que van a una empresa — mejor que Groq, ~$0,02/CV."""
+    try:
+        contenido = call_claude(prompt, model=model, max_tokens=max_tokens)
+        logger.info("LLM calidad: Claude OK (%s)", model)
+        return contenido
+    except Exception as e:
+        logger.warning("Claude falló (%s) — cayendo a Groq", e)
+        return call_llm(prompt)
 
 
 # ══════════════════════════════════════════════
@@ -968,7 +1009,8 @@ REGLAS FINALES:
 - Idioma: español (salvo que la oferta sea en inglés)"""
 
     try:
-        contenido_cv = call_llm(prompt)
+        # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad
+        contenido_cv = call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096)
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503
 
