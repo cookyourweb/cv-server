@@ -858,7 +858,33 @@ def generar_cv():
     nombre = usuario.get("nombre") or email.split("@")[0]
 
     # 2. Leer CV master desde Drive
+    tiene_master_configurado = bool(
+        (usuario.get("cv_master_file_id") or "").strip()
+        or (usuario.get("cv_master_url") or "").strip()
+    )
     cv_master = leer_cv_master_desde_drive(usuario)
+
+    # Guardrail: si hay un master configurado pero lo leído es ilegible
+    # (basura binaria de un .docx sin parsear, o sin acceso), NO generamos
+    # nada. Mejor fallar claro que mandar un CV con datos inventados.
+    def _es_legible(t: str) -> bool:
+        if not t:
+            return False
+        if t.lstrip().startswith("PK"):  # firma ZIP de un .docx no parseado
+            return False
+        imprimibles = sum(1 for c in t if c.isprintable() or c in "\n\r\t")
+        return imprimibles / len(t) >= 0.85
+
+    if tiene_master_configurado and not _es_legible(cv_master):
+        logger.error("CV master ILEGIBLE para %s (largo=%d) — abortando para no inventar",
+                     email, len(cv_master or ""))
+        return jsonify({
+            "ok": False,
+            "error": ("No se pudo leer tu CV master desde Drive (archivo ilegible o sin acceso). "
+                      "NO se generó un CV para evitar enviar datos inventados. "
+                      "Revisá el archivo y los permisos en Drive."),
+        }), 502
+
     if cv_master:
         logger.info("CV master leído (%d chars) para %s", len(cv_master), email)
     else:
