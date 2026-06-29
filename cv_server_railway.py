@@ -231,21 +231,29 @@ _GDOC_EXPORT = {
 }
 
 
-def leer_cv_master_desde_drive(usuario: dict) -> str:
-    """Descarga el CV master en texto plano desde Drive usando cv_master_file_id o cv_master_url."""
+def leer_cv_master_desde_drive(usuario: dict, idioma: str = "es") -> str:
+    """Descarga el CV master en texto plano desde Drive, eligiendo la fuente segun idioma.
+    idioma='en' -> 'CV Master URL' (ingles); idioma='es' -> 'CV Master URL ES'
+    (con fallback al master ingles si no hay version española configurada)."""
     service = get_drive_service()
 
-    # Prioridad 1: cv_master_file_id (campo nuevo en Notion)
-    file_id = usuario.get("cv_master_file_id", "").strip()
+    # Elegir la fuente del master segun el idioma detectado de la oferta
+    if idioma == "en":
+        file_id = (usuario.get("cv_master_file_id") or "").strip()
+        url = usuario.get("cv_master_url", "") or ""
+    else:  # 'es' (o cualquier otro) -> master español, con fallback al ingles
+        file_id = ""
+        url = usuario.get("cv_master_url_es", "") or ""
+        if not url:
+            file_id = (usuario.get("cv_master_file_id") or "").strip()
+            url = usuario.get("cv_master_url", "") or ""
 
-    # Prioridad 2: extraer file_id de cv_master_url (Drive share link)
-    if not file_id:
-        url = usuario.get("cv_master_url", "")
-        if url:
-            import re
-            m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'id=([a-zA-Z0-9_-]+)', url)
-            if m:
-                file_id = m.group(1)
+    # Si no hay file_id directo, extraerlo de la URL (link de Drive/Docs)
+    if not file_id and url:
+        import re
+        m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'id=([a-zA-Z0-9_-]+)', url)
+        if m:
+            file_id = m.group(1)
 
     if not file_id:
         return ""
@@ -295,6 +303,51 @@ def leer_cv_master_desde_drive(usuario: dict) -> str:
 
 
 # ══════════════════════════════════════════════
+# IDIOMA
+# ══════════════════════════════════════════════
+
+import re as _re_idioma
+
+_ES_ACENTOS = _re_idioma.compile(r"[ñáéíóúü¿¡]", _re_idioma.IGNORECASE)
+_ES_PALABRAS = {
+    "experiencia", "equipo", "desarrollo", "empresa", "puesto", "requisitos",
+    "conocimientos", "años", "trabajo", "ofrecemos", "buscamos", "gestión",
+    "liderazgo", "desarrollador", "programador", "aplicaciones", "datos",
+    "proyecto", "cliente", "habilidades", "capacidad", "valorable",
+    "imprescindible", "nivel", "sector", "jornada", "remoto",
+}
+_EN_PALABRAS = {
+    "experience", "team", "development", "company", "position", "requirements",
+    "skills", "years", "work", "we", "you", "our", "developer", "engineer",
+    "manage", "ability", "strong", "knowledge", "including", "required",
+    "preferred", "remote", "build", "design", "role", "looking",
+}
+
+
+def detectar_idioma(*textos) -> str:
+    """Heuristica simple: devuelve 'es' o 'en' segun señales del texto de la oferta.
+    Acentos y signos ¿¡ pesan doble (señal fuerte de español). Empate -> 'es'
+    (mercado principal de la usuaria)."""
+    texto = " ".join(t for t in textos if t).lower()
+    if not texto.strip():
+        return "es"
+    palabras = set(_re_idioma.findall(r"[a-záéíóúñü]+", texto))
+    es = len(_ES_ACENTOS.findall(texto)) * 2
+    es += sum(1 for w in _ES_PALABRAS if w in palabras)
+    en = sum(1 for w in _EN_PALABRAS if w in palabras)
+    return "en" if en > es else "es"
+
+
+def _tiene_algun_master(usuario: dict) -> bool:
+    """True si el usuario tiene configurado un master en cualquier idioma."""
+    return bool(
+        (usuario.get("cv_master_file_id") or "").strip()
+        or (usuario.get("cv_master_url") or "").strip()
+        or (usuario.get("cv_master_url_es") or "").strip()
+    )
+
+
+# ══════════════════════════════════════════════
 # NOTION
 # ══════════════════════════════════════════════
 
@@ -337,6 +390,7 @@ def buscar_usuario_por_email(email: str) -> dict | None:
         "ciudad":             (p.get("Ciudad", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
         "linkedin":           p.get("LinkedIn", {}).get("url", "") or "",
         "cv_master_url":      p.get("CV Master URL", {}).get("url", "") or "",
+        "cv_master_url_es":   p.get("CV Master URL ES", {}).get("url", "") or "",
         "cv_master_file_id":  (p.get("cv_master_file_id", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
     }
 
@@ -900,12 +954,10 @@ def generar_cv():
 
     nombre = usuario.get("nombre") or email.split("@")[0]
 
-    # 2. Leer CV master desde Drive
-    tiene_master_configurado = bool(
-        (usuario.get("cv_master_file_id") or "").strip()
-        or (usuario.get("cv_master_url") or "").strip()
-    )
-    cv_master = leer_cv_master_desde_drive(usuario)
+    # 2. Detectar idioma de la oferta y leer el CV master en ese idioma
+    idioma = detectar_idioma(puesto, descripcion, empresa)
+    tiene_master_configurado = _tiene_algun_master(usuario)
+    cv_master = leer_cv_master_desde_drive(usuario, idioma)
 
     # Guardrail: si hay un master configurado pero lo leído es ilegible
     # (basura binaria de un .docx sin parsear, o sin acceso), NO generamos
@@ -950,7 +1002,66 @@ def generar_cv():
 - Ciudad: {ciudad}
 - Perfil: {usuario.get("perfil", "")}"""
 
+    # Titulos de seccion y regla de idioma, en el idioma de la oferta
+    idioma_nombre = "English" if idioma == "en" else "Spanish"
+    if idioma == "en":
+        bloque_formato = """OUTPUT FORMAT (plain text, no markdown):
+
+PROFESSIONAL SUMMARY
+[2-3 lines tailored to the offer, based on the CV master summary]
+
+PROFESSIONAL EXPERIENCE
+[Company] — [City]
+[Role]
+[Start date] – [End date]
+- Real achievement from the CV master, prioritised by relevance
+- Real achievement from the CV master, prioritised by relevance
+
+TECHNICAL SKILLS
+[Skills ordered by relevance to this offer]
+
+EDUCATION
+[From the CV master]
+
+LANGUAGES
+[From the CV master]
+
+FINAL RULES:
+- Do NOT include header (name/email/phone), it is added programmatically
+- Do NOT use markdown (**text**, ##, ```)
+- Do NOT invent anything not in the CV master
+- Language: the ENTIRE CV must be in English (section titles and content)"""
+    else:
+        bloque_formato = """FORMATO DE SALIDA (texto plano, sin markdown):
+
+PERFIL PROFESIONAL
+[2-3 líneas adaptadas a la oferta, basadas en el resumen ejecutivo del CV master]
+
+EXPERIENCIA PROFESIONAL
+[Empresa] — [Ciudad]
+[Puesto]
+[Fecha inicio] – [Fecha fin]
+- Logro real del CV master adaptado en relevancia
+- Logro real del CV master adaptado en relevancia
+
+HABILIDADES TÉCNICAS
+[Skills ordenadas por relevancia para esta oferta]
+
+FORMACIÓN
+[Del CV master]
+
+IDIOMAS
+[Del CV master]
+
+REGLAS FINALES:
+- NO incluir cabecera (nombre/email/tel), se añade programáticamente
+- NO usar markdown (**texto**, ##, ```)
+- NO inventar nada que no esté en el CV master
+- Idioma: TODO el CV en español (títulos de sección y contenido)"""
+
     prompt = f"""Act as a senior tech recruiter who screens 200+ CVs daily. Adapt this candidate's CV for a specific job offer.
+
+The target job offer is written in {idioma_nombre}. Generate the ENTIRE CV in {idioma_nombre} — both the section titles and the content.
 
 {contexto_candidato}
 
@@ -983,32 +1094,7 @@ Elimina TODO rastro de texto generado por IA:
 - Si suena a IA, reescríbelo con lenguaje humano y directo
 - Mantener tono profesional pero natural, como lo escribiría una persona
 
-FORMATO DE SALIDA (texto plano, sin markdown):
-
-PERFIL PROFESIONAL
-[2-3 líneas adaptadas a la oferta, basadas en el resumen ejecutivo del CV master]
-
-EXPERIENCIA PROFESIONAL
-[Empresa] — [Ciudad]
-[Puesto]
-[Fecha inicio] – [Fecha fin]
-- Logro real del CV master adaptado en relevancia
-- Logro real del CV master adaptado en relevancia
-
-HABILIDADES TÉCNICAS
-[Skills ordenadas por relevancia para esta oferta]
-
-FORMACIÓN
-[Del CV master]
-
-IDIOMAS
-[Del CV master]
-
-REGLAS FINALES:
-- NO incluir cabecera (nombre/email/tel), se añade programáticamente
-- NO usar markdown (**texto**, ##, ```)
-- NO inventar nada que no esté en el CV master
-- Idioma: español (salvo que la oferta sea en inglés)"""
+{bloque_formato}"""
 
     try:
         # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad
@@ -1044,6 +1130,7 @@ REGLAS FINALES:
         "archivo":         nombre_archivo,
         "email":           email,
         "cv_master_usado": bool(cv_master),
+        "idioma":          idioma,
         "cv_master_url":   usuario.get("cv_master_url", "") or "",
     })
 
@@ -1067,10 +1154,10 @@ def generar_carta():
 
     nombre = usuario.get("nombre") or email.split("@")[0]
 
-    # Leer CV master real (misma lógica + guardrail que /generar-cv)
-    tiene_master = bool((usuario.get("cv_master_file_id") or "").strip()
-                        or (usuario.get("cv_master_url") or "").strip())
-    cv_master = leer_cv_master_desde_drive(usuario)
+    # Detectar idioma de la oferta y leer el CV master en ese idioma
+    idioma = detectar_idioma(puesto, descripcion, empresa)
+    tiene_master = _tiene_algun_master(usuario)
+    cv_master = leer_cv_master_desde_drive(usuario, idioma)
 
     def _es_legible(t: str) -> bool:
         if not t:
@@ -1103,12 +1190,13 @@ OFERTA:
 - Descripción: {descripcion or "No disponible"}
 
 REGLAS:
-- Máximo 250 palabras, en español (salvo que la oferta esté en inglés → escríbela en inglés).
+- La oferta está en {"inglés" if idioma == "en" else "español"}. Escribe TODA la carta en ese idioma (saludo, cuerpo y despedida).
+- Máximo 250 palabras.
 - Usa SOLO experiencia real del CV master; conecta esa experiencia con lo que pide la oferta. NO inventes.
 - Tono profesional, directo y humano. Cero frases vacías de IA: nada de "apasionada",
   "proactiva", "soluciones innovadoras", "emocionada de la oportunidad", "dinámica".
 - Menciona logros o tecnologías concretas del CV que encajen con la oferta.
-- Formato: "Estimados/as," ... cuerpo ... "Atentamente,\\n{nombre}".
+- Formato carta: saludo formal ("Estimados/as," en español, "Dear Hiring Team," en inglés) ... cuerpo ... despedida formal ("Atentamente," / "Sincerely,") seguida de "{nombre}".
 - Devuelve SOLO el texto de la carta, sin encabezados ni comentarios."""
 
     try:
