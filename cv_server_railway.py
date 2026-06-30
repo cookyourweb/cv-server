@@ -492,6 +492,46 @@ def crear_usuario_en_notion(datos: dict) -> dict:
     return resp.json()
 
 
+def crear_oferta_en_notion(oferta: dict, idioma: str = "", usuario_notion_id: str = "") -> dict:
+    """Crea una oferta en la DB Ofertas con TODOS sus campos mapeados.
+
+    Centraliza el mapeo oferta→Notion en código (en vez de la UI de n8n).
+    `oferta` es el dict que devuelve /buscar-ofertas-reales (real_jobs.py).
+    """
+    def _txt(v: str) -> dict:
+        return {"rich_text": [{"text": {"content": (v or "")[:2000]}}]}
+
+    props = {
+        "Empresa":       {"title": [{"text": {"content": oferta.get("empresa", "")}}]},
+        "Puesto":        _txt(oferta.get("puesto", "")),
+        "Descripción":   _txt(oferta.get("descripcion", "")),
+        "Salario":       _txt(oferta.get("salario", "")),
+        "Ubicación":     _txt(oferta.get("ubicacion", "")),
+        "Tipo Contrato": _txt(oferta.get("tipo_contrato", "")),
+        "Estado":        {"select": {"name": "Pendiente"}},
+    }
+    modalidad = oferta.get("modalidad", "")
+    if modalidad in ("Remoto", "Hibrido", "Presencial"):
+        props["Modalidad"] = {"select": {"name": modalidad}}
+    tags = [t for t in (oferta.get("tags") or []) if t]
+    if tags:
+        props["Tags"] = {"multi_select": [{"name": t[:100]} for t in tags]}
+    if oferta.get("link"):
+        props["Link oferta"] = {"url": oferta["link"]}
+    if oferta.get("fecha_publicacion"):
+        props["Fecha Publicacion"] = {"date": {"start": oferta["fecha_publicacion"]}}
+    if idioma in ("en", "es"):
+        props["Idioma"] = {"select": {"name": idioma}}
+    if usuario_notion_id:
+        props["Usuario"] = {"relation": [{"id": usuario_notion_id}]}
+
+    payload = {"parent": {"database_id": NOTION_DB_OFERTAS}, "properties": props}
+    resp = requests.post("https://api.notion.com/v1/pages",
+                         headers=notion_headers(), json=payload, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ══════════════════════════════════════════════
 # GENERACIÓN DOCX
 # ══════════════════════════════════════════════
@@ -1392,6 +1432,42 @@ def buscar_ofertas_reales_endpoint():
     except Exception as e:
         logger.error("Error buscando ofertas reales: %s", e)
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/crear-oferta", methods=["POST"])
+def crear_oferta():
+    """Crea una oferta en Notion con TODOS sus campos.
+
+    n8n llama aquí (una vez por oferta) en vez de mapear campo por campo en su
+    nodo de Notion. Body: {"email": "...", "oferta": {...}} — o el objeto oferta
+    plano. Detecta y persiste el idioma a partir de la descripción.
+    """
+    datos = request.get_json(force=True)
+    email = (datos.get("email") or "").strip().lower()
+    oferta = datos.get("oferta") if isinstance(datos.get("oferta"), dict) else datos
+
+    empresa = oferta.get("empresa", "")
+    puesto = oferta.get("puesto", "")
+    if not empresa or not puesto:
+        return jsonify({"ok": False, "error": "empresa y puesto son requeridos"}), 400
+
+    # Detectar idioma ahora que tenemos la descripción en la mano y persistirlo
+    idioma = detectar_idioma(puesto, oferta.get("descripcion", ""), empresa)
+
+    # Relacionar la oferta con el usuario (si tenemos email)
+    usuario_notion_id = ""
+    if email:
+        u = buscar_usuario_por_email(email)
+        if u:
+            usuario_notion_id = u.get("notion_id", "")
+
+    try:
+        page = crear_oferta_en_notion(oferta, idioma, usuario_notion_id)
+    except requests.RequestException as e:
+        logger.error("Error creando oferta en Notion: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 502
+
+    return jsonify({"ok": True, "notion_page_id": page.get("id", ""), "idioma": idioma})
 
 
 # ══════════════════════════════════════════════
