@@ -1051,12 +1051,15 @@ def generar_cv():
     if not email or not empresa or not puesto:
         return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
 
-    # Si n8n no mandó la descripción, recuperarla de la oferta en Notion
-    # (sin ella detectar_idioma cae a 'es' por defecto).
-    if not descripcion.strip():
+    # Idioma autoritativo: el que n8n decidió de la descripción REAL al crear la
+    # oferta (la de Notion suele ser un resumen en español que confunde la
+    # detección). Prioridad: body.idioma > Idioma guardado en Notion > detección.
+    idioma_in = (datos.get("idioma") or "").strip().lower()
+    if not descripcion.strip() or idioma_in not in ("en", "es"):
         oferta = buscar_oferta_en_notion(empresa, puesto)
         if oferta:
-            descripcion = oferta.get("descripcion", "") or descripcion
+            descripcion = descripcion or oferta.get("descripcion", "")
+            idioma_in = idioma_in or (oferta.get("idioma") or "").strip().lower()
 
     # 1. Leer perfil completo del usuario desde Notion
     usuario = buscar_usuario_por_email(email)
@@ -1065,8 +1068,8 @@ def generar_cv():
 
     nombre = usuario.get("nombre") or email.split("@")[0]
 
-    # 2. Detectar idioma de la oferta y leer el CV master en ese idioma
-    idioma = detectar_idioma(puesto, descripcion, empresa)
+    # 2. Resolver idioma y leer el CV master en ese idioma
+    idioma = idioma_in if idioma_in in ("en", "es") else detectar_idioma(puesto, descripcion, empresa)
     tiene_master_configurado = _tiene_algun_master(usuario)
     cv_master = leer_cv_master_desde_drive(usuario, idioma)
 
@@ -1287,14 +1290,16 @@ def generar_carta():
     if not email or not empresa or not puesto:
         return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
 
-    # Recuperar de la oferta en Notion lo que n8n no mandó: la descripción
-    # (necesaria para el idioma) y la persona de contacto (para el saludo).
+    # Idioma autoritativo (igual que en /generar-cv) + persona de contacto para
+    # el saludo. Prioridad idioma: body.idioma > Idioma de Notion > detección.
+    idioma_in = (datos.get("idioma") or "").strip().lower()
     contacto = (datos.get("contacto") or datos.get("nombre_contacto") or "").strip()
-    if not descripcion.strip() or not contacto:
+    if not descripcion.strip() or not contacto or idioma_in not in ("en", "es"):
         oferta = buscar_oferta_en_notion(empresa, puesto)
         if oferta:
             descripcion = descripcion or oferta.get("descripcion", "")
             contacto = contacto or oferta.get("nombre_contacto", "").strip()
+            idioma_in = idioma_in or (oferta.get("idioma") or "").strip().lower()
 
     usuario = buscar_usuario_por_email(email)
     if not usuario:
@@ -1302,8 +1307,8 @@ def generar_carta():
 
     nombre = usuario.get("nombre") or email.split("@")[0]
 
-    # Detectar idioma de la oferta y leer el CV master en ese idioma
-    idioma = detectar_idioma(puesto, descripcion, empresa)
+    # Resolver idioma y leer el CV master en ese idioma
+    idioma = idioma_in if idioma_in in ("en", "es") else detectar_idioma(puesto, descripcion, empresa)
     tiene_master = _tiene_algun_master(usuario)
     cv_master = leer_cv_master_desde_drive(usuario, idioma)
 
