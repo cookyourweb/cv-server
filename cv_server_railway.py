@@ -64,6 +64,7 @@ FOLDER_CV_MASTERS    = os.getenv("FOLDER_CV_MASTERS", "1duJA_G3lLbOqiUYoSJcsXAvb
 # ── Notion ────────────────────────────────────
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
+NOTION_DB_OFERTAS  = os.getenv("NOTION_DB_OFERTAS", "33d11515-f4b2-8176-947b-000bbafd1ca7")
 
 # ── Webhooks n8n ──────────────────────────────
 WEBHOOK_NUEVO_USUARIO = os.getenv("WEBHOOK_NUEVO_USUARIO", "")
@@ -415,6 +416,42 @@ def buscar_usuario_por_email(email: str) -> dict | None:
         "cv_master_url":      p.get("CV Master URL", {}).get("url", "") or "",
         "cv_master_url_es":   p.get("CV Master URL ES", {}).get("url", "") or "",
         "cv_master_file_id":  (p.get("cv_master_file_id", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+    }
+
+
+def buscar_oferta_en_notion(empresa: str, puesto: str) -> dict | None:
+    """Busca una oferta en la DB de Ofertas por Empresa + Puesto.
+
+    Sirve para recuperar datos que n8n guardó en Notion al crear la oferta
+    pero que no llegan en el body de /generar-cv o /generar-carta (sobre todo
+    la Descripción, clave para detectar el idioma). Devuelve dict o None.
+    """
+    if not NOTION_DB_OFERTAS or not empresa or not puesto:
+        return None
+    try:
+        resp = requests.post(
+            f"https://api.notion.com/v1/databases/{NOTION_DB_OFERTAS}/query",
+            headers=notion_headers(),
+            json={"filter": {"and": [
+                {"property": "Empresa", "title": {"equals": empresa}},
+                {"property": "Puesto", "rich_text": {"equals": puesto}},
+            ]}, "page_size": 1},
+            timeout=15,
+        )
+    except requests.RequestException as e:
+        logger.warning("Notion query oferta falló: %s", e)
+        return None
+    if resp.status_code != 200:
+        logger.warning("Notion query oferta error %s: %s", resp.status_code, resp.text[:200])
+        return None
+    results = resp.json().get("results", [])
+    if not results:
+        return None
+    p = results[0].get("properties", {})
+    return {
+        "descripcion":     (p.get("Descripción", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "nombre_contacto": (p.get("Nombre Contacto", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "idioma":          (p.get("Idioma", {}).get("select") or {}).get("name", ""),
     }
 
 
@@ -974,6 +1011,13 @@ def generar_cv():
     if not email or not empresa or not puesto:
         return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
 
+    # Si n8n no mandó la descripción, recuperarla de la oferta en Notion
+    # (sin ella detectar_idioma cae a 'es' por defecto).
+    if not descripcion.strip():
+        oferta = buscar_oferta_en_notion(empresa, puesto)
+        if oferta:
+            descripcion = oferta.get("descripcion", "") or descripcion
+
     # 1. Leer perfil completo del usuario desde Notion
     usuario = buscar_usuario_por_email(email)
     if not usuario:
@@ -1203,6 +1247,15 @@ def generar_carta():
     if not email or not empresa or not puesto:
         return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
 
+    # Recuperar de la oferta en Notion lo que n8n no mandó: la descripción
+    # (necesaria para el idioma) y la persona de contacto (para el saludo).
+    contacto = (datos.get("contacto") or datos.get("nombre_contacto") or "").strip()
+    if not descripcion.strip() or not contacto:
+        oferta = buscar_oferta_en_notion(empresa, puesto)
+        if oferta:
+            descripcion = descripcion or oferta.get("descripcion", "")
+            contacto = contacto or oferta.get("nombre_contacto", "").strip()
+
     usuario = buscar_usuario_por_email(email)
     if not usuario:
         return jsonify({"ok": False, "error": f"Usuario {email} no encontrado en Notion"}), 404
@@ -1234,6 +1287,14 @@ def generar_carta():
                 if cv_master else
                 f"PERFIL: {nombre} — {usuario.get('rol','')} — {usuario.get('perfil','')}")
 
+    # Saludo: si hay persona de contacto real, dirigir la carta a ella; si no,
+    # saludo genérico. NUNCA inventar un nombre.
+    if contacto:
+        instr_saludo = (f'saludo dirigido a la persona de contacto ("A la atención de {contacto}," '
+                        f'en español, "Dear {contacto}," en inglés) — usa EXACTAMENTE ese nombre, no lo inventes ni lo cambies')
+    else:
+        instr_saludo = 'saludo formal genérico ("Estimados/as," en español, "Dear Hiring Team," en inglés)'
+
     prompt = f"""Eres un experto en cartas de presentación para ofertas de trabajo.
 Escribe una carta de presentación profesional para {nombre}.
 
@@ -1251,7 +1312,7 @@ REGLAS:
 - Tono profesional, directo y humano. Cero frases vacías de IA: nada de "apasionada",
   "proactiva", "soluciones innovadoras", "emocionada de la oportunidad", "dinámica".
 - Menciona logros o tecnologías concretas del CV que encajen con la oferta.
-- Formato carta: saludo formal ("Estimados/as," en español, "Dear Hiring Team," en inglés) ... cuerpo ... despedida formal ("Atentamente," / "Sincerely,") seguida de "{nombre}".
+- Formato carta: {instr_saludo} ... cuerpo ... despedida formal ("Atentamente," / "Sincerely,") seguida de "{nombre}".
 - Devuelve SOLO el texto de la carta, sin encabezados ni comentarios."""
 
     try:
