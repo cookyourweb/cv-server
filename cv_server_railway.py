@@ -338,6 +338,26 @@ def detectar_idioma(*textos) -> str:
     return "en" if en > es else "es"
 
 
+def _slug(texto: str) -> str:
+    """Slug en minúsculas sin acentos para nombres de archivo."""
+    s = (texto or "").lower().strip()
+    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"),
+                 ("ú", "u"), ("ñ", "n"), ("ü", "u")):
+        s = s.replace(a, b)
+    s = _re_idioma.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s
+
+
+def _nombre_archivo_cv(nombre: str, puesto: str) -> str:
+    """Convención: cv-<nombre>-<puesto>-<año>.docx (ej: cv-veronica-serna-frontend-developer-2026.docx)."""
+    partes = ["cv", _slug(nombre) or "candidato"]
+    puesto_slug = _slug(puesto)
+    if puesto_slug:
+        partes.append(puesto_slug)
+    partes.append(str(datetime.now(timezone.utc).year))
+    return "-".join(partes) + ".docx"
+
+
 def _tiene_algun_master(usuario: dict) -> bool:
     """True si el usuario tiene configurado un master en cualquier idioma."""
     return bool(
@@ -381,6 +401,8 @@ def buscar_usuario_por_email(email: str) -> dict | None:
         "notion_id":          page.get("id", ""),
         "nombre":             (p.get("Name", {}).get("title") or [{}])[0].get("plain_text", ""),
         "email":              p.get("Email", {}).get("email", ""),
+        "email_cv":           (p.get("Email CV", {}).get("email", "")
+                               or (p.get("Email CV", {}).get("rich_text") or [{}])[0].get("plain_text", "")),
         "activo":             p.get("Activo", {}).get("checkbox", False),
         "perfil":             (p.get("Perfil", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
         "rol":                (p.get("Rol objetivo", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
@@ -388,6 +410,7 @@ def buscar_usuario_por_email(email: str) -> dict | None:
         "salario_min":        p.get("Salario min", {}).get("number", 0) or 0,
         "modalidad":          [m["name"] for m in p.get("Modalidad", {}).get("multi_select", [])],
         "ciudad":             (p.get("Ciudad", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
+        "telefono":           (p.get("Teléfono", {}).get("rich_text") or [{}])[0].get("plain_text", ""),
         "linkedin":           p.get("LinkedIn", {}).get("url", "") or "",
         "cv_master_url":      p.get("CV Master URL", {}).get("url", "") or "",
         "cv_master_url_es":   p.get("CV Master URL ES", {}).get("url", "") or "",
@@ -441,8 +464,10 @@ def generar_docx(contenido_cv: str, nombre_candidato: str) -> bytes:
     return generar_docx_con_cabecera(contenido_cv, {"nombre": nombre_candidato})
 
 
-def generar_docx_con_cabecera(contenido_cv: str, usuario: dict) -> bytes:
-    """Genera DOCX con cabecera profesional estructurada usando datos reales del usuario."""
+def generar_docx_con_cabecera(contenido_cv: str, usuario: dict, titular: str = "") -> bytes:
+    """Genera DOCX con cabecera profesional estructurada usando datos reales del usuario.
+    `titular` (si viene) es el headline adaptado a la oferta por el LLM; tiene prioridad
+    sobre el campo `rol` fijo del perfil."""
     from docx.shared import Cm
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
@@ -464,9 +489,11 @@ def generar_docx_con_cabecera(contenido_cv: str, usuario: dict) -> bytes:
 
     # ── Cabecera ──────────────────────────────────────────────────
     nombre   = usuario.get("nombre", "Candidato")
-    rol      = usuario.get("rol", "")
+    rol      = titular or usuario.get("rol", "")
     ciudad   = usuario.get("ciudad", "")
-    email    = usuario.get("email", "")
+    telefono = usuario.get("telefono", "")
+    # Email de cabecera (contacto) separado del email-clave de búsqueda en Notion
+    email    = usuario.get("email_cv") or usuario.get("email", "")
     linkedin = (usuario.get("linkedin", "") or "").replace("https://", "").replace("http://", "")
 
     p = doc.add_paragraph()
@@ -480,7 +507,7 @@ def generar_docx_con_cabecera(contenido_cv: str, usuario: dict) -> bytes:
         r = p.add_run(rol)
         r.font.size = Pt(11); r.font.color.rgb = BLUE
 
-    contacto = " · ".join(c for c in [ciudad, email, linkedin] if c)
+    contacto = " · ".join(c for c in [ciudad, telefono, email, linkedin] if c)
     if contacto:
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -1007,18 +1034,25 @@ def generar_cv():
     if idioma == "en":
         bloque_formato = """OUTPUT FORMAT (plain text, no markdown):
 
+HEADLINE: [professional title for this offer — see HEADLINE RULES below]
+
 PROFESSIONAL SUMMARY
-[2-3 lines tailored to the offer, based on the CV master summary]
+[2 full paragraphs (4-6 lines each) tailored to the offer, based on the CV master summary. First paragraph: who she is + core strengths relevant to this role. Second paragraph: depth, domains and the angle that fits this offer.]
 
 PROFESSIONAL EXPERIENCE
 [Company] — [City]
 [Role]
 [Start date] – [End date]
-- Real achievement from the CV master, prioritised by relevance
-- Real achievement from the CV master, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+(6-9 bullets for recent/relevant roles, 3-4 for older ones — always real, never padded)
 
 TECHNICAL SKILLS
-[Skills ordered by relevance to this offer]
+[Skills grouped by category (Frontend, AI, Design Systems, Backend, Cloud, Testing...) with concrete tools/versions, ordered by relevance to this offer]
 
 EDUCATION
 [From the CV master]
@@ -1027,25 +1061,33 @@ LANGUAGES
 [From the CV master]
 
 FINAL RULES:
-- Do NOT include header (name/email/phone), it is added programmatically
+- First line MUST be "HEADLINE: ..." — it becomes the header title
+- Do NOT include name/email/phone, they are added programmatically
 - Do NOT use markdown (**text**, ##, ```)
 - Do NOT invent anything not in the CV master
 - Language: the ENTIRE CV must be in English (section titles and content)"""
     else:
         bloque_formato = """FORMATO DE SALIDA (texto plano, sin markdown):
 
+HEADLINE: [titular profesional para esta oferta — ver REGLAS DEL HEADLINE abajo]
+
 PERFIL PROFESIONAL
-[2-3 líneas adaptadas a la oferta, basadas en el resumen ejecutivo del CV master]
+[2 párrafos completos (4-6 líneas cada uno) adaptados a la oferta, basados en el resumen del CV master. Primer párrafo: quién es + fortalezas clave relevantes para este puesto. Segundo párrafo: profundidad, dominios y el ángulo que encaja con esta oferta.]
 
 EXPERIENCIA PROFESIONAL
 [Empresa] — [Ciudad]
 [Puesto]
 [Fecha inicio] – [Fecha fin]
-- Logro real del CV master adaptado en relevancia
-- Logro real del CV master adaptado en relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+(6-9 bullets en los puestos recientes/relevantes, 3-4 en los antiguos — siempre reales, nunca de relleno)
 
 HABILIDADES TÉCNICAS
-[Skills ordenadas por relevancia para esta oferta]
+[Skills agrupadas por categoría (Frontend, IA, Sistemas de Diseño, Backend, Cloud, Testing...) con herramientas/versiones concretas, ordenadas por relevancia para esta oferta]
 
 FORMACIÓN
 [Del CV master]
@@ -1054,7 +1096,8 @@ IDIOMAS
 [Del CV master]
 
 REGLAS FINALES:
-- NO incluir cabecera (nombre/email/tel), se añade programáticamente
+- La primera línea DEBE ser "HEADLINE: ..." — se usa como titular de la cabecera
+- NO incluir nombre/email/tel, se añaden programáticamente
 - NO usar markdown (**texto**, ##, ```)
 - NO inventar nada que no esté en el CV master
 - Idioma: TODO el CV en español (títulos de sección y contenido)"""
@@ -1081,8 +1124,15 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 1. USA SOLO experiencia real del CV master, NO inventar métricas ni logros
 2. Adapta el ORDEN y ÉNFASIS según la oferta, no el contenido
 3. Keywords de la oferta integradas honestamente
-4. Bullets con fórmula X-Y-Z cuando los datos lo permitan
-5. Máximo 2 páginas
+4. Bullets con fórmula XYZ ("Logré X, medido por Y, haciendo Z") SIEMPRE que los datos lo permitan — nada de bullets genéricos tipo "responsable de..."
+5. Densidad real: NO recortes ni resumas el CV master. Los puestos recientes/relevantes deben llevar 6-9 bullets; los antiguos 3-4. Si el master tiene el detalle, úsalo entero.
+6. Máximo 2 páginas
+
+HEADLINE RULES (primera línea del output):
+- Base canónica: "Full-Stack Developer & AI Engineer" (Full-Stack primero, IA después)
+- AJUSTA el titular al ángulo VERAZ de la oferta: si la oferta es de frontend → "Frontend Developer"; si es full-stack → la base; si está centrada en IA → "AI Engineer" al frente
+- NUNCA un rol que la candidata no tiene (p.ej. JAMÁS "Video Editor" ni similares). Si la oferta pide un rol que no encaja con su perfil real, usa la base canónica
+- El titular va en el idioma de la oferta
 
 PASO 3 — REVISION ANTI-IA (aplicar al output antes de entregar):
 Elimina TODO rastro de texto generado por IA:
@@ -1102,19 +1152,24 @@ Elimina TODO rastro de texto generado por IA:
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503
 
-    # 5. Limpiar output del LLM
+    # 5. Limpiar output del LLM y extraer el titular (HEADLINE)
+    titular = ""
     lineas_limpias = []
     for linea in contenido_cv.split("\n"):
         limpia = linea.strip().replace("**", "").replace("`", "").replace("##", "").replace("# ", "")
+        # Titular generado por el LLM (primera línea HEADLINE) → cabecera, fuera del cuerpo
+        if not titular and limpia.lower().startswith("headline:"):
+            titular = limpia.split(":", 1)[1].strip()
+            continue
         # Filtrar frases introductorias del LLM
         if limpia.lower().startswith(("aquí", "here is", "here's", "a continuación", "claro", "por supuesto")):
             continue
         lineas_limpias.append(limpia)
     contenido_cv = "\n".join(lineas_limpias)
 
-    # 6. Generar DOCX con cabecera estructurada
-    nombre_archivo = f"CV_{nombre.replace(' ', '_')}_{empresa.replace(' ', '_')}.docx"
-    docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario)
+    # 6. Generar DOCX con cabecera estructurada (titular adaptado por la oferta)
+    nombre_archivo = _nombre_archivo_cv(nombre, puesto)
+    docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario, titular)
 
     # 7. Subir a Drive
     try:
