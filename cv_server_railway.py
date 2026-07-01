@@ -1210,7 +1210,7 @@ PASO 2 — CV ADAPTADO (output principal):
 Genera el CV adaptado con estas reglas ESTRICTAS:
 1. NO INVENTAR NUNCA: solo experiencia real del CV master. Nada de tecnologías no usadas, responsabilidades no ejercidas, liderazgo de personas o arquitectura que no haya hecho, ni métricas/impacto exagerados.
 2. Adapta el ORDEN y ÉNFASIS según la oferta, no el contenido
-3. Keywords de la oferta integradas honestamente
+3. Optimización ATS: integra las palabras clave EXACTAS de la oferta cuando formen parte de su experiencia real; el CV debe quedar 100% defendible en entrevista
 4. Bullets con fórmula XYZ ("Logré X, medido por Y, haciendo Z") SIEMPRE que los datos lo permitan — nada de bullets genéricos tipo "responsable de..."
 5. Densidad real: NO recortes ni resumas el CV master. Los puestos recientes/relevantes deben llevar 6-9 bullets; los antiguos 3-4. Si el master tiene el detalle, úsalo entero.
 6. Redacta como PERFIL DE PRODUCTO: traducción de necesidades de negocio a soluciones digitales, colaboración con diseño y producto, plataformas B2B y B2C, diseño de flujos y componentes reutilizables, Design Systems.
@@ -1219,20 +1219,19 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 HEADLINE RULES (primera línea del output):
 - IDENTIDAD BASE (por defecto, ~80% de las ofertas): "Frontend Tech Lead | UX Engineer".
   Su activo diferencial son 15+ años de Frontend + UX + Producto + Design Systems.
-- IDENTIDAD IA (usar SOLO si la oferta está claramente centrada en IA, automatización, agentes, LLMs o adopción de IA):
-  "AI Product Builder | Frontend Developer"  o  "Frontend Developer | AI Solutions Builder".
-- Adaptaciones permitidas del titular base según el ángulo VERAZ de la oferta (elige la más ajustada):
-  · "Frontend Tech Lead | UX Engineer"        (base, y para ofertas de lead/ownership frontend)
-  · "Senior Frontend Engineer | UX Engineer"  (para senior frontend)
-  · "Frontend Developer | Vue.js | React | UX Engineer"  (para ofertas de dev frontend centradas en una tech)
+- Adapta el titular al tipo de oferta (elige el más ajustado y VERAZ):
+  · Oferta Frontend (dev):            "Frontend Developer | React | Vue.js | UX Engineer"
+  · Oferta Tech Lead / lead frontend: "Frontend Tech Lead | UX Engineer"
+  · Oferta de IA / automatización:    "Frontend Tech Lead | UX Engineer | AI Solutions Builder"
 - NUNCA uses "Full-Stack Developer & AI Engineer" como identidad principal.
-- NUNCA un rol que la candidata no tiene (JAMÁS "Video Editor", "Backend Architect", etc.). El titular va en el idioma de la oferta.
+- NO uses títulos grandilocuentes ("AI Engineer", "Principal Architect", "Head of Engineering") salvo que la oferta lo pida EXPLÍCITAMENTE y sea justificable en entrevista.
+- NUNCA un rol que la candidata no tiene. El titular va en el idioma de la oferta.
 
 POSICIONAMIENTO SEGÚN EL TIPO DE OFERTA (adapta el ÉNFASIS, nunca inventes):
 - Oferta Frontend (dev): prioriza React, Vue, TypeScript, JavaScript, HTML5, CSS3. REDUCE el protagonismo del liderazgo.
 - Oferta Tech Lead: destaca mentoría técnica, coordinación con negocio/UX/producto/backend y ownership del área frontend. Fue Tech Lead DE FACTO del área frontend; NO afirmes gestión/dirección de personas salvo que sea explícitamente cierto.
 - Oferta UX Engineer: destaca Figma, Design Systems, UX, accesibilidad y traducción de negocio a experiencia digital.
-- Oferta de IA: destaca IA aplicada, automatización, LLMs, agentes, Cursor/Lovable/n8n y prototipado rápido. NO afirmes experiencia profesional avanzada con Python/MLOps si la oferta no lo exige.
+- Oferta de IA: destaca IA aplicada, automatización, LLMs, OpenAI/Claude/n8n, agentes y prototipado rápido. Python SÍ puede aparecer como HERRAMIENTA dentro de su experiencia en IA aplicada cuando sea relevante, pero NUNCA la posiciones como Senior Python Engineer.
 - Tecnología usada hace años (p.ej. Java): posiciónala como algo que puede retomar rápido por su experiencia full-stack previa, SIN presentarse como especialista actual en ella.
 
 PASO 3 — REVISION ANTI-IA (aplicar al output antes de entregar):
@@ -1367,7 +1366,7 @@ OFERTA:
 REGLAS:
 - La oferta está en {"inglés" if idioma == "en" else "español"}. Escribe TODA la carta en ese idioma (saludo, cuerpo y despedida).
 - Máximo 250 palabras.
-- Usa SOLO experiencia real del CV master; conecta esa experiencia con lo que pide la oferta. NO inventes.
+- Usa SOLO experiencia real del CV master, y SOLO la relevante para este puesto; conecta esa experiencia con lo que pide la oferta. NO inventes, NO exageres y NO afirmes nada difícil de defender en entrevista (ni gestión de equipos ni arquitectura que no haya hecho).
 - Tono profesional, directo y humano. Cero frases vacías de IA: nada de "apasionada",
   "proactiva", "soluciones innovadoras", "emocionada de la oportunidad", "dinámica".
 - Menciona logros o tecnologías concretas del CV que encajen con la oferta.
