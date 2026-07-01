@@ -1200,11 +1200,14 @@ OFERTA TARGET:
 - Puesto: {puesto}
 - Descripción: {descripcion or "No disponible"}
 
-PASO 1 — ANÁLISIS INTERNO (no mostrar en output):
+PASO 1 — ANÁLISIS INTERNO (SOLO mental — NO lo escribas en la respuesta):
+Piensa, SIN volcarlo al output, en:
 - Skills del CV master que encajan con esta oferta
 - Keywords de la oferta que deben aparecer
 - Logros que mejor demuestran el fit
 - NO inventar experiencia, métricas ni logros
+Tu respuesta DEBE empezar EXACTAMENTE con la línea "HEADLINE: ...". Prohibido escribir
+análisis, títulos, encabezados o cualquier texto ANTES de esa línea.
 
 PASO 2 — CV ADAPTADO (output principal):
 Genera el CV adaptado con estas reglas ESTRICTAS:
@@ -1226,6 +1229,13 @@ HEADLINE RULES (primera línea del output):
 - NUNCA uses "Full-Stack Developer & AI Engineer" como identidad principal.
 - NO uses títulos grandilocuentes ("AI Engineer", "Principal Architect", "Head of Engineering") salvo que la oferta lo pida EXPLÍCITAMENTE y sea justificable en entrevista.
 - NUNCA un rol que la candidata no tiene. El titular va en el idioma de la oferta.
+
+NIVEL DEL PUESTO (detecta liderazgo vs colaborador individual — es CLAVE):
+- Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director → es un rol de DESARROLLO INDIVIDUAL. En ese caso:
+  · Titular de developer, NUNCA "Tech Lead" (p.ej. "Full Stack Developer | Frontend Engineer").
+  · REDUCE al mínimo el liderazgo: NO abras bullets con "Lideré/Coordiné equipos" ni "formación de equipos". Reformula esos logros hacia el trabajo TÉCNICO concreto (qué construiste, qué migraste, qué arquitectura/componentes/APIs), no hacia la gestión.
+  · El liderazgo puede aparecer como contexto breve ("durante 8 años en el equipo frontend..."), NUNCA como la venta principal del perfil.
+- Solo si el puesto pide lead/manager/responsable/principal/head → destaca el ownership y la coordinación técnica.
 
 POSICIONAMIENTO SEGÚN EL TIPO DE OFERTA (adapta el ÉNFASIS, nunca inventes):
 - Oferta Frontend (dev): prioriza React, Vue, TypeScript, JavaScript, HTML5, CSS3. REDUCE el protagonismo del liderazgo.
@@ -1253,14 +1263,23 @@ Elimina TODO rastro de texto generado por IA:
         return jsonify({"ok": False, "error": str(e)}), 503
 
     # 5. Limpiar output del LLM y extraer el titular (HEADLINE)
+    #    Todo lo anterior a la línea HEADLINE se DESCARTA: si el modelo escribe el
+    #    "ANÁLISIS INTERNO" pese al "no mostrar", o mete un preámbulo, jamás llega
+    #    al DOCX. El cuerpo del CV empieza recién DESPUÉS del HEADLINE.
     titular = ""
+    lineas = contenido_cv.split("\n")
+    idx_headline = next(
+        (i for i, l in enumerate(lineas)
+         if l.strip().replace("**", "").replace("`", "").lower().startswith("headline:")),
+        None,
+    )
+    if idx_headline is not None:
+        cab = lineas[idx_headline].strip().replace("**", "").replace("`", "")
+        titular = cab.split(":", 1)[1].strip()
+        lineas = lineas[idx_headline + 1:]
     lineas_limpias = []
-    for linea in contenido_cv.split("\n"):
+    for linea in lineas:
         limpia = linea.strip().replace("**", "").replace("`", "").replace("##", "").replace("# ", "")
-        # Titular generado por el LLM (primera línea HEADLINE) → cabecera, fuera del cuerpo
-        if not titular and limpia.lower().startswith("headline:"):
-            titular = limpia.split(":", 1)[1].strip()
-            continue
         # Filtrar frases introductorias del LLM
         if limpia.lower().startswith(("aquí", "here is", "here's", "a continuación", "claro", "por supuesto")):
             continue
@@ -1367,6 +1386,7 @@ REGLAS:
 - La oferta está en {"inglés" if idioma == "en" else "español"}. Escribe TODA la carta en ese idioma (saludo, cuerpo y despedida).
 - Máximo 250 palabras.
 - Usa SOLO experiencia real del CV master, y SOLO la relevante para este puesto; conecta esa experiencia con lo que pide la oferta. NO inventes, NO exageres y NO afirmes nada difícil de defender en entrevista (ni gestión de equipos ni arquitectura que no haya hecho).
+- NIVEL: si el puesto NO menciona lead/manager/responsable/principal/head, es un rol de DESARROLLO INDIVIDUAL: NO uses la coordinación/liderazgo de equipos como argumento principal (nada de "experiencia coordinando equipos técnicos"). Enfoca el encaje TÉCNICO real (stacks, full-stack, APIs, mobile, capacidad de aprender rápido el stack de la oferta).
 - Tono profesional, directo y humano. Cero frases vacías de IA: nada de "apasionada",
   "proactiva", "soluciones innovadoras", "emocionada de la oportunidad", "dinámica".
 - Menciona logros o tecnologías concretas del CV que encajen con la oferta.
