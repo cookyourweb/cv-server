@@ -1216,10 +1216,15 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 6. Máximo 2 páginas
 
 HEADLINE RULES (primera línea del output):
-- Base canónica: "Full-Stack Developer & AI Engineer" (Full-Stack primero, IA después)
-- AJUSTA el titular al ángulo VERAZ de la oferta: si la oferta es de frontend → "Frontend Developer"; si es full-stack → la base; si está centrada en IA → "AI Engineer" al frente
-- NUNCA un rol que la candidata no tiene (p.ej. JAMÁS "Video Editor" ni similares). Si la oferta pide un rol que no encaja con su perfil real, usa la base canónica
-- El titular va en el idioma de la oferta
+- SIEMPRE refleja su SENIORITY real: es Tech Lead / Senior con 10+ años. NUNCA la degrades al nivel de la oferta: aunque la oferta pida junior o mid (p.ej. "Frontend Developer" de 1-2 años), su titular sigue siendo SENIOR.
+- Estructura: "[ángulo de la oferta a nivel senior] & AI [Engineer/Specialist]". Ejemplos VERACES:
+  · Oferta de frontend → "Frontend Tech Lead & AI Engineer" o "Senior Frontend Developer & AI Engineer"
+  · Oferta full-stack → "Full-Stack Tech Lead & AI Engineer"
+  · Oferta centrada en IA → "AI Engineer & Full-Stack Developer"
+- SIEMPRE incluí la dimensión de IA (AI Engineer / AI Specialist): es parte de su identidad, aunque la oferta no la pida.
+- NO metas tecnologías concretas en el titular (Vue, React, Angular...). Esas van en el PERFIL/summary, adaptadas a la oferta.
+- Si la oferta no encaja claro con su perfil, usa la base canónica: "Full-Stack Tech Lead & AI Engineer".
+- NUNCA un rol que la candidata no tiene (p.ej. JAMÁS "Video Editor"). El titular va en el idioma de la oferta.
 
 PASO 3 — REVISION ANTI-IA (aplicar al output antes de entregar):
 Elimina TODO rastro de texto generado por IA:
