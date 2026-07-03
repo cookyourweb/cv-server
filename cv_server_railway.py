@@ -1220,25 +1220,33 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 7. Máximo 2 páginas
 
 HEADLINE RULES (primera línea del output):
-- IDENTIDAD BASE (por defecto, ~80% de las ofertas): "Frontend Tech Lead | UX Engineer".
-  Su activo diferencial son 15+ años de Frontend + UX + Producto + Design Systems.
+- REGLA MAESTRA: IDENTIDAD REAL + ESPECIALIZACIÓN DE LA OFERTA, nunca al revés. El NÚCLEO del titular es SIEMPRE una de estas tres identidades reales y defendibles: "Frontend Tech Lead", "Full-Stack Developer", "UX Engineer". A ese núcleo se le añade la especialización que pide la oferta (React, Vue.js, Next.js, TypeScript, AI, Design Systems, Product, Accessibility, FinTech, E-commerce...). Su valor diferencial NO es "usar IA" ni "saber Vue": es 15+ años en frontend, UX y producto, que además trabaja full-stack y aplica IA cuando el proyecto lo requiere.
+- IDENTIDAD BASE (cuando la oferta no encaja claramente en un tipo): "Frontend Tech Lead | Full-Stack Developer | UX Engineer".
 - Adapta el titular al tipo de oferta (elige el más ajustado y VERAZ):
-  · Oferta Frontend (dev):            "Frontend Developer | React | Vue.js | UX Engineer"
-  · Oferta Tech Lead / lead frontend: "Frontend Tech Lead | UX Engineer"
-  · Oferta de IA / automatización:    "Frontend Tech Lead | UX Engineer | AI Solutions Builder"
-- NUNCA uses "Full-Stack Developer & AI Engineer" como identidad principal.
-- NO uses títulos grandilocuentes ("AI Engineer", "Principal Architect", "Head of Engineering") salvo que la oferta lo pida EXPLÍCITAMENTE y sea justificable en entrevista.
+  · Oferta Frontend:   "Frontend Tech Lead | React | Vue.js | UX Engineer"
+  · Oferta Full Stack: "Full-Stack Developer | React | TypeScript | UX Engineer"
+  · Oferta Tech Lead:  "Frontend Tech Lead | UX Engineer"
+  · Oferta de IA:      "AI Product Builder | Full-Stack Developer" o "AI Solutions Engineer | Full-Stack Developer"
+- TÍTULOS DE IA: usa SOLO títulos defendibles ("AI Product Builder", "AI Solutions Engineer", "AI Automation Engineer"). NUNCA uses "AI Expert" ni "AI Specialist" solo porque la oferta lo diga: ella construye soluciones con Claude/OpenAI/n8n y cursa un máster de IA aplicada, pero no se posiciona como especialista/experta en IA.
+- NO uses títulos grandilocuentes ("Principal Architect", "Head of Engineering", "Engineering Manager") salvo que la oferta lo pida EXPLÍCITAMENTE y sea justificable en entrevista.
 - NUNCA un rol que la candidata no tiene. El titular va en el idioma de la oferta.
 
-NIVEL DEL PUESTO (detecta liderazgo vs colaborador individual — es CLAVE):
-- Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director → es un rol de DESARROLLO INDIVIDUAL. En ese caso:
-  · Titular de developer, NUNCA "Tech Lead" (p.ej. "Full Stack Developer | Frontend Engineer").
+RESUMEN / PERFIL — frase complementaria según el tipo de oferta (añade al resumen la experiencia real que NO va en el titular, para no perderla):
+- Oferta Frontend:   añade "Experiencia adicional en desarrollo Full-Stack e integración de soluciones basadas en IA."
+- Oferta Tech Lead:  añade "Experiencia en desarrollo Full-Stack, Design Systems e IA aplicada al desarrollo."
+- Oferta Full Stack: añade "Experiencia liderando iniciativas frontend y diseño de producto digital."
+- Oferta de IA:      añade "Background de más de 15 años en frontend, UX y desarrollo de producto digital."
+
+NIVEL DEL PUESTO (aplica al CUERPO del CV — el TITULAR lo fijan las HEADLINE RULES):
+- Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director → es un rol de DESARROLLO INDIVIDUAL. En ese caso, en el CUERPO:
   · REDUCE al mínimo el liderazgo: NO abras bullets con "Lideré/Coordiné equipos" ni "formación de equipos". Reformula esos logros hacia el trabajo TÉCNICO concreto (qué construiste, qué migraste, qué arquitectura/componentes/APIs), no hacia la gestión.
   · El liderazgo puede aparecer como contexto breve ("durante 8 años en el equipo frontend..."), NUNCA como la venta principal del perfil.
+  · "Frontend Tech Lead" en el titular refleja su seniority real (fue Tech Lead DE FACTO del frontend); NO lo contradice, pero el cuerpo se centra en el trabajo técnico, no en dirigir personas.
 - Solo si el puesto pide lead/manager/responsable/principal/head → destaca el ownership y la coordinación técnica.
 
 POSICIONAMIENTO SEGÚN EL TIPO DE OFERTA (adapta el ÉNFASIS, nunca inventes):
 - Oferta Frontend (dev): prioriza React, Vue, TypeScript, JavaScript, HTML5, CSS3. REDUCE el protagonismo del liderazgo.
+- Oferta Full Stack: prioriza React, TypeScript, Node.js, APIs, Firebase, MongoDB e integraciones. Mantén el frontend como fortaleza principal; no infles el liderazgo salvo que la oferta lo pida.
 - Oferta Tech Lead: destaca mentoría técnica, coordinación con negocio/UX/producto/backend y ownership del área frontend. Fue Tech Lead DE FACTO del área frontend; NO afirmes gestión/dirección de personas salvo que sea explícitamente cierto.
 - Oferta UX Engineer: destaca Figma, Design Systems, UX, accesibilidad y traducción de negocio a experiencia digital.
 - Oferta de IA: destaca IA aplicada, automatización, LLMs, OpenAI/Claude/n8n, agentes y prototipado rápido. Python SÍ puede aparecer como HERRAMIENTA dentro de su experiencia en IA aplicada cuando sea relevante, pero NUNCA la posiciones como Senior Python Engineer.
