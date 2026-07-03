@@ -1220,7 +1220,7 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 7. Máximo 2 páginas
 
 HEADLINE RULES (primera línea del output):
-- REGLA MAESTRA: IDENTIDAD REAL + ESPECIALIZACIÓN DE LA OFERTA, nunca al revés. El NÚCLEO del titular es SIEMPRE una de estas tres identidades reales y defendibles: "Frontend Tech Lead", "Full-Stack Developer", "UX Engineer". A ese núcleo se le añade la especialización que pide la oferta (React, Vue.js, Next.js, TypeScript, AI, Design Systems, Product, Accessibility, FinTech, E-commerce...). Su valor diferencial NO es "usar IA" ni "saber Vue": es 15+ años en frontend, UX y producto, que además trabaja full-stack y aplica IA cuando el proyecto lo requiere.
+- REGLA MAESTRA: IDENTIDAD REAL + ESPECIALIZACIÓN DE LA OFERTA, nunca al revés. El NÚCLEO del titular es SIEMPRE una de estas tres identidades reales y defendibles: "Frontend Tech Lead", "Full-Stack Developer", "UX Engineer". A ese núcleo se le añade la especialización que pide la oferta (React, Vue.js, Next.js, TypeScript, AI, Design Systems, Product, Accessibility, FinTech, E-commerce...). Su valor diferencial NO es "usar IA" ni "saber Vue": es su trayectoria real en frontend, UX y producto (10+ años), que además trabaja full-stack y aplica IA cuando el proyecto lo requiere.
 - IDENTIDAD BASE (cuando la oferta no encaja claramente en un tipo): "Frontend Tech Lead | Full-Stack Developer | UX Engineer".
 - Adapta el titular al tipo de oferta (elige el más ajustado y VERAZ):
   · Oferta Frontend:   "Frontend Tech Lead | React | Vue.js | UX Engineer"
@@ -1230,12 +1230,13 @@ HEADLINE RULES (primera línea del output):
 - TÍTULOS DE IA: usa SOLO títulos defendibles ("AI Product Builder", "AI Solutions Engineer", "AI Automation Engineer"). NUNCA uses "AI Expert" ni "AI Specialist" solo porque la oferta lo diga: ella construye soluciones con Claude/OpenAI/n8n y cursa un máster de IA aplicada, pero no se posiciona como especialista/experta en IA.
 - NO uses títulos grandilocuentes ("Principal Architect", "Head of Engineering", "Engineering Manager") salvo que la oferta lo pida EXPLÍCITAMENTE y sea justificable en entrevista.
 - NUNCA un rol que la candidata no tiene. El titular va en el idioma de la oferta.
+- AÑOS DE EXPERIENCIA: usa "10+ años" como base por defecto. NO claves "15+" ni un número alto en todas las ofertas. Solo refleja más años (siempre veraz, nunca inventado) si la oferta valora seniority explícitamente; ajusta el número a lo que pide cada proyecto.
 
 RESUMEN / PERFIL — frase complementaria según el tipo de oferta (añade al resumen la experiencia real que NO va en el titular, para no perderla):
 - Oferta Frontend:   añade "Experiencia adicional en desarrollo Full-Stack e integración de soluciones basadas en IA."
 - Oferta Tech Lead:  añade "Experiencia en desarrollo Full-Stack, Design Systems e IA aplicada al desarrollo."
 - Oferta Full Stack: añade "Experiencia liderando iniciativas frontend y diseño de producto digital."
-- Oferta de IA:      añade "Background de más de 15 años en frontend, UX y desarrollo de producto digital."
+- Oferta de IA:      añade "Background de 10+ años en frontend, UX y desarrollo de producto digital."
 
 NIVEL DEL PUESTO (aplica al CUERPO del CV — el TITULAR lo fijan las HEADLINE RULES):
 - Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director → es un rol de DESARROLLO INDIVIDUAL. En ese caso, en el CUERPO:
