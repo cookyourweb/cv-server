@@ -155,5 +155,9 @@ Cualquier incidencia, duda o feedback:
 
 ---
 
+> 🛠️ **¿Desarrollas o mantienes el servicio?** El detalle técnico (modelos LLM, fixes y trampas) está en [`CHANGELOG.md`](./CHANGELOG.md). Esta guía es solo para usuarios.
+
+---
+
 **Versión:** 2.0 Multi-User
 **Última actualización:** 21 Abril 2026
