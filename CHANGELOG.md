@@ -26,6 +26,11 @@ Cadena declarada en la cabecera de `cv_server_railway.py` (v2.3-groq):
 Todos los modelos se pueden sobreescribir por variable de entorno (`GROQ_MODEL`,
 `CV_MODEL`, `CARTA_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL`).
 
+**El prompt que adapta el CV y la carta está documentado en
+[`docs/PROMPT-ADAPTACION-CV.md`](./docs/PROMPT-ADAPTACION-CV.md)**: estructura en 3 pasos,
+HEADLINE RULES, posicionamiento por tipo de oferta y las reglas anti-IA. Léelo antes de
+tocar el f-string del prompt en `cv_server_railway.py`.
+
 ---
 
 ## Julio 2026
