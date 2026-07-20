@@ -68,6 +68,16 @@ Reglas estrictas:
 manda sobre el titular. Ver reglas de CV en la memoria del proyecto y en el README de
 buscartrabajo.
 
+### PERFIL — anclaje a la oferta (obligatorio)
+El resumen debe RESONAR con la oferta: identifica 2-3 requisitos o keywords concretas de la
+descripción que la candidata YA haya trabajado de verdad, e intégralos en el perfil
+redactados como experiencia real y demostrable ("con experiencia en X aplicada a Y").
+
+*Línea roja*: PROHIBIDO meter un requisito de la oferta que NO esté respaldado por su
+trayectoria real. Si la oferta lo pide pero ella no lo ha hecho, NO entra. Esto ancla el
+perfil a la oferta usando SOLO lo cierto y defendible en entrevista; nunca es una puerta
+para inventar.
+
 ### NIVEL DEL PUESTO (aplica al CUERPO, no al titular)
 - Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director, es
   **desarrollo individual**: reducir el liderazgo al mínimo, reformular logros hacia el

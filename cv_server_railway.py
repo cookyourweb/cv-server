@@ -1277,6 +1277,8 @@ RESUMEN / PERFIL — frase complementaria según el tipo de oferta (añade al re
 - Oferta Full Stack: añade "Experiencia liderando iniciativas frontend y diseño de producto digital."
 - Oferta de IA:      añade "Background de 10+ años en frontend, UX y desarrollo de producto digital."
 
+PERFIL — ANCLAJE A LA OFERTA (obligatorio): identifica 2-3 requisitos o palabras clave concretas de la DESCRIPCIÓN de la oferta que la candidata YA haya trabajado de verdad (según su CV master), e intégralos en el resumen redactados como experiencia real y demostrable ("con experiencia en X aplicada a Y", "habiendo trabajado Z en..."). PROHIBIDO incluir un requisito de la oferta que NO esté respaldado por su trayectoria real: si la oferta lo pide pero ella no lo ha hecho, NO entra. El objetivo es que el perfil resuene con la oferta usando SOLO lo que es cierto y defendible en entrevista.
+
 NIVEL DEL PUESTO (aplica al CUERPO del CV — el TITULAR lo fijan las HEADLINE RULES):
 - Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director → es un rol de DESARROLLO INDIVIDUAL. En ese caso, en el CUERPO:
   · REDUCE al mínimo el liderazgo: NO abras bullets con "Lideré/Coordiné equipos" ni "formación de equipos". Reformula esos logros hacia el trabajo TÉCNICO concreto (qué construiste, qué migraste, qué arquitectura/componentes/APIs), no hacia la gestión.
