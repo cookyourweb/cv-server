@@ -11,6 +11,7 @@ Formulario multi-pantalla:
 
 import os
 import io
+import re
 import logging
 import requests
 from datetime import datetime, timezone
@@ -536,12 +537,37 @@ def crear_oferta_en_notion(oferta: dict, idioma: str = "", usuario_notion_id: st
 # GENERACIÓN DOCX
 # ══════════════════════════════════════════════
 
+# Guiones largos/medios y flechas: rastro tipográfico de IA. Regla NO NEGOCIABLE
+# de la usuaria — jamás deben aparecer en un CV o carta que sale a una empresa.
+_ARROWS = "→←⟶⟹➜➔➡⇒"
+_DASHES = "—–―‒−"
+_RE_ARROW = re.compile(r"\s*[" + _ARROWS + r"]\s*")
+_RE_DASH  = re.compile(r"\s*[" + _DASHES + r"]\s*")
+_RE_SPACES = re.compile(r"[ \t]{2,}")
+
+
+def sanear_tipografia(texto: str, idioma: str = "es") -> str:
+    """Elimina guiones largos/medios (—, –) y flechas (→) del texto final.
+
+    Se aplica en el RENDER (DOCX y carta), nunca sobre el texto que el parser del
+    DOCX usa para detectar estructura (ese sigue viendo el — crudo). Las flechas se
+    traducen a la palabra de transición del idioma ("a"/"to"); los guiones a guion
+    normal. Es una red determinista: no depende de que el LLM obedezca el prompt."""
+    if not texto:
+        return texto
+    trans = " to " if idioma == "en" else " a "
+    t = _RE_ARROW.sub(trans, texto)
+    t = _RE_DASH.sub(" - ", t)
+    t = _RE_SPACES.sub(" ", t)
+    return t
+
+
 def generar_docx(contenido_cv: str, nombre_candidato: str) -> bytes:
     """Wrapper legacy — usar generar_docx_con_cabecera() para nuevos CVs."""
     return generar_docx_con_cabecera(contenido_cv, {"nombre": nombre_candidato})
 
 
-def generar_docx_con_cabecera(contenido_cv: str, usuario: dict, titular: str = "") -> bytes:
+def generar_docx_con_cabecera(contenido_cv: str, usuario: dict, titular: str = "", idioma: str = "es") -> bytes:
     """Genera DOCX con cabecera profesional estructurada usando datos reales del usuario.
     `titular` (si viene) es el headline adaptado a la oferta por el LLM; tiene prioridad
     sobre el campo `rol` fijo del perfil."""
@@ -581,7 +607,7 @@ def generar_docx_con_cabecera(contenido_cv: str, usuario: dict, titular: str = "
     if rol:
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = p.add_run(rol)
+        r = p.add_run(sanear_tipografia(rol, idioma))
         r.font.size = Pt(11); r.font.color.rgb = BLUE
 
     contacto = " · ".join(c for c in [ciudad, telefono, email, linkedin] if c)
@@ -611,11 +637,15 @@ def generar_docx_con_cabecera(contenido_cv: str, usuario: dict, titular: str = "
             continue
 
         limpia = linea.upper().strip()
+        # La DETECCIÓN de estructura usa `linea` cruda (necesita ver el — como
+        # marcador de empresa). El RENDER usa la versión saneada: así ningún
+        # guion largo ni flecha llega nunca al DOCX. Regla NO NEGOCIABLE.
+        render = sanear_tipografia(linea, idioma)
 
         # Sección
         if any(limpia.startswith(s) for s in SECCIONES) and len(linea) < 50:
             p = doc.add_paragraph()
-            r = p.add_run(linea.upper())
+            r = p.add_run(render.upper())
             r.bold = True; r.font.size = Pt(10); r.font.color.rgb = BLUE
             p.paragraph_format.space_before = Pt(14)
             p.paragraph_format.space_after  = Pt(4)
@@ -630,7 +660,7 @@ def generar_docx_con_cabecera(contenido_cv: str, usuario: dict, titular: str = "
         # Bullet
         if linea.startswith(("- ", "• ", "* ")):
             p = doc.add_paragraph()
-            r = p.add_run("• " + linea[2:].strip())
+            r = p.add_run("• " + render[2:].strip())
             r.font.size = Pt(9.5); r.font.color.rgb = DARK
             p.paragraph_format.left_indent = Cm(0.5)
             p.paragraph_format.space_after  = Pt(2)
@@ -639,24 +669,23 @@ def generar_docx_con_cabecera(contenido_cv: str, usuario: dict, titular: str = "
         # Empresa / puesto (línea con — o –)
         if ("—" in linea or "–" in linea) and len(linea) < 100:
             p = doc.add_paragraph()
-            r = p.add_run(linea)
+            r = p.add_run(render)
             r.bold = True; r.font.size = Pt(10); r.font.color.rgb = DARK
             p.paragraph_format.space_before = Pt(8)
             p.paragraph_format.space_after  = Pt(1)
             continue
 
         # Fecha (línea corta con año)
-        import re
         if re.search(r"(20\d{2}|19\d{2})", linea) and len(linea) < 60:
             p = doc.add_paragraph()
-            r = p.add_run(linea)
+            r = p.add_run(render)
             r.italic = True; r.font.size = Pt(9); r.font.color.rgb = GREY
             p.paragraph_format.space_after = Pt(2)
             continue
 
         # Texto normal
         p = doc.add_paragraph()
-        r = p.add_run(linea)
+        r = p.add_run(render)
         r.font.size = Pt(9.5); r.font.color.rgb = DARK
         p.paragraph_format.space_after = Pt(3)
 
@@ -1071,7 +1100,17 @@ def generar_cv():
     # 2. Resolver idioma y leer el CV master en ese idioma
     idioma = idioma_in if idioma_in in ("en", "es") else detectar_idioma(puesto, descripcion, empresa)
     tiene_master_configurado = _tiene_algun_master(usuario)
-    cv_master = leer_cv_master_desde_drive(usuario, idioma)
+    try:
+        cv_master = leer_cv_master_desde_drive(usuario, idioma)
+    except Exception as e:
+        # get_drive_service() -> creds.refresh() puede fallar (token caducado)
+        # ANTES del try interno de la lectura: sin este guard, sale un 500 HTML
+        # opaco. Devolvemos el error REAL en JSON para poder diagnosticar.
+        logger.error("Drive auth/lectura falló en /generar-cv: %s", e)
+        return jsonify({
+            "ok": False,
+            "error": f"No se pudo autenticar/leer el CV master en Drive: {e}",
+        }), 502
 
     # Guardrail: si hay un master configurado pero lo leído es ilegible
     # (basura binaria de un .docx sin parsear, o sin acceso), NO generamos
@@ -1297,7 +1336,7 @@ Elimina TODO rastro de texto generado por IA:
 
     # 6. Generar DOCX con cabecera estructurada (titular adaptado por la oferta)
     nombre_archivo = _nombre_archivo_cv(nombre, puesto)
-    docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario, titular)
+    docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario, titular, idioma)
 
     # 7. Subir a Drive
     try:
@@ -1413,6 +1452,8 @@ REGLAS:
         if carta.lower().startswith(pref):
             carta = carta.split("\n", 1)[-1].strip()
             break
+    # Fuera guiones largos y flechas: la carta va a la empresa. Regla NO NEGOCIABLE.
+    carta = sanear_tipografia(carta, idioma)
 
     return jsonify({
         "ok":              True,
