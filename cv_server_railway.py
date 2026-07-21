@@ -1270,11 +1270,7 @@ HEADLINE RULES (primera línea del output — el TITULAR del CV es DATA-DRIVEN):
 - El titular va en el idioma de la oferta; separa identidades/skills con " | " o " · ".
 - AÑOS DE EXPERIENCIA: usa el seniority declarado en el PERFIL BASE (sección "Seniority"). No infles el número ni lo subas por encima de lo que dice la fuente.
 
-RESUMEN / PERFIL — frase complementaria según el tipo de oferta (añade al resumen la experiencia real que NO va en el titular, para no perderla):
-- Oferta Frontend:   añade "Experiencia adicional en desarrollo Full-Stack e integración de soluciones basadas en IA."
-- Oferta Tech Lead:  añade "Experiencia en desarrollo Full-Stack, Design Systems e IA aplicada al desarrollo."
-- Oferta Full Stack: añade "Experiencia liderando iniciativas frontend y diseño de producto digital."
-- Oferta de IA:      añade "Background de 10+ años en frontend, UX y desarrollo de producto digital."
+RESUMEN / PERFIL — no pierdas experiencia real que no cabe en el titular: si la candidata tiene fortalezas relevantes que el titular de esta oferta no refleja (según el CV Master), inclúyelas en el resumen para no perderlas, redactadas como experiencia real. Si el CV Master incluye un bloque "EVOLUCIÓN PROFESIONAL", úsalo para entender el arco de su carrera y dar el contexto temporal correcto (de dónde viene y hacia dónde ha evolucionado), sin inventar.
 
 PERFIL — ANCLAJE A LA OFERTA (obligatorio): identifica 2-3 requisitos o palabras clave concretas de la DESCRIPCIÓN de la oferta que la candidata YA haya trabajado de verdad (según su CV master), e intégralos en el resumen redactados como experiencia real y demostrable ("con experiencia en X aplicada a Y", "habiendo trabajado Z en..."). PROHIBIDO incluir un requisito de la oferta que NO esté respaldado por su trayectoria real: si la oferta lo pide pero ella no lo ha hecho, NO entra. El objetivo es que el perfil resuene con la oferta usando SOLO lo que es cierto y defendible en entrevista.
 
@@ -1282,16 +1278,14 @@ NIVEL DEL PUESTO (aplica al CUERPO del CV — el TITULAR lo fijan las HEADLINE R
 - Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director → es un rol de DESARROLLO INDIVIDUAL. En ese caso, en el CUERPO:
   · REDUCE al mínimo el liderazgo: NO abras bullets con "Lideré/Coordiné equipos" ni "formación de equipos". Reformula esos logros hacia el trabajo TÉCNICO concreto (qué construiste, qué migraste, qué arquitectura/componentes/APIs), no hacia la gestión.
   · El liderazgo puede aparecer como contexto breve ("durante 8 años en el equipo frontend..."), NUNCA como la venta principal del perfil.
-  · "Frontend Tech Lead" en el titular refleja su seniority real (fue Tech Lead DE FACTO del frontend); NO lo contradice, pero el cuerpo se centra en el trabajo técnico, no en dirigir personas.
+  · El titular puede reflejar seniority de liderazgo si figura en el PERFIL BASE; NO lo contradice, pero el cuerpo se centra en el trabajo técnico, no en dirigir personas.
 - Solo si el puesto pide lead/manager/responsable/principal/head → destaca el ownership y la coordinación técnica.
 
-POSICIONAMIENTO SEGÚN EL TIPO DE OFERTA (adapta el ÉNFASIS, nunca inventes):
-- Oferta Frontend (dev): prioriza React, Vue, TypeScript, JavaScript, HTML5, CSS3. REDUCE el protagonismo del liderazgo.
-- Oferta Full Stack: prioriza React, TypeScript, Node.js, APIs, Firebase, MongoDB e integraciones. Mantén el frontend como fortaleza principal; no infles el liderazgo salvo que la oferta lo pida.
-- Oferta Tech Lead: destaca mentoría técnica, coordinación con negocio/UX/producto/backend y ownership del área frontend. Fue Tech Lead DE FACTO del área frontend; NO afirmes gestión/dirección de personas salvo que sea explícitamente cierto.
-- Oferta UX Engineer: destaca Figma, Design Systems, UX, accesibilidad y traducción de negocio a experiencia digital.
-- Oferta de IA: destaca IA aplicada, automatización, LLMs, OpenAI/Claude/n8n, agentes y prototipado rápido. Python SÍ puede aparecer como HERRAMIENTA dentro de su experiencia en IA aplicada cuando sea relevante, pero NUNCA la posiciones como Senior Python Engineer.
-- Tecnología usada hace años (p.ej. Java): posiciónala como algo que puede retomar rápido por su experiencia full-stack previa, SIN presentarse como especialista actual en ella.
+POSICIONAMIENTO (adapta el ÉNFASIS a la oferta, nunca inventes):
+- Prioriza y reordena las skills y logros del CV Master que esta oferta valora; deja en segundo plano lo que no pide. NUNCA añadas algo que no esté en el Master.
+- LÍMITE DE POSICIONAMIENTO: si el CV Master incluye un bloque "POSICIONAMIENTO" (lo que la candidata ES y lo que NO es), respétalo como frontera. NUNCA posiciones a la candidata en un rol o especialidad que ese bloque niega, aunque la oferta lo pida.
+- EVOLUCIÓN: si el CV Master incluye un bloque "EVOLUCIÓN PROFESIONAL", respeta el arco temporal (de dónde viene, hacia dónde ha evolucionado); no presentes como especialidad actual algo que fue una etapa pasada, ni al revés.
+- Una tecnología usada hace años puede presentarse como algo que puede retomar rápido por su experiencia previa, SIN presentarla como especialidad actual salvo que el Master lo respalde.
 
 PASO 3 — REVISION ANTI-IA (aplicar al output antes de entregar):
 Elimina TODO rastro de texto generado por IA:
