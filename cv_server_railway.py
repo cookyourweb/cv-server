@@ -1250,7 +1250,7 @@ análisis, títulos, encabezados o cualquier texto ANTES de esa línea.
 
 PASO 2 — CV ADAPTADO (output principal):
 Genera el CV adaptado con estas reglas ESTRICTAS:
-1. NO INVENTAR NUNCA: solo experiencia real del CV master. Nada de tecnologías no usadas, responsabilidades no ejercidas, liderazgo de personas o arquitectura que no haya hecho, ni métricas/impacto exagerados.
+1. NO INVENTAR NUNCA: solo experiencia real del CV master. Nada de tecnologías no usadas, responsabilidades no ejercidas, liderazgo de personas o arquitectura que no haya hecho, ni métricas/impacto exagerados. REGLA DE EVIDENCIA: una tecnología o skill SOLO puede aparecer si está respaldada en el Master por experiencia profesional, un proyecto o formación significativa; no basta con haberla tocado puntualmente.
 2. Adapta el ORDEN y ÉNFASIS según la oferta, no el contenido
 3. Optimización ATS: integra las palabras clave EXACTAS de la oferta cuando formen parte de su experiencia real; el CV debe quedar 100% defendible en entrevista
 4. Bullets con fórmula XYZ ("Logré X, medido por Y, haciendo Z") SIEMPRE que los datos lo permitan — nada de bullets genéricos tipo "responsable de..."
@@ -1258,18 +1258,17 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 6. Redacta como PERFIL DE PRODUCTO: traducción de necesidades de negocio a soluciones digitales, colaboración con diseño y producto, plataformas B2B y B2C, diseño de flujos y componentes reutilizables, Design Systems.
 7. Máximo 2 páginas
 
-HEADLINE RULES (primera línea del output):
-- REGLA MAESTRA: IDENTIDAD REAL + ESPECIALIZACIÓN DE LA OFERTA, nunca al revés. El NÚCLEO del titular es SIEMPRE una de estas tres identidades reales y defendibles: "Frontend Tech Lead", "Full-Stack Developer", "UX Engineer". A ese núcleo se le añade la especialización que pide la oferta (React, Vue.js, Next.js, TypeScript, AI, Design Systems, Product, Accessibility, FinTech, E-commerce...). Su valor diferencial NO es "usar IA" ni "saber Vue": es su trayectoria real en frontend, UX y producto (10+ años), que además trabaja full-stack y aplica IA cuando el proyecto lo requiere.
-- IDENTIDAD BASE (cuando la oferta no encaja claramente en un tipo): "Frontend Tech Lead | Full-Stack Developer | UX Engineer".
-- Adapta el titular al tipo de oferta (elige el más ajustado y VERAZ):
-  · Oferta Frontend:   "Frontend Tech Lead | React | Vue.js | UX Engineer"
-  · Oferta Full Stack: "Full-Stack Developer | React | TypeScript | UX Engineer"
-  · Oferta Tech Lead:  "Frontend Tech Lead | UX Engineer"
-  · Oferta de IA:      "AI Product Builder | Full-Stack Developer" o "AI Solutions Engineer | Full-Stack Developer"
-- TÍTULOS DE IA: usa SOLO títulos defendibles ("AI Product Builder", "AI Solutions Engineer", "AI Automation Engineer"). NUNCA uses "AI Expert" ni "AI Specialist" solo porque la oferta lo diga: ella construye soluciones con Claude/OpenAI/n8n y cursa un máster de IA aplicada, pero no se posiciona como especialista/experta en IA.
-- NO uses títulos grandilocuentes ("Principal Architect", "Head of Engineering", "Engineering Manager") salvo que la oferta lo pida EXPLÍCITAMENTE y sea justificable en entrevista.
-- NUNCA un rol que la candidata no tiene. El titular va en el idioma de la oferta.
-- AÑOS DE EXPERIENCIA: usa "10+ años" como base por defecto. NO claves "15+" ni un número alto en todas las ofertas. Solo refleja más años (siempre veraz, nunca inventado) si la oferta valora seniority explícitamente; ajusta el número a lo que pide cada proyecto.
+HEADLINE RULES (primera línea del output — el TITULAR del CV es DATA-DRIVEN):
+- FUENTE DE VERDAD: las identidades profesionales y roles objetivo de la candidata están declarados en el bloque "PERFIL BASE" del CV MASTER (secciones "Identidades profesionales" y "Roles objetivo"). Esa es la ÚNICA fuente. El titular SIEMPRE debe construirse usando ÚNICAMENTE esas identidades. NUNCA inventes ni uses una identidad profesional que no aparezca en el PERFIL BASE.
+- CÓMO CONSTRUIR EL TITULAR: selecciona y REORDENA las identidades del PERFIL BASE que mejor encajan con esta oferta, y añade especialización/stack SOLO si aparece en el PERFIL BASE (secciones "Stack principal" / "Especialización") o en la experiencia real del CV master. El titular NO tiene que ser idéntico al PERFIL BASE: cambia el ÉNFASIS y el ORDEN, nunca las identidades.
+- LA OFERTA DECIDE QUÉ DESTACAR, NUNCA QUÉ INVENTAR: si la oferta pide un rol/identidad que NO está en el PERFIL BASE, NO lo uses. La oferta solo elige cuáles de las identidades existentes se resaltan.
+- GUARDRAIL POR PRINCIPIO (no escalar seniority): nunca subas el nivel por encima de lo que declara el PERFIL BASE. Prohibido inventar rangos superiores (Principal, Staff, Head, Director, Architect, Distinguished, Manager, o "Lead" de personas) salvo que esa identidad EXACTA figure en el PERFIL BASE.
+- RESPETA EL POSICIONAMIENTO: si el CV master incluye un bloque "POSICIONAMIENTO" (lo que la candidata NO es), el titular NUNCA debe contradecirlo.
+- AUTO-CHEQUEO antes de cerrar el HEADLINE: verifica que CADA identidad del titular aparece en el PERFIL BASE; si alguna no rastrea ahí, elimínala.
+- COHERENCIA IDENTIDAD/EXPERIENCIA: el PERFIL BASE define quién es la candidata; la sección EXPERIENCIA demuestra por qué puede afirmarlo. Cada identidad del titular debe poder justificarse leyendo la EXPERIENCIA del Master. Si una identidad del PERFIL BASE no tiene experiencia real que la respalde, NO la uses en el titular.
+- FALLBACK: si el CV master NO contiene un bloque "PERFIL BASE", deriva las identidades SOLO de la experiencia real del CV master (nunca inventes) y aplica igualmente el guardrail de no escalar seniority.
+- El titular va en el idioma de la oferta; separa identidades/skills con " | " o " · ".
+- AÑOS DE EXPERIENCIA: usa el seniority declarado en el PERFIL BASE (sección "Seniority"). No infles el número ni lo subas por encima de lo que dice la fuente.
 
 RESUMEN / PERFIL — frase complementaria según el tipo de oferta (añade al resumen la experiencia real que NO va en el titular, para no perderla):
 - Oferta Frontend:   añade "Experiencia adicional en desarrollo Full-Stack e integración de soluciones basadas en IA."
