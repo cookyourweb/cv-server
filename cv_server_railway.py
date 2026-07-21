@@ -1163,7 +1163,7 @@ def generar_cv():
 HEADLINE: [professional title for this offer — see HEADLINE RULES below]
 
 PROFESSIONAL SUMMARY
-[2 full paragraphs (4-6 lines each) tailored to the offer, based on the CV master summary. First paragraph: who she is + core strengths relevant to this role. Second paragraph: depth, domains and the angle that fits this offer.]
+[2 full paragraphs (4-6 lines each) tailored to the offer, generated from her REAL EXPERIENCE (never copied from PERFIL BASE). First paragraph: who she is + core strengths relevant to this role. Second paragraph: depth, domains and the angle that fits this offer.]
 
 PROFESSIONAL EXPERIENCE
 [Company] — [City]
@@ -1198,7 +1198,7 @@ FINAL RULES:
 HEADLINE: [titular profesional para esta oferta — ver REGLAS DEL HEADLINE abajo]
 
 PERFIL PROFESIONAL
-[2 párrafos completos (4-6 líneas cada uno) adaptados a la oferta, basados en el resumen del CV master. Primer párrafo: quién es + fortalezas clave relevantes para este puesto. Segundo párrafo: profundidad, dominios y el ángulo que encaja con esta oferta.]
+[2 párrafos completos (4-6 líneas cada uno) adaptados a la oferta, generados desde su EXPERIENCIA real (NUNCA copiados del PERFIL BASE). Primer párrafo: quién es + fortalezas clave relevantes para este puesto. Segundo párrafo: profundidad, dominios y el ángulo que encaja con esta oferta.]
 
 EXPERIENCIA PROFESIONAL
 [Empresa] — [Ciudad]
@@ -1231,6 +1231,15 @@ REGLAS FINALES:
     prompt = f"""Act as a senior tech recruiter who screens 200+ CVs daily. Adapt this candidate's CV for a specific job offer.
 
 The target job offer is written in {idioma_nombre}. Generate the ENTIRE CV in {idioma_nombre} — both the section titles and the content.
+
+PRINCIPIO FUNDAMENTAL: el CV generado NO añade información nueva. Únicamente reorganiza, prioriza y redacta de forma distinta información YA existente y demostrable en el CV Master. Nunca al revés.
+
+JERARQUÍA DE FUENTES (respétala siempre):
+- La OFERTA decide QUÉ enfatizar.
+- El PERFIL BASE decide DESDE QUÉ IDENTIDAD se responde (quién es la candidata). Es una GUÍA de identidad y coherencia, NO una fuente de contenido, y NUNCA constituye evidencia. No copies literalmente sus frases al CV.
+- La EXPERIENCIA (junto con proyectos, formación y conocimientos técnicos) es la ÚNICA fuente de evidencia: decide QUÉ se puede afirmar.
+- El CV generado es solo una reorganización de esa evidencia según la oferta.
+Ninguna afirmación entra en el CV si no está respaldada por la EXPERIENCIA, proyectos, formación o skills del Master; el PERFIL BASE por sí solo NO basta como evidencia.
 
 {contexto_candidato}
 
