@@ -954,6 +954,10 @@ def health():
             "gemini":  bool(GEMINI_API_KEY),
             "claude":  bool(CLAUDE_API_KEY),
         },
+        "deploy":       {
+            "branch": os.environ.get("RENDER_GIT_BRANCH", "local"),
+            "commit": (os.environ.get("RENDER_GIT_COMMIT", "") or "")[:7],
+        },
         "timestamp":    datetime.now(timezone.utc).isoformat(),
     })
 
