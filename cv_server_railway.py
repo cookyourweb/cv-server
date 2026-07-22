@@ -61,7 +61,12 @@ CARTA_MODEL = os.getenv("CARTA_MODEL", "claude-sonnet-4-6")
 GOOGLE_CLIENT_ID     = os.environ["GOOGLE_CLIENT_ID"]
 GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
 GOOGLE_REFRESH_TOKEN = os.environ["GOOGLE_REFRESH_TOKEN"]
+# Dos carpetas SEPARADAS a proposito: los CV Master son la fuente de verdad y
+# se leen; los CV generados son salida y se acumulan a varios por dia. Si
+# comparten carpeta, en semanas es imposible distinguirlos y se corre el riesgo
+# de leer como master un CV generado.
 FOLDER_CV_MASTERS    = os.getenv("FOLDER_CV_MASTERS", "1duJA_G3lLbOqiUYoSJcsXAvbtJUdcmzR")
+FOLDER_CV_GENERADOS  = os.getenv("FOLDER_CV_GENERADOS", "1tHuVOIz3ratjRp8AmHsF0kGVpmy9DocY")
 
 # ── Notion ────────────────────────────────────
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
@@ -229,7 +234,7 @@ def subir_cv_a_drive(docx_bytes: bytes, nombre_archivo: str) -> str:
     service = get_drive_service()
     file_metadata = {
         "name":    nombre_archivo,
-        "parents": [FOLDER_CV_MASTERS],
+        "parents": [FOLDER_CV_GENERADOS],
     }
     media = MediaIoBaseUpload(
         io.BytesIO(docx_bytes),
