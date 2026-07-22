@@ -78,6 +78,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 
+class CVError(Exception):
+    """Error de negocio del cv-server: status HTTP + mensaje.
+
+    El core (generar_cv_core, ...) la lanza; cada capa HTTP (Flask/FastAPI)
+    la mapea a su formato de respuesta. Ver docs/ADR-001."""
+
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
 # ══════════════════════════════════════════════
 # CAPA LLM — Groq primario, Gemini/Claude fallback
 # ══════════════════════════════════════════════
@@ -1072,22 +1084,18 @@ def registro():
     })
 
 
-@app.route("/generar-cv", methods=["POST"])
-def generar_cv():
-    """Genera un CV personalizado con CV master real y lo sube a Drive."""
-    datos = request.get_json(force=True)
-    email       = datos.get("email", "")
-    empresa     = datos.get("empresa", "")
-    puesto      = datos.get("puesto", "")
-    descripcion = datos.get("descripcion", "")
-
+def generar_cv_core(email: str, empresa: str, puesto: str,
+                    descripcion: str = "", idioma_in: str = "") -> dict:
+    """Núcleo de /generar-cv (sin Flask): orquesta Notion/Drive/LLM y devuelve
+    el dict de respuesta. Lanza CVError(status, msg) en los errores. Lo comparten
+    la ruta Flask y la ruta FastAPI. Ver docs/ADR-001."""
     if not email or not empresa or not puesto:
-        return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
+        raise CVError(400, "email, empresa y puesto son requeridos")
 
     # Idioma autoritativo: el que n8n decidió de la descripción REAL al crear la
     # oferta (la de Notion suele ser un resumen en español que confunde la
     # detección). Prioridad: body.idioma > Idioma guardado en Notion > detección.
-    idioma_in = (datos.get("idioma") or "").strip().lower()
+    idioma_in = (idioma_in or "").strip().lower()
     if not descripcion.strip() or idioma_in not in ("en", "es"):
         oferta = buscar_oferta_en_notion(empresa, puesto)
         if oferta:
@@ -1097,7 +1105,7 @@ def generar_cv():
     # 1. Leer perfil completo del usuario desde Notion
     usuario = buscar_usuario_por_email(email)
     if not usuario:
-        return jsonify({"ok": False, "error": f"Usuario {email} no encontrado en Notion"}), 404
+        raise CVError(404, f"Usuario {email} no encontrado en Notion")
 
     nombre = usuario.get("nombre") or email.split("@")[0]
 
@@ -1111,10 +1119,7 @@ def generar_cv():
         # ANTES del try interno de la lectura: sin este guard, sale un 500 HTML
         # opaco. Devolvemos el error REAL en JSON para poder diagnosticar.
         logger.error("Drive auth/lectura falló en /generar-cv: %s", e)
-        return jsonify({
-            "ok": False,
-            "error": f"No se pudo autenticar/leer el CV master en Drive: {e}",
-        }), 502
+        raise CVError(502, f"No se pudo autenticar/leer el CV master en Drive: {e}")
 
     # Guardrail: si hay un master configurado pero lo leído es ilegible
     # (basura binaria de un .docx sin parsear, o sin acceso), NO generamos
@@ -1130,12 +1135,9 @@ def generar_cv():
     if tiene_master_configurado and not _es_legible(cv_master):
         logger.error("CV master ILEGIBLE para %s (largo=%d) — abortando para no inventar",
                      email, len(cv_master or ""))
-        return jsonify({
-            "ok": False,
-            "error": ("No se pudo leer tu CV master desde Drive (archivo ilegible o sin acceso). "
-                      "NO se generó un CV para evitar enviar datos inventados. "
-                      "Revisá el archivo y los permisos en Drive."),
-        }), 502
+        raise CVError(502, "No se pudo leer tu CV master desde Drive (archivo ilegible o sin acceso). "
+                           "NO se generó un CV para evitar enviar datos inventados. "
+                           "Revisá el archivo y los permisos en Drive.")
 
     if cv_master:
         logger.info("CV master leído (%d chars) para %s", len(cv_master), email)
@@ -1316,7 +1318,7 @@ Elimina TODO rastro de texto generado por IA:
         # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad
         contenido_cv = call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096)
     except RuntimeError as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        raise CVError(503, str(e))
 
     # 5. Limpiar output del LLM y extraer el titular (HEADLINE)
     #    Todo lo anterior a la línea HEADLINE se DESCARTA: si el modelo escribe el
@@ -1351,9 +1353,9 @@ Elimina TODO rastro de texto generado por IA:
         link_drive = subir_cv_a_drive(docx_bytes, nombre_archivo)
     except Exception as e:
         logger.error("Drive upload error: %s", e)
-        return jsonify({"ok": False, "error": f"Error subiendo a Drive: {e}"}), 500
+        raise CVError(500, f"Error subiendo a Drive: {e}")
 
-    return jsonify({
+    return {
         "ok":              True,
         "link":            link_drive,
         "modelo_usado":    GROQ_MODEL,
@@ -1362,7 +1364,24 @@ Elimina TODO rastro de texto generado por IA:
         "cv_master_usado": bool(cv_master),
         "idioma":          idioma,
         "cv_master_url":   usuario.get("cv_master_url", "") or "",
-    })
+    }
+
+
+@app.route("/generar-cv", methods=["POST"])
+def generar_cv():
+    """Ruta Flask fina: parsea el request y delega en generar_cv_core (ADR-001)."""
+    datos = request.get_json(force=True)
+    try:
+        result = generar_cv_core(
+            email=datos.get("email", ""),
+            empresa=datos.get("empresa", ""),
+            puesto=datos.get("puesto", ""),
+            descripcion=datos.get("descripcion", ""),
+            idioma_in=(datos.get("idioma") or "").strip().lower(),
+        )
+    except CVError as e:
+        return jsonify({"ok": False, "error": e.message}), e.status
+    return jsonify(result)
 
 
 @app.route("/generar-carta", methods=["POST"])
