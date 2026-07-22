@@ -15,6 +15,7 @@ import re
 import logging
 import requests
 from datetime import datetime, timezone
+from typing import NamedTuple
 from flask import Flask, request, jsonify, render_template_string
 
 # Google Drive / OAuth
@@ -94,7 +95,17 @@ class CVError(Exception):
 # CAPA LLM — Groq primario, Gemini/Claude fallback
 # ══════════════════════════════════════════════
 
-def call_llm(prompt: str) -> str:
+class RespuestaLLM(NamedTuple):
+    """Respuesta de un LLM junto al modelo que la generó DE VERDAD.
+
+    Sin esto no se puede saber si el CV lo escribió Claude o el fallback
+    de Groq: los endpoints reportaban el modelo configurado, no el usado.
+    """
+    contenido: str
+    modelo:    str
+
+
+def call_llm(prompt: str) -> RespuestaLLM:
     """Llama a Groq; si falla intenta Gemini y luego Claude."""
 
     # ── 1. Groq ──────────────────────────────
@@ -116,7 +127,7 @@ def call_llm(prompt: str) -> str:
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
         logger.info("LLM: Groq OK (%s)", GROQ_MODEL)
-        return content
+        return RespuestaLLM(content, GROQ_MODEL)
     except Exception as e:
         logger.warning("Groq falló: %s — probando fallbacks", e)
 
@@ -132,7 +143,7 @@ def call_llm(prompt: str) -> str:
             resp.raise_for_status()
             content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
             logger.info("LLM: Gemini fallback OK (%s)", GEMINI_MODEL)
-            return content
+            return RespuestaLLM(content, GEMINI_MODEL)
         except Exception as e:
             logger.warning("Gemini fallback falló: %s — probando Claude", e)
 
@@ -156,7 +167,7 @@ def call_llm(prompt: str) -> str:
             resp.raise_for_status()
             content = resp.json()["content"][0]["text"]
             logger.info("LLM: Claude fallback OK (%s)", CLAUDE_MODEL)
-            return content
+            return RespuestaLLM(content, CLAUDE_MODEL)
         except Exception as e:
             logger.error("Claude fallback falló: %s", e)
 
@@ -185,13 +196,13 @@ def call_claude(prompt: str, model: str, max_tokens: int = 4096) -> str:
     return "".join(b.text for b in resp.content if b.type == "text")
 
 
-def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096) -> str:
+def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096) -> RespuestaLLM:
     """Claude primario; si falla (rate limit, red o sin key) cae a Groq.
     Para el CV y textos que van a una empresa — mejor que Groq, ~$0,02/CV."""
     try:
         contenido = call_claude(prompt, model=model, max_tokens=max_tokens)
         logger.info("LLM calidad: Claude OK (%s)", model)
-        return contenido
+        return RespuestaLLM(contenido, model)
     except Exception as e:
         logger.warning("Claude falló (%s) — cayendo a Groq", e)
         return call_llm(prompt)
@@ -978,8 +989,8 @@ def health():
 def debug():
     """Prueba rápida del LLM activo (Groq primero)."""
     try:
-        respuesta = call_llm("Responde solo: 'Groq funcionando correctamente en cv_server v2.3'")
-        return jsonify({"ok": True, "respuesta": respuesta, "modelo": GROQ_MODEL})
+        r = call_llm("Responde solo: 'Groq funcionando correctamente en cv_server v2.3'")
+        return jsonify({"ok": True, "respuesta": r.contenido, "modelo": r.modelo})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -1316,7 +1327,8 @@ Elimina TODO rastro de texto generado por IA:
 
     try:
         # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad
-        contenido_cv = call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096)
+        respuesta_llm = call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096)
+        contenido_cv  = respuesta_llm.contenido
     except RuntimeError as e:
         raise CVError(503, str(e))
 
@@ -1358,7 +1370,7 @@ Elimina TODO rastro de texto generado por IA:
     return {
         "ok":              True,
         "link":            link_drive,
-        "modelo_usado":    GROQ_MODEL,
+        "modelo_usado":    respuesta_llm.modelo,
         "archivo":         nombre_archivo,
         "email":           email,
         "cv_master_usado": bool(cv_master),
@@ -1469,7 +1481,8 @@ REGLAS:
 - Devuelve SOLO el texto de la carta, sin encabezados ni comentarios."""
 
     try:
-        carta = call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500)
+        respuesta_llm = call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500)
+        carta         = respuesta_llm.contenido
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503
 
@@ -1485,7 +1498,7 @@ REGLAS:
     return jsonify({
         "ok":              True,
         "carta":           carta,
-        "modelo_usado":    CARTA_MODEL,
+        "modelo_usado":    respuesta_llm.modelo,
         "email":           email,
         "cv_master_usado": bool(cv_master),
     })
