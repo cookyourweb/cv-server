@@ -8,6 +8,9 @@ el código a secas.
 Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
 Archivo principal: `cv_server_railway.py`. Ranking de ofertas: `real_jobs.py`.
 
+**Decisiones de arquitectura:** ver `docs/ADR-*`.
+- [`docs/ADR-001-migracion-fastapi.md`](docs/ADR-001-migracion-fastapi.md) - migración incremental Flask → FastAPI + Pydantic (core puro + wrapper HTTP, coexistencia, TDD).
+
 ---
 
 ## Modelos LLM (estado actual)
