@@ -256,13 +256,20 @@ _GDOC_EXPORT = {
 }
 
 
-def leer_cv_master_desde_drive(usuario: dict, idioma: str = "es") -> str:
-    """Descarga el CV master en texto plano desde Drive, eligiendo la fuente segun idioma.
-    idioma='en' -> 'CV Master URL' (ingles); idioma='es' -> 'CV Master URL ES'
-    (con fallback al master ingles si no hay version española configurada)."""
-    service = get_drive_service()
+class MasterElegido(NamedTuple):
+    """Master seleccionado para un idioma, con la URL de la que sale.
 
-    # Elegir la fuente del master segun el idioma detectado de la oferta
+    Sin la url no se puede reportar CUAL master se usó: la respuesta acababa
+    devolviendo siempre el master inglés aunque el CV fuese en español.
+    """
+    file_id: str
+    url:     str
+
+
+def elegir_master(usuario: dict, idioma: str) -> MasterElegido:
+    """Elige la fuente del master segun el idioma. Pura: no toca Drive.
+    idioma='en' -> 'CV Master URL' (ingles); cualquier otro -> 'CV Master URL ES'
+    (con fallback al master ingles si no hay version española configurada)."""
     if idioma == "en":
         file_id = (usuario.get("cv_master_file_id") or "").strip()
         url = usuario.get("cv_master_url", "") or ""
@@ -275,13 +282,27 @@ def leer_cv_master_desde_drive(usuario: dict, idioma: str = "es") -> str:
 
     # Si no hay file_id directo, extraerlo de la URL (link de Drive/Docs)
     if not file_id and url:
-        import re
         m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'id=([a-zA-Z0-9_-]+)', url)
         if m:
             file_id = m.group(1)
 
+    return MasterElegido(file_id, url)
+
+
+class MasterCV(NamedTuple):
+    """Texto del master y la URL de la que se leyó de verdad."""
+    texto: str
+    url:   str
+
+
+def leer_cv_master_desde_drive(usuario: dict, idioma: str = "es") -> MasterCV:
+    """Descarga el CV master en texto plano desde Drive, eligiendo la fuente segun idioma."""
+    service = get_drive_service()
+
+    file_id, url = elegir_master(usuario, idioma)
+
     if not file_id:
-        return ""
+        return MasterCV("", "")
 
     try:
         # Detectar mimeType para saber cómo extraer el texto
@@ -318,13 +339,13 @@ def leer_cv_master_desde_drive(usuario: dict, idioma: str = "es") -> str:
                     for celda in fila.cells:
                         if celda.text.strip():
                             partes.append(celda.text)
-            return "\n".join(partes)
+            return MasterCV("\n".join(partes), url)
 
         # Texto plano u otros formatos legibles
-        return buf.read().decode("utf-8", errors="replace")
+        return MasterCV(buf.read().decode("utf-8", errors="replace"), url)
     except Exception as e:
         logger.warning("No se pudo leer CV master (file_id=%s): %s", file_id, e)
-        return ""
+        return MasterCV("", url)
 
 
 # ══════════════════════════════════════════════
@@ -1124,7 +1145,8 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     idioma = idioma_in if idioma_in in ("en", "es") else detectar_idioma(puesto, descripcion, empresa)
     tiene_master_configurado = _tiene_algun_master(usuario)
     try:
-        cv_master = leer_cv_master_desde_drive(usuario, idioma)
+        master     = leer_cv_master_desde_drive(usuario, idioma)
+        cv_master  = master.texto
     except Exception as e:
         # get_drive_service() -> creds.refresh() puede fallar (token caducado)
         # ANTES del try interno de la lectura: sin este guard, sale un 500 HTML
@@ -1375,7 +1397,7 @@ Elimina TODO rastro de texto generado por IA:
         "email":           email,
         "cv_master_usado": bool(cv_master),
         "idioma":          idioma,
-        "cv_master_url":   usuario.get("cv_master_url", "") or "",
+        "cv_master_url":   master.url,
     }
 
 
@@ -1429,7 +1451,8 @@ def generar_carta():
     # Resolver idioma y leer el CV master en ese idioma
     idioma = idioma_in if idioma_in in ("en", "es") else detectar_idioma(puesto, descripcion, empresa)
     tiene_master = _tiene_algun_master(usuario)
-    cv_master = leer_cv_master_desde_drive(usuario, idioma)
+    master       = leer_cv_master_desde_drive(usuario, idioma)
+    cv_master    = master.texto
 
     def _es_legible(t: str) -> bool:
         if not t:
