@@ -261,6 +261,55 @@ _GDOC_EXPORT = {
 }
 
 
+# ── Guardrail de veracidad: cifras inventadas ────
+# El prompt YA prohibe inventar metricas y el modelo lo hizo igual (caso real:
+# "serving millions of users", cifra que no existe en el Master). Una instruccion
+# es una peticion, no una garantia: la salida se VERIFICA contra la fuente.
+
+_NUM_RE = re.compile(r"\d[\d.,]*")
+
+# Magnitudes en texto: no llevan digitos pero cuantifican igual.
+_MAGNITUDES = (
+    "millones", "millón", "millon", "millions", "million",
+    "miles", "thousands", "thousand",
+    "cientos", "hundreds",
+    "billones", "billions",
+)
+
+
+def _normalizar_cifra(crudo: str) -> str:
+    """166.000 y 166,000 son el MISMO dato escrito en dos idiomas."""
+    return crudo.replace(".", "").replace(",", "").lstrip("0") or "0"
+
+
+def detectar_cifras_no_respaldadas(cv_texto: str, master_texto: str) -> list:
+    """Cifras del CV generado que NO aparecen en el CV Master.
+
+    Devuelve la lista de fragmentos sospechosos (vacia si todo esta respaldado).
+    Los años se ignoran: son fechas, no metricas. Sin master no se alerta:
+    no hay fuente contra la que contrastar."""
+    if not cv_texto or not master_texto:
+        return []
+
+    respaldadas = {_normalizar_cifra(m.group(0)) for m in _NUM_RE.finditer(master_texto)}
+
+    sospechosas = set()
+    for m in _NUM_RE.finditer(cv_texto):
+        norm = _normalizar_cifra(m.group(0))
+        if norm.isdigit() and 1900 <= int(norm) <= 2100:  # es un año, no una metrica
+            continue
+        if norm not in respaldadas:
+            sospechosas.add(m.group(0).rstrip(".,"))
+
+    master_low = master_texto.lower()
+    cv_low = cv_texto.lower()
+    for palabra in _MAGNITUDES:
+        if re.search(rf"\b{palabra}\b", cv_low) and not re.search(rf"\b{palabra}\b", master_low):
+            sospechosas.add(palabra)
+
+    return sorted(sospechosas)
+
+
 class MasterElegido(NamedTuple):
     """Master seleccionado para un idioma, con la URL de la que sale.
 
@@ -1306,7 +1355,8 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 1. NO INVENTAR NUNCA: solo experiencia real del CV master. Nada de tecnologías no usadas, responsabilidades no ejercidas, liderazgo de personas o arquitectura que no haya hecho, ni métricas/impacto exagerados. REGLA DE EVIDENCIA: una tecnología o skill SOLO puede aparecer si está respaldada en el Master por experiencia profesional, un proyecto o formación significativa; no basta con haberla tocado puntualmente.
 2. Adapta el ORDEN y ÉNFASIS según la oferta, no el contenido
 3. Optimización ATS: integra las palabras clave EXACTAS de la oferta cuando formen parte de su experiencia real; el CV debe quedar 100% defendible en entrevista
-4. Bullets con fórmula XYZ ("Logré X, medido por Y, haciendo Z") SIEMPRE que los datos lo permitan — nada de bullets genéricos tipo "responsable de..."
+4. Bullets con fórmula XYZ ("Logré X, medido por Y, haciendo Z") SOLO cuando la cifra de "Y" esté LITERALMENTE en el CV Master. Si el Master no da una cifra, escribe el bullet SIN métrica (X + Z): describe qué construiste y cómo, sin cuantificar. Nada de bullets genéricos tipo "responsable de...".
+4bis. PROHIBICIÓN DE CIFRAS (no negociable): no introduzcas NINGÚN número que no aparezca en el CV Master. Ni usuarios, ni porcentajes, ni ingresos, ni tamaños de equipo, ni volúmenes. Prohibido también cuantificar con palabras ("millones de", "miles de", "cientos de", "millions of", "thousands of") si esa magnitud no está en el Master. Ante la duda, describe sin número: un CV sin cifras es defendible en entrevista; uno con una cifra inventada, no.
 5. Densidad real: NO recortes ni resumas el CV master. Los puestos recientes/relevantes deben llevar 6-9 bullets; los antiguos 3-4. Si el master tiene el detalle, úsalo entero.
 6. Redacta como PERFIL DE PRODUCTO: traducción de necesidades de negocio a soluciones digitales, colaboración con diseño y producto, plataformas B2B y B2C, diseño de flujos y componentes reutilizables, Design Systems.
 7. Máximo 2 páginas
@@ -1383,6 +1433,17 @@ Elimina TODO rastro de texto generado por IA:
         lineas_limpias.append(limpia)
     contenido_cv = "\n".join(lineas_limpias)
 
+    # 5b. Guardrail de veracidad: el prompt prohibe inventar metricas, pero eso es
+    #     una peticion, no una garantia. Se contrasta la salida contra el Master.
+    #     NO se aborta: una cifra sospechosa puede ser legitima (reformulacion) y
+    #     abortar dejaria a la usuaria sin CV. Se avisa para que ella lo revise.
+    cifras_sospechosas = detectar_cifras_no_respaldadas(contenido_cv, cv_master)
+    if cifras_sospechosas:
+        logger.warning(
+            "CIFRAS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
+            email, empresa, puesto, cifras_sospechosas,
+        )
+
     # 6. Generar DOCX con cabecera estructurada (titular adaptado por la oferta)
     nombre_archivo = _nombre_archivo_cv(nombre, puesto)
     docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario, titular, idioma)
@@ -1403,6 +1464,9 @@ Elimina TODO rastro de texto generado por IA:
         "cv_master_usado": bool(cv_master),
         "idioma":          idioma,
         "cv_master_url":   master.url,
+        # Vacio = todas las cifras del CV estan en el Master. Si trae algo, REVISAR
+        # a mano antes de enviar: son datos que el modelo no pudo justificar.
+        "cifras_no_respaldadas": cifras_sospechosas,
     }
 
 
