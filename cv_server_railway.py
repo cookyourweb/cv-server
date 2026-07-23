@@ -531,18 +531,49 @@ _EN_PALABRAS = {
 }
 
 
-def detectar_idioma(*textos) -> str:
-    """Heuristica simple: devuelve 'es' o 'en' segun señales del texto de la oferta.
-    Acentos y signos ¿¡ pesan doble (señal fuerte de español). Empate -> 'es'
-    (mercado principal de la usuaria)."""
-    texto = " ".join(t for t in textos if t).lower()
-    if not texto.strip():
-        return "es"
-    palabras = set(_re_idioma.findall(r"[a-záéíóúñü]+", texto))
-    es = len(_ES_ACENTOS.findall(texto)) * 2
+def _señales_idioma(texto: str) -> tuple:
+    """Cuenta señales de español e inglés en un texto. Devuelve (es, en).
+    Los acentos y signos ¿¡ pesan doble: son señal fuerte de español."""
+    t = (texto or "").lower()
+    if not t.strip():
+        return (0, 0)
+    palabras = set(_re_idioma.findall(r"[a-záéíóúñü]+", t))
+    es = len(_ES_ACENTOS.findall(t)) * 2
     es += sum(1 for w in _ES_PALABRAS if w in palabras)
     en = sum(1 for w in _EN_PALABRAS if w in palabras)
+    return (es, en)
+
+
+def detectar_idioma(*textos) -> str:
+    """Heuristica simple: devuelve 'es' o 'en' segun señales del texto de la oferta.
+    Empate -> 'es' (mercado principal de la usuaria)."""
+    es = en = 0
+    for t in textos:
+        e, n = _señales_idioma(t)
+        es += e
+        en += n
     return "en" if en > es else "es"
+
+
+def idioma_de_oferta(puesto: str, descripcion: str, empresa: str) -> str:
+    """Idioma del anuncio, priorizando el PUESTO.
+
+    El titulo del puesto viene tal cual del anuncio, en su idioma. La descripcion,
+    en cambio, la reescribe la tarea programada casi siempre en español, asi que
+    ahogaba la señal del titulo (caso Revolut, 23jul2026: titulo ingles, carta en
+    español). El puesto pesa x3, pero no es absoluto: una descripcion con señal
+    española muy marcada todavia puede ganar (oferta española titulada en ingles).
+
+    Un idioma explicito (body o campo Idioma de Notion) manda sobre esta deteccion:
+    esta funcion es solo el ultimo recurso. Empate y vacio -> 'es'."""
+    es_p, en_p = _señales_idioma(puesto)
+    if es_p != en_p:
+        # El titulo tiene señal neta: manda. No lo contamina la descripcion.
+        return "en" if en_p > es_p else "es"
+    # Titulo vacio o ambiguo: caemos a la descripcion y la empresa.
+    es_d, en_d = _señales_idioma(descripcion)
+    es_e, en_e = _señales_idioma(empresa)
+    return "en" if (en_d + en_e) > (es_d + es_e) else "es"
 
 
 def _slug(texto: str) -> str:
@@ -1303,7 +1334,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     nombre = usuario.get("nombre") or email.split("@")[0]
 
     # 2. Resolver idioma y leer el CV master en ese idioma
-    idioma = idioma_in if idioma_in in ("en", "es") else detectar_idioma(puesto, descripcion, empresa)
+    idioma = idioma_in if idioma_in in ("en", "es") else idioma_de_oferta(puesto, descripcion, empresa)
     tiene_master_configurado = _tiene_algun_master(usuario)
     try:
         master     = leer_cv_master_desde_drive(usuario, idioma)
@@ -1637,7 +1668,7 @@ def generar_carta():
     nombre = usuario.get("nombre") or email.split("@")[0]
 
     # Resolver idioma y leer el CV master en ese idioma
-    idioma = idioma_in if idioma_in in ("en", "es") else detectar_idioma(puesto, descripcion, empresa)
+    idioma = idioma_in if idioma_in in ("en", "es") else idioma_de_oferta(puesto, descripcion, empresa)
     tiene_master = _tiene_algun_master(usuario)
     master       = leer_cv_master_desde_drive(usuario, idioma)
     cv_master    = master.texto
@@ -1791,7 +1822,7 @@ def crear_oferta():
         return jsonify({"ok": False, "error": "empresa y puesto son requeridos"}), 400
 
     # Detectar idioma ahora que tenemos la descripción en la mano y persistirlo
-    idioma = detectar_idioma(puesto, oferta.get("descripcion", ""), empresa)
+    idioma = idioma_de_oferta(puesto, oferta.get("descripcion", ""), empresa)
 
     # Relacionar la oferta con el usuario (si tenemos email)
     usuario_notion_id = ""
