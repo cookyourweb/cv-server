@@ -45,28 +45,43 @@ Reglas estrictas:
 7. Máximo 2 páginas.
 
 ### HEADLINE RULES (primera línea del output)
-- **Regla maestra**: IDENTIDAD REAL + especialización de la oferta, nunca al revés. El
-  núcleo del titular es SIEMPRE una de tres identidades reales y defendibles: *Frontend
-  Tech Lead*, *Full-Stack Developer* o *UX Engineer*. A ese núcleo se le añade la
-  especialización que pide la oferta (React, Vue, Next.js, TypeScript, IA, Design Systems,
-  Product, Accessibility, FinTech, E-commerce...).
-- **Identidad base** (oferta ambigua): `Frontend Tech Lead | Full-Stack Developer | UX Engineer`.
-- Titular por tipo de oferta:
-  - Frontend: `Frontend Tech Lead | React | Vue.js | UX Engineer`
-  - Full Stack: `Full-Stack Developer | React | TypeScript | UX Engineer`
-  - Tech Lead: `Frontend Tech Lead | UX Engineer`
-  - IA: `AI Product Builder | Full-Stack Developer` o `AI Solutions Engineer | Full-Stack Developer`
-- **Títulos de IA**: solo defendibles (*AI Product Builder*, *AI Solutions Engineer*,
-  *AI Automation Engineer*). NUNCA *AI Expert* ni *AI Specialist*: construye soluciones con
-  Claude/OpenAI/n8n y cursa un máster de IA aplicada, pero no se posiciona como especialista.
+
+> **El titular es data-driven desde el 21 de julio de 2026.** El prompt NO contiene
+> identidades escritas a mano. `test_headline_datadriven.py` falla si alguien las vuelve a
+> meter. Si querés cambiar cómo se presenta Verónica, se edita **el CV Master**, no esto.
+
+- **Fuente de verdad**: las identidades profesionales y los roles objetivo salen del bloque
+  `PERFIL BASE` del CV Master, secciones "Identidades profesionales" y "Roles objetivo". Es
+  la ÚNICA fuente. Una identidad que no esté ahí, no se usa.
+- **Cómo se construye**: se seleccionan y REORDENAN las identidades del `PERFIL BASE` que
+  mejor encajan con la oferta, y se añade especialización o stack solo si aparece en el
+  `PERFIL BASE` o en la experiencia real del Master. **Cambia el énfasis y el orden, nunca
+  las identidades.**
+- **La oferta decide qué destacar, nunca qué inventar**: si pide un rol que no está en el
+  `PERFIL BASE`, no se usa. La oferta solo elige cuáles de las identidades existentes se
+  resaltan.
+- **Coherencia identidad/experiencia**: cada identidad del titular tiene que poder
+  justificarse leyendo la EXPERIENCIA del Master. Si una identidad del `PERFIL BASE` no
+  tiene experiencia que la respalde, fuera del titular.
+- **Fallback**: si el Master no trae bloque `PERFIL BASE`, las identidades se derivan de la
+  experiencia real, nunca se inventan.
 - **Nada grandilocuente** (*Principal Architect*, *Head of Engineering*) salvo que la oferta
   lo pida explícitamente y sea justificable.
 - **Años de experiencia**: base **10+**. No clavar 15+ ni un número alto en todas las
   ofertas. Reflejar más solo si la oferta valora seniority, siempre veraz.
 
-*Por qué el titular es fuente de verdad de LinkedIn*: por convención del proyecto, LinkedIn
-manda sobre el titular. Ver reglas de CV en la memoria del proyecto y en el README de
-buscartrabajo.
+**Consecuencia práctica.** El titular es coherente entre ofertas porque el `PERFIL BASE` es
+el mismo. Lo que cambia entre un CV de Frontend y uno de IA es qué identidad va delante y
+qué stack la acompaña, no quién es la candidata. Esa es la respuesta al riesgo de "un CV
+distinto en cada candidatura": no puede pasar, porque el repertorio de identidades está
+cerrado y vive fuera del prompt.
+
+*Nota histórica*: hasta el 21 de julio de 2026 esta sección listaba identidades fijas
+(*Frontend Tech Lead*, *Full-Stack Developer*, *UX Engineer*) y titulares por tipo de
+oferta, con *AI Product Builder* y *AI Solutions Engineer* para las de IA. Eso obligaba a
+tocar el prompt cada vez que Verónica se reposicionaba, y de hecho quedó desfasado cuando el
+22 de julio los dos Masters pasaron a *AI Engineer*. Por eso el repertorio se movió al
+Master.
 
 ### PERFIL — anclaje a la oferta (obligatorio)
 El resumen debe RESONAR con la oferta: identifica 2-3 requisitos o keywords concretas de la
