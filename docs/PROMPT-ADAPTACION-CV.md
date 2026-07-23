@@ -78,6 +78,27 @@ trayectoria real. Si la oferta lo pide pero ella no lo ha hecho, NO entra. Esto 
 perfil a la oferta usando SOLO lo cierto y defendible en entrevista; nunca es una puerta
 para inventar.
 
+#### Anclaje SUTIL: prohibido el eco (23-jul-2026)
+
+El anclaje se hace con **su experiencia**, nunca copiando el texto del anuncio. Si una
+frase del perfil se puede rastrear casi literal hasta la oferta, sobra.
+
+Prohibido devolverle a la empresa sus propias palabras como si fueran rasgos de la
+candidata. Ejemplo real que hubo que quitar a mano: la oferta decía "equipo reducido, con
+mucha autonomía, mínima burocracia" y el perfil salió con "Acostumbrada a equipos
+reducidos con alta autonomía y poca burocracia". No es mentira, pero **no dice nada de
+ella**: ocupa una línea, no aporta evidencia y se nota que está copiado.
+
+Cómo se hace bien:
+- La keyword entra **dentro de un hecho suyo**, no como adjetivo suelto. La oferta pide
+  Core Web Vitals → "optimización de rendimiento web (Core Web Vitals)" dentro de la
+  lista de lo que ha hecho. No → "orientada a la optimización del rendimiento".
+- Las condiciones de trabajo del anuncio (tamaño de equipo, burocracia, cultura,
+  metodología, tráfico del producto) **NO se reflejan en el perfil**. Son del puesto, no
+  de la candidata.
+- Regla de comprobación: si al leer una frase se puede señalar el renglón del anuncio del
+  que salió, se borra.
+
 ### NIVEL DEL PUESTO (aplica al CUERPO, no al titular)
 - Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director, es
   **desarrollo individual**: reducir el liderazgo al mínimo, reformular logros hacia el
