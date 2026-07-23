@@ -131,6 +131,36 @@ Tono profesional pero natural.
 
 ---
 
+## Guardrails: lo que se comprueba en la SALIDA
+
+El prompt es una instrucción, no una garantía. Estas dos reglas ya estaban escritas y el
+modelo las incumplió igual, así que además se verifica el texto generado y se devuelve el
+resultado en la respuesta de `/generar-cv`.
+
+Ninguno de los dos aborta la generación. Una alerta puede ser legítima, y abortar dejaría a
+la candidata sin CV. Se avisa para que ella lo revise antes de enviarlo.
+
+| Campo de la respuesta | Qué contiene | Función |
+|---|---|---|
+| `cifras_no_respaldadas` | Cifras y magnitudes del CV que no están en el Master | `detectar_cifras_no_respaldadas` |
+| `tecnologias_no_respaldadas` | Tecnologías del CV que no están en el Master | `detectar_tecnologias_no_respaldadas` |
+
+**Regla de evidencia (tecnologías):** una tecnología entra en el CV solo si el Master la
+respalda. Da igual que la oferta la pida.
+
+Caso real, 23 de julio de 2026, oferta de Tenth Revolution: la oferta pedía "entornos
+PHP/Symfony o templating server-side (Twig, Blade)". Verónica no tiene esa experiencia. El
+CV generado salió con *"experiencia en templating server-side (contexto de integración con
+arquitecturas PHP/Symfony)"*. No es exactamente mentira, y en la bandeja de un recruiter se
+lee como experiencia. Hubo que quitarlo a mano. Ahora sale marcado en la respuesta.
+
+El detector trabaja con un catálogo de tecnologías y con sus variantes de escritura, para
+que "Vue" y "Vue.js" cuenten como lo mismo y no salte una falsa alarma. Cuando el Master
+incorpore una tecnología nueva, no hay que tocar nada: el detector compara contra el Master,
+no contra una lista de permitidas.
+
+---
+
 ## Prompt de la carta de presentación
 
 Rol: *experto en cartas de presentación*. Máximo **250 palabras**, en el idioma de la oferta.

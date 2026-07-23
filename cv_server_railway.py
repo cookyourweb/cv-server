@@ -310,6 +310,113 @@ def detectar_cifras_no_respaldadas(cv_texto: str, master_texto: str) -> list:
     return sorted(sospechosas)
 
 
+# Catalogo de tecnologias, con sus variantes de escritura mapeadas al nombre que se
+# reporta. Sin catalogo habria que decidir si cada sustantivo del CV es una tecnologia,
+# y eso no se puede hacer bien: se marcarian palabras normales.
+# Las variantes existen porque "Vue" y "Vue.js" son lo mismo, y marcar una teniendo la
+# otra en el master seria una falsa alarma.
+_TEC_ALIAS = {}
+
+
+def _reg_tec(canonico: str, *variantes: str) -> None:
+    _TEC_ALIAS[canonico.lower()] = canonico
+    for v in variantes:
+        _TEC_ALIAS[v.lower()] = canonico
+
+
+# Lenguajes
+for _t in ("JavaScript", "Python", "PHP", "Java", "Kotlin", "Swift", "Ruby", "Rust",
+           "Scala", "Perl", "Elixir", "Dart", "C#", "C++", "Objective-C", "COBOL", "ABAP"):
+    _reg_tec(_t)
+_reg_tec("TypeScript", "TS")
+_reg_tec("Golang", "Go lang")
+# Frontend
+for _t in ("Svelte", "Ember", "Backbone", "jQuery", "Redux", "Zustand", "RxJS", "Tailwind",
+           "Bootstrap", "Sass", "SCSS", "Webpack", "Vite", "Rollup", "Babel", "Storybook",
+           "HTML5", "CSS3", "Ionic", "Astro", "Qwik", "Solid.js", "Alpine.js"):
+    _reg_tec(_t)
+_reg_tec("React", "ReactJS", "React.js")
+_reg_tec("React Native")
+_reg_tec("Vue.js", "Vue", "VueJS")
+_reg_tec("Angular", "AngularJS", "Angular 2+")
+_reg_tec("Next.js", "NextJS", "Next")
+_reg_tec("Nuxt", "Nuxt.js", "NuxtJS")
+# Backend y frameworks
+for _t in ("Symfony", "Laravel", "Django", "Flask", "FastAPI", "NestJS", "Deno", "Bun",
+           "CodeIgniter", "Zend", "Struts", "Hibernate", "Quarkus", "Micronaut"):
+    _reg_tec(_t)
+_reg_tec(".NET", "ASP.NET", "dotnet", ".NET Core")
+_reg_tec("Spring Boot", "Spring", "Spring Framework")
+_reg_tec("Node.js", "NodeJS", "Node")
+_reg_tec("Express", "Express.js", "ExpressJS")
+_reg_tec("Ruby on Rails", "Rails")
+# Templating de servidor
+for _t in ("Twig", "Blade", "Thymeleaf", "Handlebars", "Mustache", "Pug", "Jinja", "ERB",
+           "Smarty", "Freemarker", "Razor", "JSP"):
+    _reg_tec(_t)
+# Datos
+for _t in ("MongoDB", "MySQL", "Oracle", "Redis", "Elasticsearch", "DynamoDB", "Firebase",
+           "Supabase", "Prisma", "GraphQL", "SQLite", "Cassandra", "MariaDB", "Neo4j"):
+    _reg_tec(_t)
+_reg_tec("PostgreSQL", "Postgres")
+_reg_tec("SQL Server", "MSSQL")
+# Infraestructura
+for _t in ("Docker", "Kubernetes", "Terraform", "Jenkins", "AWS", "Azure", "Vercel",
+           "Netlify", "Render", "Railway", "Nginx", "Apache", "Ansible", "Heroku"):
+    _reg_tec(_t)
+_reg_tec("GCP", "Google Cloud")
+_reg_tec("Kubernetes", "K8s")
+# Testing
+for _t in ("Jest", "Cypress", "Playwright", "Vitest", "Selenium", "JUnit", "Pytest",
+           "Mocha", "Jasmine", "Karma", "Testing Library"):
+    _reg_tec(_t)
+# CMS y comercio
+for _t in ("WordPress", "Drupal", "Shopify", "Strapi", "Contentful", "Magento", "Joomla",
+           "Prestashop", "Sitecore", "AEM"):
+    _reg_tec(_t)
+# IA y herramientas
+for _t in ("Claude Code", "Cursor", "GitHub Copilot", "LangChain", "TensorFlow", "PyTorch",
+           "Hugging Face", "Ollama", "Pandas", "NumPy", "Git", "Jira", "Figma"):
+    _reg_tec(_t)
+
+# Se buscan primero los nombres largos: en "Spring Boot" no debe reportarse ademas
+# "Spring", ni en "React Native" un "React" suelto.
+_TEC_PATRONES = [
+    (variante, re.compile(rf"(?<![A-Za-z0-9]){re.escape(variante)}(?![A-Za-z0-9])", re.IGNORECASE))
+    for variante in sorted(_TEC_ALIAS, key=len, reverse=True)
+]
+
+
+def _tecnologias_en(texto: str) -> set:
+    """Nombres canonicos de las tecnologias del catalogo presentes en el texto.
+
+    Consume los tramos ya reconocidos para que un nombre corto no vuelva a saltar
+    dentro de uno largo que ya se ha identificado."""
+    if not texto:
+        return set()
+    restante = texto
+    encontradas = set()
+    for variante, patron in _TEC_PATRONES:
+        nuevo, n = patron.subn(" ", restante)
+        if n:
+            encontradas.add(_TEC_ALIAS[variante])
+            restante = nuevo
+    return encontradas
+
+
+def detectar_tecnologias_no_respaldadas(cv_texto: str, master_texto: str) -> list:
+    """Tecnologias que el CV generado atribuye a la candidata y NO estan en su Master.
+
+    Regla de evidencia: una tecnologia entra en el CV solo si el Master la respalda.
+    El prompt ya lo prohibe y el modelo lo hizo igual (PHP/Symfony en la oferta de
+    Tenth Revolution, 23jul2026), asi que se verifica la salida.
+
+    Sin master no se alerta: no hay fuente contra la que contrastar."""
+    if not cv_texto or not master_texto:
+        return []
+    return sorted(_tecnologias_en(cv_texto) - _tecnologias_en(master_texto))
+
+
 class MasterElegido(NamedTuple):
     """Master seleccionado para un idioma, con la URL de la que sale.
 
@@ -1444,6 +1551,15 @@ Elimina TODO rastro de texto generado por IA:
             email, empresa, puesto, cifras_sospechosas,
         )
 
+    #     Lo mismo con las tecnologias: la oferta pide una cosa y el modelo tiende a
+    #     devolverla como si la candidata la tuviera. Tampoco se aborta, se avisa.
+    tecnologias_sospechosas = detectar_tecnologias_no_respaldadas(contenido_cv, cv_master)
+    if tecnologias_sospechosas:
+        logger.warning(
+            "TECNOLOGIAS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
+            email, empresa, puesto, tecnologias_sospechosas,
+        )
+
     # 6. Generar DOCX con cabecera estructurada (titular adaptado por la oferta)
     nombre_archivo = _nombre_archivo_cv(nombre, puesto)
     docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario, titular, idioma)
@@ -1467,6 +1583,9 @@ Elimina TODO rastro de texto generado por IA:
         # Vacio = todas las cifras del CV estan en el Master. Si trae algo, REVISAR
         # a mano antes de enviar: son datos que el modelo no pudo justificar.
         "cifras_no_respaldadas": cifras_sospechosas,
+        # Vacio = todas las tecnologias del CV estan en el Master. Si trae algo, es una
+        # tecnologia que la oferta pedia y la candidata NO tiene: quitarla antes de enviar.
+        "tecnologias_no_respaldadas": tecnologias_sospechosas,
     }
 
 
