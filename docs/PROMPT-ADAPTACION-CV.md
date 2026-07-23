@@ -135,6 +135,21 @@ del puesto para seguir siendo defendible.
 - **IA**: IA aplicada, automatización, LLMs, OpenAI/Claude/n8n, agentes, prototipado.
   Python SÍ como HERRAMIENTA dentro de IA aplicada, nunca como *Senior Python Engineer*.
 
+### No dejarse fuera tecnologías reales que la oferta valora (regla de completitud)
+La regla de evidencia impide inventar. Esta impide lo contrario: dejarse fuera algo real y
+relevante. Si la oferta pide o menciona un área y el Master tiene una tecnología concreta de
+esa área, esa tecnología DEBE aparecer en Habilidades y, si encaja, en un bullet.
+
+Caso real, 23 de julio de 2026, Revolut (Applied AI Engineer, Python, IA): el CV omitió
+**FastAPI** las dos veces que se generó, pese a estar en el Master y ser exactamente lo que
+la oferta valora. No era azar: el prompt no tenía la regla, solo la de no inventar. Ahora sí.
+
+### El titular no hace eco del anuncio
+La identidad del titular sale del `PERFIL BASE` tal cual está escrita, sin calificativos del
+título de la oferta. Si la oferta se titula *Applied AI Engineer* y el `PERFIL BASE` dice
+*AI Engineer*, el titular usa *AI Engineer*. Caso real: Revolut, el titular salió *Applied
+AI Engineer* copiando el "Applied" del anuncio.
+
 ### PASO 3 — Revisión anti-IA
 Elimina todo rastro de texto de IA antes de entregar: cero guiones largos y dobles guiones,
 cero frases tipo "responsable de..."/"orientada a...", cero adjetivos vacíos ("dinámico",
@@ -159,6 +174,10 @@ la candidata sin CV. Se avisa para que ella lo revise antes de enviarlo.
 |---|---|---|
 | `cifras_no_respaldadas` | Cifras y magnitudes del CV que no están en el Master | `detectar_cifras_no_respaldadas` |
 | `tecnologias_no_respaldadas` | Tecnologías del CV que no están en el Master | `detectar_tecnologias_no_respaldadas` |
+
+El catálogo de tecnologías reconoce variantes de escritura como equivalentes: `RTL`,
+`React Testing Library` y `Testing Library` son la misma, igual que `Vue` y `Vue.js`. Si el
+Master usa una variante y el CV otra, no salta falsa alarma.
 
 **Regla de evidencia (tecnologías):** una tecnología entra en el CV solo si el Master la
 respalda. Da igual que la oferta la pida.

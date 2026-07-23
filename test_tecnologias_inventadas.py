@@ -61,6 +61,15 @@ def test_no_marca_la_parte_corta_de_un_nombre_largo():
     assert "Spring" not in encontradas
 
 
+def test_rtl_en_el_master_respalda_react_testing_library_en_el_cv():
+    # Falso positivo real (23jul2026): el Master dice "RTL", el CV "React Testing
+    # Library". Son lo mismo, no debe marcarse.
+    master = MASTER + "\nTesting automatizado: Jest, RTL, Cypress."
+    assert srv.detectar_tecnologias_no_respaldadas(
+        "Automated testing with React Testing Library", master) == []
+    assert srv.detectar_tecnologias_no_respaldadas("Testing con RTL", master) == []
+
+
 def test_sin_master_no_puede_verificar_y_no_marca_nada():
     # Sin fuente de verdad no hay nada contra lo que contrastar: no inventamos alertas.
     assert srv.detectar_tecnologias_no_respaldadas("Experiencia con PHP", "") == []

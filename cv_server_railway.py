@@ -368,8 +368,9 @@ _reg_tec("GCP", "Google Cloud")
 _reg_tec("Kubernetes", "K8s")
 # Testing
 for _t in ("Jest", "Cypress", "Playwright", "Vitest", "Selenium", "JUnit", "Pytest",
-           "Mocha", "Jasmine", "Karma", "Testing Library"):
+           "Mocha", "Jasmine", "Karma"):
     _reg_tec(_t)
+_reg_tec("Testing Library", "React Testing Library", "RTL")
 # CMS y comercio
 for _t in ("WordPress", "Drupal", "Shopify", "Strapi", "Contentful", "Magento", "Joomla",
            "Prestashop", "Sitecore", "AEM"):
@@ -1497,12 +1498,14 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 4bis. PROHIBICIÓN DE CIFRAS (no negociable): no introduzcas NINGÚN número que no aparezca en el CV Master. Ni usuarios, ni porcentajes, ni ingresos, ni tamaños de equipo, ni volúmenes. Prohibido también cuantificar con palabras ("millones de", "miles de", "cientos de", "millions of", "thousands of") si esa magnitud no está en el Master. Ante la duda, describe sin número: un CV sin cifras es defendible en entrevista; uno con una cifra inventada, no.
 5. Densidad real: NO recortes ni resumas el CV master. Los puestos recientes/relevantes deben llevar 6-9 bullets; los antiguos 3-4. Si el master tiene el detalle, úsalo entero.
 6. Redacta como PERFIL DE PRODUCTO: traducción de necesidades de negocio a soluciones digitales, colaboración con diseño y producto, plataformas B2B y B2C, diseño de flujos y componentes reutilizables, Design Systems.
-7. Máximo 2 páginas
+7. NO OMITAS tecnologías del Master que la oferta valora: si la oferta pide o menciona un área (backend, IA, testing, cloud...) y el Master tiene una tecnología concreta de esa área, esa tecnología DEBE aparecer en HABILIDADES TÉCNICAS y, si encaja, en un bullet. Ejemplo: oferta backend/IA con Python y el Master incluye FastAPI → FastAPI debe salir en Backend. La REGLA DE EVIDENCIA impide inventar; esta regla impide lo contrario, dejarse fuera algo real y relevante.
+8. Máximo 2 páginas
 
 HEADLINE RULES (primera línea del output — el TITULAR del CV es DATA-DRIVEN):
 - FUENTE DE VERDAD: las identidades profesionales y roles objetivo de la candidata están declarados en el bloque "PERFIL BASE" del CV MASTER (secciones "Identidades profesionales" y "Roles objetivo"). Esa es la ÚNICA fuente. El titular SIEMPRE debe construirse usando ÚNICAMENTE esas identidades. NUNCA inventes ni uses una identidad profesional que no aparezca en el PERFIL BASE.
 - CÓMO CONSTRUIR EL TITULAR: selecciona y REORDENA las identidades del PERFIL BASE que mejor encajan con esta oferta, y añade especialización/stack SOLO si aparece en el PERFIL BASE (secciones "Stack principal" / "Especialización") o en la experiencia real del CV master. El titular NO tiene que ser idéntico al PERFIL BASE: cambia el ÉNFASIS y el ORDEN, nunca las identidades.
 - LA OFERTA DECIDE QUÉ DESTACAR, NUNCA QUÉ INVENTAR: si la oferta pide un rol/identidad que NO está en el PERFIL BASE, NO lo uses. La oferta solo elige cuáles de las identidades existentes se resaltan.
+- NADA DE ECO EN LAS IDENTIDADES: no copies calificativos ni adjetivos del título de la oferta a la identidad. Si la oferta se titula "Applied AI Engineer" y el PERFIL BASE dice "AI Engineer", el titular usa "AI Engineer", no "Applied AI Engineer". La identidad sale del PERFIL BASE tal cual está escrita ahí; la oferta solo decide su orden y qué stack la acompaña.
 - GUARDRAIL POR PRINCIPIO (no escalar seniority): nunca subas el nivel por encima de lo que declara el PERFIL BASE. Prohibido inventar rangos superiores (Principal, Staff, Head, Director, Architect, Distinguished, Manager, o "Lead" de personas) salvo que esa identidad EXACTA figure en el PERFIL BASE.
 - RESPETA EL POSICIONAMIENTO: si el CV master incluye un bloque "POSICIONAMIENTO" (lo que la candidata NO es), el titular NUNCA debe contradecirlo.
 - AUTO-CHEQUEO antes de cerrar el HEADLINE: verifica que CADA identidad del titular aparece en el PERFIL BASE; si alguna no rastrea ahí, elimínala.
