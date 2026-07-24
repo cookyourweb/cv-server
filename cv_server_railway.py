@@ -493,6 +493,75 @@ def _partir_titular(titular: str, permitidas: list) -> tuple:
     return ident, otros
 
 
+def _huecos(linea: str) -> list:
+    """Huecos del titular. Solo parte por '|': el '·' vive DENTRO de un hueco."""
+    return [h.strip() for h in (linea or "").split("|") if h.strip()]
+
+
+def _es_identidad(hueco: str, permitidas: list) -> str:
+    """Nombre canonico si el hueco es una identidad declarada, si no ''."""
+    for p in permitidas:
+        if hueco.strip().lower() == p.lower():
+            return p
+    return ""
+
+
+def _respaldado(modificador: str, master_texto: str) -> bool:
+    """El Master avala el modificador si avala todas sus palabras con contenido.
+
+    Palabra a palabra y no la frase entera: el Master dice "LLM integration" y el
+    modelo propone "LLM Systems". Exigir la frase literal obligaria a escribir en el
+    Master cada forma posible de nombrar lo mismo."""
+    master_low = (master_texto or "").lower()
+    palabras = [p for p in re.split(r"[^\wÁÉÍÓÚÜÑáéíóúüñ+#.]+", modificador or "") if len(p) > 2]
+    return bool(palabras) and all(p.lower() in master_low for p in palabras)
+
+
+def construir_titular(titular_llm: str, master_texto: str) -> str:
+    """Ensambla el titular desde el PERFIL BASE en vez de fiarse del modelo.
+
+    Medido 3 veces el 24jul2026: la regla en el prompt no sostiene el titular. El
+    modelo invirtio el orden, fusiono identidades con "&" y se comio la seniority.
+    Como el contrato es CERRADO (identidades declaradas, orden declarado), no hay nada
+    que generar: se rellena un hueco.
+
+    Del titular del modelo solo se aprovechan los MODIFICADORES, y solo si el Master
+    los respalda. Sin PERFIL BASE se devuelve lo que dijo el modelo: los Masters
+    antiguos siguen funcionando igual."""
+    permitidas = _identidades_declaradas(master_texto)
+    base = _seccion_perfil_base(master_texto, "Identidad profesional")
+    if not permitidas or not base:
+        return titular_llm
+
+    base = base.splitlines()[0]
+    identidades, resto = [], []
+    for hueco in _huecos(base):
+        canon = _es_identidad(hueco, permitidas)
+        (identidades if canon else resto).append(canon or hueco)
+    if not identidades:
+        return titular_llm
+
+    # El ultimo hueco no-identidad del PERFIL BASE es la seniority: nunca se sustituye.
+    seniority = resto[-1] if resto else ""
+    modificadores_base = resto[:-1]
+
+    # Un hueco que CONTIENE una identidad no es un modificador: es una identidad mal
+    # escrita: dos identidades fusionadas con "&", o una con un sufijo de rango pegado.
+    def _mancha_identidad(h: str) -> bool:
+        return any(re.search(rf"\b{re.escape(p)}", h, re.IGNORECASE) for p in permitidas)
+
+    propuestos = [
+        h for h in _huecos(titular_llm)
+        if not _es_identidad(h, permitidas)
+        and not _mancha_identidad(h)
+        and h.lower() != seniority.lower()
+        and _respaldado(h, master_texto)
+    ][:2]
+
+    return " | ".join(identidades + (propuestos or modificadores_base)
+                      + ([seniority] if seniority else []))
+
+
 def detectar_titular_fuera_de_contrato(titular: str, master_texto: str) -> list:
     """Avisos si el titular generado no respeta el contrato del PERFIL BASE.
 
@@ -1729,6 +1798,13 @@ Elimina TODO rastro de texto generado por IA:
         cab = lineas[idx_headline].strip().replace("**", "").replace("`", "")
         titular = cab.split(":", 1)[1].strip()
         lineas = lineas[idx_headline + 1:]
+
+    # 5a. El titular NO se acepta tal cual: se ENSAMBLA desde el PERFIL BASE. El
+    #     contrato es cerrado (identidades y orden declarados) y tres formulaciones
+    #     distintas de la regla en el prompt no lo sostuvieron: el modelo invirtio el
+    #     orden, fusiono identidades con "&" y se comio la seniority. Del modelo solo
+    #     se aprovechan los modificadores, y solo si el Master los respalda.
+    titular = construir_titular(titular, cv_master)
     lineas_limpias = []
     for linea in lineas:
         limpia = linea.strip().replace("**", "").replace("`", "").replace("##", "").replace("# ", "")
