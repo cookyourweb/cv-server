@@ -31,6 +31,60 @@ generando los CV de Verónica. Una pregunta sin fallo detrás no entra.
 
 ---
 
+## Se engancha al alta que YA existe
+
+No es un formulario nuevo. El registro actual (`/registro`, formulario multistep servido en
+`/`) ya crea el usuario en Notion con estos campos:
+
+| Campo en Notion | Qué es | Para la entrevista |
+|---|---|---|
+| `Email` · `Name` · `Ciudad` | Identificación | — |
+| `LinkedIn` | URL del perfil | **Fuente de EXTRAER** |
+| `CV Master URL` · `cv_master_file_id` | El Master en Drive | **Fuente de EXTRAER** |
+| `Perfil` | Texto libre | Solapa con `Resumen profesional` |
+| `Rol objetivo` | Texto libre | Solapa con `Roles objetivo` |
+| `Stack` | Multi-select | Solapa con `Tecnologías principales` |
+| `Salario min` · `Modalidad` · `Activo` | Filtros de búsqueda | — |
+
+**Las dos fuentes que necesita la entrevista ya se piden.** Y tres campos ya cubren parte del
+contrato: no se vuelven a preguntar, se **confirman**.
+
+Los pasos nuevos son solo los que producen lo que hoy no existe: identidades, orden,
+variante, posicionamiento y las preguntas de evidencia y frontera.
+
+---
+
+## DÓNDE VIVE EL CONTRATO: en Notion, no en el Google Doc
+
+Con Verónica el `PERFIL BASE` se pegó **a mano** al principio de su CV Master. Para una
+usuaria eso vale. Para multiusuario **no**, y hay evidencia del mismo día.
+
+*El 24-jul-2026, pegando ese bloque en dos documentos, el contenido español acabó dentro del
+Master inglés **dos veces seguidas**. Lo detectó una lectura desde Drive, no la usuaria. Si
+falla quien diseñó el bloque, falla cualquiera.*
+
+**Propuesta (no implementada)**: el contrato se guarda como campos del usuario en Notion, y
+el servidor **construye el bloque `PERFIL BASE` y lo antepone al texto del Master** antes de
+mandarlo al modelo. El usuario no pega nada. Su Master sigue siendo solo su CV.
+
+Ventajas, más allá de quitar el copiar y pegar:
+
+- **Editable desde la aplicación**: cambiar el titular es actualizar un campo, no reeditar un
+  documento de Drive.
+- **Validable**: se puede comprobar que `Identidades permitidas` tiene entre 1 y 4 entradas, o
+  que la condición de la variante contiene nombres propios y no una categoría. Sobre texto
+  pegado en un Doc no se puede validar nada.
+- **Arregla de paso la incoherencia del detector**: hoy
+  `detectar_tecnologias_no_respaldadas` compara contra el texto completo del Master,
+  `PERFIL BASE` incluido, así que una tecnología escrita ahí queda dada por respaldada y
+  ciega el guardrail. Si el bloque se inyecta aparte, el detector puede seguir comparando
+  contra el Master **sin** el bloque, que es lo que el prompt dice que debe pasar.
+
+El prompt **no cambia**: sigue leyendo las mismas secciones por su nombre. Solo cambia quién
+escribe el bloque y dónde se guarda.
+
+---
+
 ## FASE 0 — EXTRAER (sin preguntar nada)
 
 Del CV y del perfil de LinkedIn se saca automáticamente:
