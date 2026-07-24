@@ -13,6 +13,51 @@ estructura y el PORQUÉ de cada regla, para que nadie las rompa al editar el có
 > Regla de oro del proyecto: **el CV NUNCA inventa**. Todo sale del CV master del usuario.
 > El prompt solo cambia ORDEN, ÉNFASIS y TITULAR, nunca el contenido real.
 
+## Modelo mental: IDENTIDAD vs POSICIONAMIENTO
+
+La distinción base del sistema (Verónica, 24-jul-2026). Confundirlas es el origen de casi
+todos los fallos que hemos corregido.
+
+| | **Identidad** | **Posicionamiento** |
+|---|---|---|
+| Responde a | Quién **ES** la candidata | Cómo se **PRESENTA** ante esta oferta |
+| Naturaleza | **Cerrada** | **Variable** |
+| Quién la fija | El `PERFIL BASE` del Master | El **arquetipo** de la oferta |
+| Cambia entre ofertas | **Nunca** | Sí, en cada una |
+| Ejemplos | Frontend Tech Lead, Full-Stack Developer, AI Engineer | GenAI Adoption, Context Engineering, Applied AI, AI Automation |
+| Dónde va en el titular | Huecos de identidad | Huecos de **modificador** |
+
+**Un posicionamiento no es una identidad nueva**: es la misma trayectoria presentada según
+el problema que la empresa quiere resolver. Por eso el posicionamiento puede cambiar en
+cada oferta y la identidad no cambia nunca.
+
+**El posicionamiento también necesita respaldo del Master.** Un posicionamiento sin
+evidencia es una identidad inventada con otro nombre. Si el Master no respalda el que pide
+la oferta, se usa el que sí esté respaldado aunque encaje peor.
+
+> **Decisión de diseño**: no existe una sección `Posicionamientos permitidos` en el
+> contrato, y es deliberado. La identidad se declara porque es cerrada; el posicionamiento
+> se **deriva**, y ya está acotado por tres puertas que existen: la lista cerrada de
+> arquetipos, el *límite del arquetipo* (sin evidencia no se fuerza) y la regla de
+> evidencia sobre tecnologías. Declararlo además obligaría a mantener una lista que el
+> sistema no necesita.
+
+## REGLA MAESTRA — proyección, no identidad nueva
+
+> **La adaptación debe producir una PROYECCIÓN distinta de la MISMA trayectoria
+> profesional, nunca una nueva identidad profesional.**
+
+Formulada por Verónica el **24 de julio de 2026**. Es la regla de más alto nivel del
+generador: si se cumple, muchas de las demás salen casi gratis. Implica automáticamente
+no cambiar el título radicalmente, no subir el seniority, no inventar herramientas, no
+mover skills a experiencia, no convertir un proyecto propio en una multinacional, y
+cambiar solo el énfasis según el arquetipo de la oferta.
+
+El criterio de comprobación: un recruiter que viera tres CV suyos debe reconocer a la
+misma profesional adaptando el contenido, no a tres personas distintas. **Si un cambio la
+hace parecer otra profesional, ese cambio está mal aunque cada frase por separado sea
+cierta.**
+
 ---
 
 ## Prompt del CV — estructura en 3 pasos
@@ -67,6 +112,55 @@ Reglas estrictas:
   experiencia real, nunca se inventan.
 - **Nada grandilocuente** (*Principal Architect*, *Head of Engineering*) salvo que la oferta
   lo pida explícitamente y sea justificable.
+
+#### El PERFIL BASE es un CONTRATO de datos (24-jul-2026)
+
+La causa raíz de la deriva de títulos no era que el modelo inventase por capricho: era
+que **no existía el bloque `PERFIL BASE` en ningún Master**. El prompt caía al fallback
+("deriva las identidades de la experiencia real"), y derivar obliga a interpretar. De
+interpretar salieron *AI Engineering Leader*, y de ahí a *GenAI Adoption Lead* o
+*Solutions Architect* en la siguiente oferta.
+
+El arreglo no es pedirle al modelo que se contenga. Es **no dejarle nada que deducir**.
+El `PERFIL BASE` declara la identidad en secciones explícitas y el prompt las LEE:
+
+| Sección | Qué declara |
+|---|---|
+| `Identidad profesional` | El titular base completo. Es el ancla |
+| `Identidades permitidas` | Repertorio **cerrado**. Ninguna otra existe |
+| `Orden del titular` | El orden exacto. Es un dato, no una decisión del modelo |
+| `Variante permitida` | El único titular alternativo, con la condición que lo habilita |
+| `Nunca permitido` | Restricciones que declara el propio Master. Innegociables |
+
+Las únicas libertades del modelo: **sustituir uno o dos modificadores** de especialización
+o stack por los que la oferta valora (siempre tomados del Master), u **omitir** uno que no
+aporte nada. Las identidades y su orden no se tocan.
+
+*Por qué*: si en cada oferta la candidata pasa de *Frontend Tech Lead* a *AI Engineering
+Leader*, luego a *GenAI Adoption Lead* y después a *Solutions Architect*, parece que
+intenta convertirse en lo que pide cada empresa. El CV tiene que sostener la misma
+identidad profesional que su perfil público de LinkedIn.
+
+> **Nota sobre reutilización**: el prompt no conoce ninguna identidad concreta, solo los
+> NOMBRES de las secciones del contrato. Por eso el generador sirve para cualquier
+> usuario: cada uno declara su propio `PERFIL BASE` en su Master.
+> `test_proyeccion_arquetipos.py::test_titular_base_sigue_siendo_data_driven` falla si
+> alguien vuelve a escribir una identidad concreta en el código.
+
+#### El guardrail de seniority es un PRINCIPIO, no una lista
+
+La regla anterior enumeraba *Principal, Staff, Head, Director, Architect, Distinguished,
+Manager* y *"Lead" de personas*. El CV de N-iX salió con **"AI Engineering Leader"** y no
+saltó nada: *Leader* no estaba en la lista.
+
+Ahora la regla enuncia el principio (**no incrementar el nivel jerárquico, la autoridad
+ni el alcance organizativo declarados en el `PERFIL BASE`**) y marca los ejemplos como
+lista **abierta**. La prueba no es si la palabra aparece en una enumeración, sino si el
+titular sugiere un rango mayor que el declarado.
+
+*Lección general*: **las reglas deben expresar principios, no listas cerradas.** Mañana
+aparecerá *Champion*, *Evangelist*, *Technical Authority* o *Principal Contributor* y
+volvería a escaparse.
 - **Años de experiencia**: base **10+**. No clavar 15+ ni un número alto en todas las
   ofertas. Reflejar más solo si la oferta valora seniority, siempre veraz.
 
@@ -82,6 +176,15 @@ oferta, con *AI Product Builder* y *AI Solutions Engineer* para las de IA. Eso o
 tocar el prompt cada vez que Verónica se reposicionaba, y de hecho quedó desfasado cuando el
 22 de julio los dos Masters pasaron a *AI Engineer*. Por eso el repertorio se movió al
 Master.
+
+### RESUMEN — estabilidad 70-80% (24-jul-2026)
+El resumen **no se reescribe desde cero** en cada oferta. Aproximadamente tres cuartas
+partes describen la misma trayectoria con las mismas ideas y casi las mismas palabras: de
+dónde viene, cómo ha evolucionado, qué la define hoy. Solo la parte final, o los ejemplos
+concretos que se eligen, se ajustan al arquetipo.
+
+Así el titular, el resumen y el perfil público cuentan la misma historia, y esa coherencia
+se sostiene también en la entrevista.
 
 ### PERFIL — anclaje a la oferta (obligatorio)
 El resumen debe RESONAR con la oferta: identifica 2-3 requisitos o keywords concretas de la
@@ -125,15 +228,74 @@ Cómo se hace bien:
 facto del frontend) sin bajar al nivel de la oferta, pero el cuerpo se ajusta al nivel real
 del puesto para seguir siendo defendible.
 
-### POSICIONAMIENTO por tipo de oferta (ajusta el ÉNFASIS, nunca inventa)
-- **Frontend**: React, Vue, TypeScript, JS, HTML5, CSS3. Reduce el liderazgo.
-- **Full Stack**: React, TypeScript, Node, APIs, Firebase, MongoDB. Frontend como fortaleza
-  principal.
-- **Tech Lead**: mentoría técnica, coordinación con negocio/UX/producto/backend, ownership
-  del área frontend. No afirmar dirección de personas salvo que sea cierto.
-- **UX Engineer**: Figma, Design Systems, UX, accesibilidad.
-- **IA**: IA aplicada, automatización, LLMs, OpenAI/Claude/n8n, agentes, prototipado.
-  Python SÍ como HERRAMIENTA dentro de IA aplicada, nunca como *Senior Python Engineer*.
+### ARQUETIPO de la oferta (ajusta el ÉNFASIS, nunca inventa)
+
+> Reescrito el **24 de julio de 2026**. Hasta esa fecha esta sección listaba cinco
+> categorías y una de ellas era **"IA"**, a secas. Ese bucket único fue exactamente el
+> fallo del CV de N-iX. Además, la lista que aquí se documentaba llevaba tiempo sin
+> existir en el código: el prompt real solo decía "prioriza las skills que la oferta
+> valora", genérico. Ahora el bloque existe de verdad y `test_proyeccion_arquetipos.py`
+> falla si alguien vuelve a colapsar los arquetipos de IA.
+
+La oferta se clasifica en UN arquetipo leyendo el PUESTO y la DESCRIPCIÓN, nunca el
+sector de la empresa. El arquetipo **no toca el titular ni las identidades**: decide qué
+experiencia va primero, qué bullets se priorizan y qué keywords entran.
+
+- **Frontend**: React, Vue, TypeScript, arquitectura frontend, design systems,
+  rendimiento, accesibilidad, mentoría técnica.
+- **Full Stack**: frontend como fortaleza principal, más Node, APIs, bases de datos.
+- **Tech Lead**: ownership técnico, estándares, code review, coordinación con producto,
+  diseño y backend. No afirmar dirección de personas salvo que el Master lo respalde.
+- **UX Engineer**: Figma, Design Systems, accesibilidad, colaboración con diseño.
+- **IA / AI Engineer**: CONSTRUYE sistemas con IA. LLM, RAG, agentes, APIs, Context
+  Engineering, evaluación, guardrails, pipelines.
+- **IA / GenAI Adoption**: consigue que OTROS desarrolladores trabajen mejor con IA.
+  Formación, workshops, mentoring, pairing, experimentación, herramientas de desarrollo
+  asistido, playbooks, productividad de equipos de ingeniería.
+- **IA / AI Solutions Architect**: DISEÑA sistemas. Arquitectura, escalabilidad, cloud,
+  integración, decisiones técnicas, observabilidad, gobernanza.
+- **IA / AI Product Engineer**: construye PRODUCTO con IA. Métricas, usuarios,
+  experimentos, UX, negocio, iteración.
+- **IA / AI Automation Engineer**: AUTOMATIZA procesos. N8N, MCP, APIs, workflows.
+
+**Regla de proyección**: el CV se adapta al **problema que resuelve la empresa que
+contrata**, no al producto que construyó la candidata. La misma trayectoria se proyecta
+hacia un arquetipo u otro sin inventar nada.
+
+**Límite del arquetipo**: si el Master no respalda el arquetipo de la oferta, no se
+fuerza. Un arquetipo sin evidencia es una invitación a inventar.
+
+*Caso real, 24 de julio de 2026, N-iX (Gen AI Adoption Lead, Engineering Productivity).*
+La oferta pedía impulsar la adopción de Copilot, Claude y Cursor en equipos de ingeniería
+con talleres, pairing y medición de productividad. El CV salió vendiendo Context
+Engineering, guardrails, JSON contracts y deterministic retrieval: un CV de *AI Engineer*
+para una oferta de *enablement*. La carta, con el mismo Master, sí lo enfocó bien.
+
+### HECHOS, NO EFECTOS
+Se escribe la ACCIÓN concreta y verificable, nunca el efecto que se le atribuye, salvo
+que el Master traiga el dato. El lector deduce el efecto solo, y le convence más.
+
+- MAL: *"Improved engineering productivity"*, *"Led AI transformation"*, *"proven track
+  record of measurable productivity gains"*, *"measuring adoption impact"*.
+- BIEN: *"Delivered technical workshops on Generative AI for engineering teams"*.
+
+Prohibido el vocabulario de resultado no medido cuando el Master no lo respalda: *proven
+track record*, *measurable*, *impact*, *transformation*, *drove*, *boosted*,
+*accelerated*.
+
+*Por qué*: el CV de N-iX afirmó *"Proven track record translating emerging AI
+capabilities into measurable team productivity gains"* y *"measuring adoption impact"*.
+No hay una sola métrica de productividad en el Master. Un hecho concreto sin adjetivos
+vende más que un efecto declarado sin prueba, y además es defendible en entrevista.
+
+### No mover skills a experiencia
+Una tecnología que el Master lista en HABILIDADES pero **no atribuye a un puesto
+concreto** no puede aparecer como logro de ese puesto. En Habilidades es legítima.
+
+*Por qué*: el CV de N-iX atribuyó *Jest, React Testing Library y CI/CD* al puesto de
+Bitcode. El Master los tiene en *Architecture & Quality*, sin ligarlos a ese puesto. La
+tecnología es real, la ATRIBUCIÓN es inventada, y el detector de tecnologías no lo ve
+porque solo compara presencia, no a qué puesto se asigna.
 
 ### No dejarse fuera tecnologías reales que la oferta valora (regla de completitud)
 La regla de evidencia impide inventar. Esta impide lo contrario: dejarse fuera algo real y
@@ -219,6 +381,18 @@ que "Vue" y "Vue.js" cuenten como lo mismo y no salte una falsa alarma. Cuando e
 incorpore una tecnología nueva, no hay que tocar nada: el detector compara contra el Master,
 no contra una lista de permitidas.
 
+**Un alias que falta es un agujero en el guardrail.** Caso real, 24 de julio de 2026,
+N-iX: el CV coló *"integrating Copilot-class AI systems"* sin respaldo del Master y el
+detector no dijo nada. El catálogo daba de alta **"GitHub Copilot"** y el patrón usa
+fronteras de palabra, así que **"Copilot" a secas no matcheaba**. No fue un fallo del
+modelo ni de la regla: fue un alias que no estaba. Arreglado con
+`_reg_tec("GitHub Copilot", "Copilot")` y cubierto por
+`test_tecnologias_inventadas.py::test_regresion_la_frase_exacta_del_cv_de_n_ix`.
+
+Al añadir una herramienta al catálogo, **da de alta también el nombre corto por el que la
+gente la escribe de verdad**. El patrón consume primero los nombres largos, así que
+registrar el alias corto no produce dobles alertas.
+
 ---
 
 ## Prompt de la carta de presentación
@@ -249,5 +423,7 @@ Rol: *experto en cartas de presentación*. Máximo **250 palabras**, en el idiom
 
 ---
 
-**Última actualización:** 20 julio 2026
-**Ver también:** `../CHANGELOG.md` (cambios técnicos), `../README.md` (guía de usuario).
+**Última actualización:** 24 julio 2026
+**Ver también:** `../CHANGELOG.md` (cambios técnicos), `../README.md` (guía de usuario),
+`../test_proyeccion_arquetipos.py` (invariantes del prompt: regla maestra, titular base,
+arquetipos, hechos-no-efectos).

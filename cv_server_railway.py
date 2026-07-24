@@ -376,9 +376,13 @@ for _t in ("WordPress", "Drupal", "Shopify", "Strapi", "Contentful", "Magento", 
            "Prestashop", "Sitecore", "AEM"):
     _reg_tec(_t)
 # IA y herramientas
-for _t in ("Claude Code", "Cursor", "GitHub Copilot", "LangChain", "TensorFlow", "PyTorch",
+for _t in ("Claude Code", "Cursor", "LangChain", "TensorFlow", "PyTorch",
            "Hugging Face", "Ollama", "Pandas", "NumPy", "Git", "Jira", "Figma"):
     _reg_tec(_t)
+# El nombre corto tambien cuenta: el CV de N-iX (24jul2026) colo "Copilot-class AI
+# systems" sin respaldo del Master y el guardrail no salto, porque solo estaba dado de
+# alta "GitHub Copilot" y el patron usa fronteras de palabra.
+_reg_tec("GitHub Copilot", "Copilot")
 
 # Se buscan primero los nombres largos: en "Spring Boot" no debe reportarse ademas
 # "Spring", ni en "React Native" un "React" suelto.
@@ -1466,6 +1470,8 @@ The target job offer is written in {idioma_nombre}. Generate the ENTIRE CV in {i
 
 PRINCIPIO FUNDAMENTAL: el CV generado NO añade información nueva. Únicamente reorganiza, prioriza y redacta de forma distinta información YA existente y demostrable en el CV Master. Nunca al revés.
 
+REGLA MAESTRA — PROYECCIÓN, NO IDENTIDAD NUEVA (de esta se derivan casi todas las demás): la adaptación debe producir una PROYECCIÓN distinta de la MISMA trayectoria profesional, NUNCA una nueva identidad profesional. El CV de esta oferta y el que se generó para cualquier otra tienen que leerse como la misma persona enfocando distinto, no como profesionales diferentes. Un recruiter que viera tres CV suyos debe reconocer a la misma candidata adaptando el contenido. Si un cambio la hace parecer otra profesional, ese cambio está MAL aunque cada frase por separado sea cierta. Consecuencias directas: no cambies el titular de forma radical, no subas el seniority, no inventes herramientas, no muevas skills a experiencia, no conviertas un proyecto propio en una organización grande. Solo cambia el ÉNFASIS.
+
 JERARQUÍA DE FUENTES (respétala siempre):
 - La OFERTA decide QUÉ enfatizar.
 - El PERFIL BASE decide DESDE QUÉ IDENTIDAD se responde (quién es la candidata). Es una GUÍA de identidad y coherencia, NO una fuente de contenido, y NUNCA constituye evidencia. No copies literalmente sus frases al CV.
@@ -1501,18 +1507,34 @@ Genera el CV adaptado con estas reglas ESTRICTAS:
 7. NO OMITAS tecnologías del Master que la oferta valora: si la oferta pide o menciona un área (backend, IA, testing, cloud...) y el Master tiene una tecnología concreta de esa área, esa tecnología DEBE aparecer en HABILIDADES TÉCNICAS y, si encaja, en un bullet. Ejemplo: oferta backend/IA con Python y el Master incluye FastAPI → FastAPI debe salir en Backend. La REGLA DE EVIDENCIA impide inventar; esta regla impide lo contrario, dejarse fuera algo real y relevante.
 8. Máximo 2 páginas
 
+IDENTIDAD vs POSICIONAMIENTO (distinción base: no las confundas nunca):
+- IDENTIDAD = quién ES la candidata. Es un repertorio CERRADO, declarado en "Identidades permitidas" del PERFIL BASE. No se amplía, no se deduce, no se negocia. Ejemplo de identidades: Frontend Tech Lead, Full-Stack Developer, AI Engineer.
+- POSICIONAMIENTO = cómo se PRESENTA esa misma trayectoria ante esta oferta concreta. Es variable y lo fija el ARQUETIPO de la oferta. Ejemplos de posicionamiento: GenAI Adoption, Context Engineering, Applied AI, AI Automation, Design Systems.
+- Un posicionamiento NO es una identidad nueva: es la MISMA trayectoria profesional presentada según el problema que la empresa quiere resolver. Por eso el posicionamiento puede cambiar en cada oferta y la identidad no cambia nunca.
+- DÓNDE VA CADA COSA EN EL TITULAR: los huecos de IDENTIDAD solo admiten valores de "Identidades permitidas". Los huecos de MODIFICADOR (especialización y stack) son donde vive el posicionamiento. Un posicionamiento JAMÁS ocupa un hueco de identidad ni se coloca delante de las identidades.
+- EL POSICIONAMIENTO TAMBIÉN NECESITA RESPALDO: un posicionamiento solo puede usarse si la EXPERIENCIA, proyectos o formación del Master lo respaldan. Un posicionamiento sin evidencia es una identidad inventada con otro nombre, y está igual de prohibido. Si el Master no respalda el posicionamiento que pide la oferta, se usa el que sí esté respaldado, aunque encaje peor.
+
 HEADLINE RULES (primera línea del output — el TITULAR del CV es DATA-DRIVEN):
-- FUENTE DE VERDAD: las identidades profesionales y roles objetivo de la candidata están declarados en el bloque "PERFIL BASE" del CV MASTER (secciones "Identidades profesionales" y "Roles objetivo"). Esa es la ÚNICA fuente. El titular SIEMPRE debe construirse usando ÚNICAMENTE esas identidades. NUNCA inventes ni uses una identidad profesional que no aparezca en el PERFIL BASE.
-- CÓMO CONSTRUIR EL TITULAR: selecciona y REORDENA las identidades del PERFIL BASE que mejor encajan con esta oferta, y añade especialización/stack SOLO si aparece en el PERFIL BASE (secciones "Stack principal" / "Especialización") o en la experiencia real del CV master. El titular NO tiene que ser idéntico al PERFIL BASE: cambia el ÉNFASIS y el ORDEN, nunca las identidades.
-- LA OFERTA DECIDE QUÉ DESTACAR, NUNCA QUÉ INVENTAR: si la oferta pide un rol/identidad que NO está en el PERFIL BASE, NO lo uses. La oferta solo elige cuáles de las identidades existentes se resaltan.
-- NADA DE ECO EN LAS IDENTIDADES: no copies calificativos ni adjetivos del título de la oferta a la identidad. Si la oferta se titula "Applied AI Engineer" y el PERFIL BASE dice "AI Engineer", el titular usa "AI Engineer", no "Applied AI Engineer". La identidad sale del PERFIL BASE tal cual está escrita ahí; la oferta solo decide su orden y qué stack la acompaña.
-- GUARDRAIL POR PRINCIPIO (no escalar seniority): nunca subas el nivel por encima de lo que declara el PERFIL BASE. Prohibido inventar rangos superiores (Principal, Staff, Head, Director, Architect, Distinguished, Manager, o "Lead" de personas) salvo que esa identidad EXACTA figure en el PERFIL BASE.
+- EL PERFIL BASE ES UN CONTRATO, NO UNA SUGERENCIA: el bloque "PERFIL BASE" del CV MASTER declara la identidad de la candidata en secciones explícitas. Tu trabajo es LEERLAS, no interpretarlas. No deduzcas nada que esté declarado. Secciones del contrato:
+  · "Identidad profesional" → el TITULAR BASE completo. Es el ancla.
+  · "Identidades permitidas" → el repertorio CERRADO de identidades. Ninguna otra existe.
+  · "Orden del titular" → el orden exacto de los elementos del titular. Es un dato, no una decisión tuya.
+  · "Variante permitida" → el único titular alternativo, con la condición que lo habilita.
+  · "Nunca permitido" → restricciones que el propio Master declara. Son innegociables.
+- CÓMO CONSTRUIR EL TITULAR: parte de "Identidad profesional" tal cual está escrita y respeta el "Orden del titular". Tus ÚNICAS libertades son: (a) SUSTITUIR uno, como mucho dos, MODIFICADORES de especialización o stack por los que esta oferta valora, tomados siempre del Master; (b) OMITIR un modificador que no aporte nada a esta oferta. Las identidades y su orden no se tocan.
+- EL ORDEN NO SE ALTERA: el orden de las identidades es branding, no una preferencia. Un recruiter que vea varios CV suyos debe reconocer el mismo titular. Prohibido reordenarlas aunque esta oferta priorice otra cosa, prohibido añadir identidades fuera de "Identidades permitidas", y prohibido reescribir el núcleo del titular para parecerse al título del anuncio.
+- ÚNICA EXCEPCIÓN AL ORDEN: usa el titular de "Variante permitida" solo si esta oferta cumple EXACTAMENTE la condición que esa sección declara. Si el Master no declara variante, o la condición no se cumple, no hay excepción.
+- LA OFERTA DECIDE QUÉ DESTACAR, NUNCA QUÉ INVENTAR: si la oferta pide un rol/identidad que NO está en "Identidades permitidas", NO lo uses. La oferta solo elige qué modificadores acompañan al titular.
+- NADA DE ECO EN LAS IDENTIDADES: no copies calificativos ni adjetivos del título de la oferta a la identidad. Si la oferta se titula "Applied AI Engineer" y el PERFIL BASE dice "AI Engineer", el titular usa "AI Engineer", no "Applied AI Engineer". La identidad sale del PERFIL BASE tal cual está escrita ahí.
+- GUARDRAIL POR PRINCIPIO (no escalar el NIVEL JERÁRQUICO): no incrementes el nivel jerárquico, la autoridad ni el alcance organizativo que declara el PERFIL BASE. La prueba NO es si la palabra aparece en una lista: es si el titular sugiere un rango, una autoridad o un alcance MAYOR que el declarado. Queda prohibido cualquier término que eleve el nivel, salvo que esa identidad EXACTA figure en el PERFIL BASE. Ejemplos, y la lista NO es cerrada: Principal, Staff, Head, Director, Architect, Distinguished, Manager, Leader, Chief, VP, Owner, Champion, Evangelist, Authority, o "Lead" de personas. Ante la duda, usa la identidad tal cual está escrita en el PERFIL BASE.
 - RESPETA EL POSICIONAMIENTO: si el CV master incluye un bloque "POSICIONAMIENTO" (lo que la candidata NO es), el titular NUNCA debe contradecirlo.
 - AUTO-CHEQUEO antes de cerrar el HEADLINE: verifica que CADA identidad del titular aparece en el PERFIL BASE; si alguna no rastrea ahí, elimínala.
 - COHERENCIA IDENTIDAD/EXPERIENCIA: el PERFIL BASE define quién es la candidata; la sección EXPERIENCIA demuestra por qué puede afirmarlo. Cada identidad del titular debe poder justificarse leyendo la EXPERIENCIA del Master. Si una identidad del PERFIL BASE no tiene experiencia real que la respalde, NO la uses en el titular.
 - FALLBACK: si el CV master NO contiene un bloque "PERFIL BASE", deriva las identidades SOLO de la experiencia real del CV master (nunca inventes) y aplica igualmente el guardrail de no escalar seniority.
 - El titular va en el idioma de la oferta; separa identidades/skills con " | " o " · ".
-- AÑOS DE EXPERIENCIA: usa el seniority declarado en el PERFIL BASE (sección "Seniority"). No infles el número ni lo subas por encima de lo que dice la fuente.
+- AÑOS DE EXPERIENCIA: usa el seniority tal como lo declara el PERFIL BASE (dentro de "Identidad profesional" o en una sección propia). No infles el número ni lo subas por encima de lo que dice la fuente.
+
+RESUMEN — ESTABILIDAD (aproximadamente 70-80% estable, 20-30% adaptado): el resumen NO se reescribe desde cero en cada oferta. La mayor parte describe la MISMA trayectoria con las mismas ideas y casi las mismas palabras: de dónde viene la candidata, cómo ha evolucionado y qué la define hoy. Solo la parte final, o los ejemplos concretos que se eligen, se ajustan al arquetipo de esta oferta. El objetivo es que el titular, el resumen y su perfil público cuenten la misma historia; si alguien compara dos CV suyos, tiene que ver a la misma profesional enfocando distinto, nunca dos perfiles inconexos.
 
 RESUMEN / PERFIL — no pierdas experiencia real que no cabe en el titular: si la candidata tiene fortalezas relevantes que el titular de esta oferta no refleja (según el CV Master), inclúyelas en el resumen para no perderlas, redactadas como experiencia real. Si el CV Master incluye un bloque "EVOLUCIÓN PROFESIONAL", úsalo para entender el arco de su carrera y dar el contexto temporal correcto (de dónde viene y hacia dónde ha evolucionado), sin inventar.
 
@@ -1522,7 +1544,7 @@ PROYECTOS PROPIOS, FREELANCE Y CONSULTORÍA (no sobredimensionar la escala):
 - Un proyecto personal, freelance o de consultoría se describe por la COMPLEJIDAD TÉCNICA del trabajo, NUNCA por el tamaño aparente de la organización. El lector debe entender QUÉ SABE HACER la candidata, no cómo de grande era la empresa.
 - PROHIBIDO el lenguaje que sugiera equipos, departamentos o estructuras que no existían: "definí la estrategia de IA de la compañía", "lideré la arquitectura de la empresa", "responsable de la plataforma global", "dirección técnica de", "lideré un equipo de". Nada de vocabulario de CEO (estrategia, dirección, organización, transformación digital de la empresa) salvo que la oferta sea justamente para ese tipo de puesto.
 - En su lugar, prioriza: qué construyó, qué problemas resolvió, qué tecnologías usó, qué arquitectura diseñó, qué decisiones de ingeniería tomó.
-- EL RESUMEN NUNCA GIRA ALREDEDOR DEL PROYECTO PROPIO. El resumen describe la trayectoria completa; la experiencia actual es el EJEMPLO de la evolución, no el eje de la identidad. La narrativa correcta es "10+ años de producto digital, especialización frontend, evolución a full-stack, especialización actual en AI Engineering", nunca "fundadora de X que hace IA".
+- EL RESUMEN NUNCA GIRA ALREDEDOR DEL PROYECTO PROPIO. El resumen describe la trayectoria COMPLETA; la experiencia actual es el EJEMPLO de la evolución, no el eje de la identidad. La narrativa correcta es un arco: años de trayectoria en el sector, especialización de origen, evolución posterior y especialización actual, todo ello leído del bloque "EVOLUCIÓN PROFESIONAL" o de la experiencia del Master. La narrativa INCORRECTA es identificar a la candidata con su proyecto más reciente ("fundadora de X que hace Y").
 - El PESO de una experiencia no depende del tamaño de la empresa, sino de la RELEVANCIA de las competencias para esta oferta. Un proyecto propio puede ir el primero si es lo más reciente y especializado, pero presentado como trabajo de ingeniería, no como si hubiese dirigido una organización.
 
 NIVEL DEL PUESTO (aplica al CUERPO del CV — el TITULAR lo fijan las HEADLINE RULES):
@@ -1532,8 +1554,33 @@ NIVEL DEL PUESTO (aplica al CUERPO del CV — el TITULAR lo fijan las HEADLINE R
   · El titular puede reflejar seniority de liderazgo si figura en el PERFIL BASE; NO lo contradice, pero el cuerpo se centra en el trabajo técnico, no en dirigir personas.
 - Solo si el puesto pide lead/manager/responsable/principal/head → destaca el ownership y la coordinación técnica.
 
+ARQUETIPO DE LA OFERTA (decide QUÉ se proyecta; jamás QUÉ se inventa):
+Antes de escribir, clasifica esta oferta en UN arquetipo leyendo el PUESTO y la DESCRIPCIÓN — no el sector de la empresa ni las tecnologías que nombra de pasada. El arquetipo NO cambia el titular base ni las identidades: cambia qué experiencia del Master va primero, qué bullets se priorizan y qué keywords entran.
+- Frontend: React, Vue, TypeScript, arquitectura frontend, design systems, rendimiento, accesibilidad, mentoría técnica.
+- Full Stack: el frontend como fortaleza principal, más Node, APIs, bases de datos e integración.
+- Tech Lead: ownership técnico, estándares, code review, coordinación con producto, diseño y backend. No afirmes dirección de personas salvo que el Master lo respalde.
+- UX Engineer: Figma, design systems, accesibilidad, colaboración con diseño.
+- IA / AI Engineer: CONSTRUYE sistemas con IA. LLM, RAG, agentes, APIs, Context Engineering, evaluación, guardrails, pipelines.
+- IA / GenAI Adoption: consigue que OTROS desarrolladores trabajen mejor con IA. Formación, workshops, mentoring, pairing, experimentación, herramientas de desarrollo asistido, playbooks, productividad de equipos de ingeniería.
+- IA / AI Solutions Architect: DISEÑA sistemas. Arquitectura, escalabilidad, cloud, integración, decisiones técnicas, observabilidad, gobernanza.
+- IA / AI Product Engineer: construye PRODUCTO con IA. Métricas, usuarios, experimentos, UX, negocio, iteración.
+- IA / AI Automation Engineer: AUTOMATIZA procesos. N8N, MCP, APIs, workflows, integración de procesos de negocio.
+
+"IA" NO es un arquetipo único. Una oferta que busca impulsar la adopción de GenAI en equipos de ingeniería y otra que busca construir sistemas LLM piden CV DISTINTOS aunque las dos digan "IA". Clasifica por el PROBLEMA que la empresa necesita resolver, no por la tecnología que menciona.
+
+REGLA DE PROYECCIÓN: adapta el CV al PROBLEMA que resuelve la empresa que contrata, NO al producto que la candidata construyó. La misma trayectoria se proyecta hacia un arquetipo u otro sin inventar absolutamente nada: cambia el orden, el énfasis y qué se cuenta primero.
+
+LÍMITE DEL ARQUETIPO: si el Master NO respalda el arquetipo de la oferta, no lo fuerces. Proyecta lo que haya y deja el resto fuera. Un arquetipo sin evidencia en el Master es una invitación a inventar, y esa línea no se cruza nunca: es preferible un CV honesto que encaja a medias, a uno que encaja del todo y no se sostiene en entrevista.
+
+HECHOS, NO EFECTOS (separa lo que hizo de lo que eso demuestra):
+- Escribe la ACCIÓN concreta y verificable, NUNCA el efecto que se le atribuye, salvo que el Master dé el dato. El lector deduce el efecto solo, y le convence más.
+- MAL: "Improved engineering productivity", "Led AI transformation", "proven track record of measurable productivity gains", "measuring adoption impact", "drove AI adoption".
+- BIEN: "Delivered technical workshops on Generative AI for engineering teams", "Designed and delivered internal training on prompt engineering".
+- Prohibido el vocabulario de resultado no medido cuando el Master no trae el dato: "proven track record", "measurable", "impact", "transformation", "drove", "boosted", "accelerated". Un hecho concreto sin adjetivos vende más que un efecto declarado sin prueba, y además es defendible en entrevista.
+
 POSICIONAMIENTO (adapta el ÉNFASIS a la oferta, nunca inventes):
 - Prioriza y reordena las skills y logros del CV Master que esta oferta valora; deja en segundo plano lo que no pide. NUNCA añadas algo que no esté en el Master.
+- NO MUEVAS SKILLS A EXPERIENCIA: una tecnología que el Master lista en HABILIDADES pero NO atribuye a un puesto concreto no puede aparecer como logro de ese puesto. Puede seguir en Habilidades, ahí es legítima. Atribuirla a una experiencia donde el Master no la sitúa es inventar, aunque la tecnología sea real y ella la domine.
 - LÍMITE DE POSICIONAMIENTO: si el CV Master incluye un bloque "POSICIONAMIENTO" (lo que la candidata ES y lo que NO es), respétalo como frontera. NUNCA posiciones a la candidata en un rol o especialidad que ese bloque niega, aunque la oferta lo pida.
 - EVOLUCIÓN: si el CV Master incluye un bloque "EVOLUCIÓN PROFESIONAL", respeta el arco temporal (de dónde viene, hacia dónde ha evolucionado); no presentes como especialidad actual algo que fue una etapa pasada, ni al revés.
 - Una tecnología usada hace años puede presentarse como algo que puede retomar rápido por su experiencia previa, SIN presentarla como especialidad actual salvo que el Master lo respalde.

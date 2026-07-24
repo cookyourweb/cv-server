@@ -95,3 +95,44 @@ def test_regresion_la_frase_exacta_del_cv_de_tenth_revolution():
 def test_palabra_normal_que_contiene_el_nombre_de_una_tecnologia_no_se_marca():
     # "Blade" dentro de "Bladerunner" no es la tecnologia.
     assert srv.detectar_tecnologias_no_respaldadas("Proyecto Bladerunner", MASTER) == []
+
+
+# ── Alias de herramientas de IA: el catalogo registraba el nombre largo y solo ese ──
+# Caso real, 24jul2026, CV de N-iX: el CV colo "integrating Copilot-class AI systems".
+# "Copilot" NO estaba en el Master. El guardrail no salto porque el catalogo daba de
+# alta "GitHub Copilot" y el patron usa fronteras de palabra, asi que "Copilot" a secas
+# no matcheaba. No es un fallo de la IA: es un alias que faltaba.
+
+MASTER_SIN_HERRAMIENTAS = """Frontend Tech Lead con 10 años de experiencia.
+Stack: React, TypeScript, Node.js. Integracion de LLMs con Claude API y OpenAI API.
+Formacion tecnica a empresas sobre IA generativa y prompt engineering."""
+
+
+def test_copilot_a_secas_se_marca():
+    encontradas = srv.detectar_tecnologias_no_respaldadas(
+        "Experience integrating Copilot into development workflows", MASTER_SIN_HERRAMIENTAS)
+    assert "GitHub Copilot" in encontradas
+
+
+def test_regresion_la_frase_exacta_del_cv_de_n_ix():
+    """La formula ambigua que se colo el 24jul2026.
+
+    "Copilot-class" no es exactamente afirmar que usa Copilot, pero en la bandeja de un
+    recruiter se lee como experiencia. Mismo patron que "arquitecturas PHP/Symfony"."""
+    frase = ("Combine deep product development experience with hands-on expertise in "
+             "integrating Copilot-class AI systems, Claude, and LLM agents")
+    assert "GitHub Copilot" in srv.detectar_tecnologias_no_respaldadas(
+        frase, MASTER_SIN_HERRAMIENTAS)
+
+
+def test_github_copilot_completo_se_reporta_una_sola_vez():
+    # El nombre largo no debe reportarse ademas como el alias corto.
+    encontradas = srv.detectar_tecnologias_no_respaldadas(
+        "Uso de GitHub Copilot en el dia a dia", MASTER_SIN_HERRAMIENTAS)
+    assert encontradas == ["GitHub Copilot"]
+
+
+def test_copilot_respaldado_por_el_master_no_se_marca():
+    # Si el Master lo respalda con el nombre largo, el CV puede decirlo corto.
+    master = MASTER_SIN_HERRAMIENTAS + "\nDesarrollo asistido con GitHub Copilot."
+    assert srv.detectar_tecnologias_no_respaldadas("Uso de Copilot a diario", master) == []
