@@ -432,6 +432,116 @@ class MasterElegido(NamedTuple):
     url:     str
 
 
+# ── Guardrail del TITULAR: que no se salga del contrato del PERFIL BASE ──────────
+# El 24jul2026 se desplegaron las reglas del titular ancla y los DOS CV regenerados
+# (N-iX y Revolut) salieron con el orden de "Variante permitida", cuya condicion no
+# cumplia ninguna de las dos empresas. El modelo leyo el parentesis de la condicion
+# como ejemplos. Mismo patron que dejo pasar "Leader" en el guardrail de seniority.
+# Leccion medida: la regla en el prompt es DISCIPLINA; solo el detector es MECANISMO.
+
+_SEP_TITULAR = re.compile(r"\s*[|·]\s*")
+_VINETA = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
+
+# Nombres de seccion del contrato: sirven para saber donde ACABA la seccion buscada.
+_SECCIONES_PB = {
+    "identidad profesional", "identidades permitidas", "orden del titular",
+    "variante permitida", "nunca permitido", "roles objetivo", "resumen profesional",
+    "especializacion actual", "especialización actual",
+    "tecnologias principales", "tecnologías principales",
+}
+
+
+def _cabecera(linea: str) -> str:
+    """Nombre de seccion de una linea, sin almohadillas ni dos puntos. '' si no lo es."""
+    return linea.strip().lstrip("#").strip().rstrip(":").lower()
+
+
+def _seccion_perfil_base(master: str, nombre: str) -> str:
+    """Contenido de una seccion del PERFIL BASE. Cadena vacia si no existe.
+
+    Tolerante con el formato: Google Docs exporta a texto plano y puede haberse
+    comido las almohadillas, asi que se reconoce la cabecera por su NOMBRE."""
+    objetivo = nombre.lower()
+    dentro, out = False, []
+    for linea in (master or "").splitlines():
+        cab = _cabecera(linea)
+        if not dentro:
+            dentro = cab == objetivo
+            continue
+        if linea.strip().startswith("#") or cab in _SECCIONES_PB:
+            break
+        s = linea.strip()
+        # Cabecera del CV en mayusculas (POSICIONAMIENTO, EXPERIENCIA...): fin de bloque
+        if s and s == s.upper() and len(s) > 3 and any(c.isalpha() for c in s):
+            break
+        out.append(linea)
+    return "\n".join(out).strip()
+
+
+def _identidades_declaradas(master: str) -> list:
+    bloque = _seccion_perfil_base(master, "Identidades permitidas")
+    return [_VINETA.sub("", l).strip() for l in bloque.splitlines() if _VINETA.sub("", l).strip()]
+
+
+def _partir_titular(titular: str, permitidas: list) -> tuple:
+    """Separa el titular en (identidades reconocidas, resto de segmentos)."""
+    por_nombre = {p.lower(): p for p in permitidas}
+    ident, otros = [], []
+    for seg in (s.strip() for s in _SEP_TITULAR.split(titular or "") if s.strip()):
+        canon = por_nombre.get(seg.lower())
+        (ident if canon else otros).append(canon or seg)
+    return ident, otros
+
+
+def detectar_titular_fuera_de_contrato(titular: str, master_texto: str) -> list:
+    """Avisos si el titular generado no respeta el contrato del PERFIL BASE.
+
+    Comprueba tres cosas: que las identidades sean las declaradas, que vayan en el
+    orden declarado, y que no aparezca una identidad declarada con un sufijo de rango
+    pegado detras, que es como se cuela una seniority que el PERFIL BASE no da.
+
+    No aborta ni decide: la condicion de la Variante permitida depende de la empresa
+    y eso no se puede verificar por codigo. Informa para que la persona lo revise."""
+    permitidas = _identidades_declaradas(master_texto)
+    base = _seccion_perfil_base(master_texto, "Identidad profesional")
+    if not titular or not permitidas or not base:
+        return []  # sin contrato no hay nada contra lo que contrastar
+
+    esperadas, _ = _partir_titular(base.splitlines()[0], permitidas)
+    if not esperadas:
+        return []
+
+    avisos = []
+    actuales, otros = _partir_titular(titular, permitidas)
+
+    # Una identidad declarada con un sufijo de rango pegado detras.
+    # Solo frontera de palabra por delante: por detras la rompe el propio sufijo.
+    for seg in otros:
+        for ident in permitidas:
+            if re.search(rf"\b{re.escape(ident)}", seg, re.IGNORECASE):
+                avisos.append(
+                    f"Identidad no permitida en el titular: {seg!r}. El PERFIL BASE solo "
+                    f"declara {permitidas}."
+                )
+                break
+
+    if actuales != esperadas:
+        variante = _seccion_perfil_base(master_texto, "Variante permitida")
+        lineas_var = [l for l in variante.splitlines() if l.strip()]
+        if lineas_var:
+            de_variante, _ = _partir_titular(lineas_var[0], permitidas)
+            if de_variante and actuales == de_variante:
+                avisos.append(
+                    "El titular usa la Variante permitida. Solo es valida si esta oferta "
+                    "cumple la condicion declarada en el PERFIL BASE; verificalo antes de enviar."
+                )
+        avisos.append(
+            f"El orden de las identidades no coincide con 'Identidad profesional': "
+            f"esperado {esperadas}, generado {actuales}."
+        )
+    return avisos
+
+
 def elegir_master(usuario: dict, idioma: str) -> MasterElegido:
     """Elige la fuente del master segun el idioma. Pura: no toca Drive.
     idioma='en' -> 'CV Master URL' (ingles); cualquier otro -> 'CV Master URL ES'
@@ -1402,9 +1512,8 @@ PROFESSIONAL SUMMARY
 [2 full paragraphs (4-6 lines each) tailored to the offer, generated from her REAL EXPERIENCE (never copied from PERFIL BASE). First paragraph: who she is + core strengths relevant to this role. Second paragraph: depth, domains and the angle that fits this offer.]
 
 PROFESSIONAL EXPERIENCE
-[Company] — [City]
-[Role]
-[Start date] – [End date]
+[Role] — [Company]
+[Start date] - [End date]
 - Real achievement from the CV master, XYZ formula, prioritised by relevance
 - Real achievement from the CV master, XYZ formula, prioritised by relevance
 - Real achievement from the CV master, XYZ formula, prioritised by relevance
@@ -1427,6 +1536,7 @@ FINAL RULES:
 - Do NOT include name/email/phone, they are added programmatically
 - Do NOT use markdown (**text**, ##, ```)
 - Do NOT invent anything not in the CV master
+- EXPERIENCE reads as a career story told through ROLES: the job title opens every entry and the company follows it. A recruiter must be able to scan the left edge and see the progression (Tech Lead, then Front-End Developer, then Designer). Never lead with the company.
 - Language: the ENTIRE CV must be in English (section titles and content)"""
     else:
         bloque_formato = """FORMATO DE SALIDA (texto plano, sin markdown):
@@ -1437,9 +1547,8 @@ PERFIL PROFESIONAL
 [2 párrafos completos (4-6 líneas cada uno) adaptados a la oferta, generados desde su EXPERIENCIA real (NUNCA copiados del PERFIL BASE). Primer párrafo: quién es + fortalezas clave relevantes para este puesto. Segundo párrafo: profundidad, dominios y el ángulo que encaja con esta oferta.]
 
 EXPERIENCIA PROFESIONAL
-[Empresa] — [Ciudad]
-[Puesto]
-[Fecha inicio] – [Fecha fin]
+[Puesto] — [Empresa]
+[Fecha inicio] - [Fecha fin]
 - Logro real del CV master, fórmula XYZ, priorizado por relevancia
 - Logro real del CV master, fórmula XYZ, priorizado por relevancia
 - Logro real del CV master, fórmula XYZ, priorizado por relevancia
@@ -1462,6 +1571,7 @@ REGLAS FINALES:
 - NO incluir nombre/email/tel, se añaden programáticamente
 - NO usar markdown (**texto**, ##, ```)
 - NO inventar nada que no esté en el CV master
+- La EXPERIENCIA se lee como una trayectoria contada a través de los PUESTOS: el puesto abre cada entrada y la empresa va detrás. Quien lee debe poder recorrer el margen izquierdo y ver la progresión (Tech Lead, antes Front-End Developer, antes Diseñadora). Nunca empieces por la empresa.
 - Idioma: TODO el CV en español (títulos de sección y contenido)"""
 
     prompt = f"""Act as a senior tech recruiter who screens 200+ CVs daily. Adapt this candidate's CV for a specific job offer.
@@ -1648,6 +1758,16 @@ Elimina TODO rastro de texto generado por IA:
             email, empresa, puesto, tecnologias_sospechosas,
         )
 
+    # 5d. Guardrail del titular: que respete el contrato del PERFIL BASE. Es el unico
+    #     de los tres que mira la CABECERA, y viene de un fallo medido: los CV de N-iX y
+    #     Revolut usaron la Variante permitida sin cumplir su condicion.
+    titular_sospechoso = detectar_titular_fuera_de_contrato(titular, cv_master)
+    if titular_sospechoso:
+        logger.warning(
+            "TITULAR FUERA DEL CONTRATO del PERFIL BASE en el CV de %s para %s/%s: %s",
+            email, empresa, puesto, titular_sospechoso,
+        )
+
     # 6. Generar DOCX con cabecera estructurada (titular adaptado por la oferta)
     nombre_archivo = _nombre_archivo_cv(nombre, puesto)
     docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario, titular, idioma)
@@ -1674,6 +1794,9 @@ Elimina TODO rastro de texto generado por IA:
         # Vacio = todas las tecnologias del CV estan en el Master. Si trae algo, es una
         # tecnologia que la oferta pedia y la candidata NO tiene: quitarla antes de enviar.
         "tecnologias_no_respaldadas": tecnologias_sospechosas,
+        # Vacio = el titular respeta el contrato del PERFIL BASE. Si trae algo, el titular
+        # cambio la identidad o su orden: revisarlo, es lo primero que lee un recruiter.
+        "titular_fuera_de_contrato": titular_sospechoso,
     }
 
 
