@@ -1,0 +1,189 @@
+# Onboarding multiusuario: de un CV cualquiera a un PERFIL BASE
+
+Spec de la entrevista de alta. **Todavía no implementado.** Escrito el 24 de julio de 2026,
+al terminar de convertir el generador en data-driven.
+
+El usuario entrega **su CV y su perfil de LinkedIn**. A partir de ahí hay que construirle un
+`PERFIL BASE` como el que tiene Verónica, para que su generador funcione igual de bien.
+
+- **Qué produce esta entrevista**: el bloque `PERFIL BASE` que se pega al principio de su CV
+  Master. Ver `PROMPT-ADAPTACION-CV.md`, sección *El PERFIL BASE es un CONTRATO de datos*.
+- **Por qué hace falta**: sin ese bloque el prompt cae al fallback ("deriva las identidades
+  de la experiencia") y **derivar obliga a interpretar**. De interpretar salió
+  *AI Engineering Leader* en el CV de N-iX. La entrevista existe para que el modelo no tenga
+  que deducir nada.
+
+---
+
+## Principio: no preguntes lo que puedes leer
+
+Un formulario largo mata el alta. Y la mayoría de las respuestas ya están en los dos
+documentos que el usuario acaba de entregar. Tres modos, y solo el tercero cuesta tiempo:
+
+| Modo | Qué es | Coste para el usuario |
+|---|---|---|
+| **EXTRAER** | Se lee del CV o de LinkedIn. No se pregunta | Cero |
+| **CONFIRMAR** | Se le propone lo extraído y dice sí o corrige | Un clic |
+| **PREGUNTAR** | No está en ningún documento. Hay que preguntarlo | Real |
+
+**Toda pregunta de este documento justifica su existencia con un fallo real** que se cometió
+generando los CV de Verónica. Una pregunta sin fallo detrás no entra.
+
+---
+
+## FASE 0 — EXTRAER (sin preguntar nada)
+
+Del CV y del perfil de LinkedIn se saca automáticamente:
+
+- Titular actual de LinkedIn → candidato a `Identidad profesional`
+- Puestos, empresas y fechas
+- Tecnologías mencionadas, y **en qué puesto aparece cada una**
+- Formación e idiomas
+- Años totales de trayectoria
+
+Esto no se pregunta nunca. Ya está escrito.
+
+---
+
+## FASE 1 — CONFIRMAR la identidad (un clic por pregunta)
+
+Se propone lo extraído y el usuario valida. Construye el contrato.
+
+**1.1 · Tu titular** — *"Tu LinkedIn dice X. ¿Ese es el titular con el que quieres que se
+generen todos tus CV?"*
+→ `Identidad profesional`
+
+**1.2 · Tus identidades** — *"He detectado estas: A, B, C. ¿Sobran o falta alguna?"*
+Máximo 4. Es un repertorio **cerrado**: ninguna otra podrá usarse nunca.
+→ `Identidades permitidas`
+*Previene*: identidades inventadas por oferta (*AI Engineering Leader*, *GenAI Adoption Lead*).
+
+**1.3 · El orden** — *"¿En qué orden van? La primera es con la que te van a identificar."*
+→ `Orden del titular`
+*Previene*: que el CV se reordene según la oferta y parezca otra persona en cada envío.
+
+**1.4 · La excepción** — *"¿Hay empresas concretas para las que invertirías ese orden?
+Nómbralas. Si dudas, deja esto vacío."*
+→ `Variante permitida`
+
+> **Esta es la pregunta más delicada de todo el alta.** El 24-jul-2026 la condición de
+> Verónica decía *"empresas cuyo producto principal sea la IA (OpenAI, Anthropic,
+> Cohere...)"*, y el modelo aplicó la variante **a N-iX y a Revolut**, que no son ninguna de
+> esas. Leyó el paréntesis como ejemplos, no como lista cerrada. Es el mismo patrón que
+> dejó pasar *"Leader"* en el guardrail de seniority.
+>
+> **Regla que se deriva**: la condición debe ser una **lista de nombres propios**, nunca una
+> categoría. Si el usuario responde con una categoría ("empresas de IA", "startups"), hay
+> que repreguntar pidiendo nombres. Y si no sabe cuáles, se deja vacío: **sin variante
+> declarada, no hay excepción posible.** Vacío es más seguro que ambiguo.
+
+**1.5 · Seniority** — *"¿Cuántos años declaras?"*
+*Previene*: inflar el número según lo que valore la oferta.
+
+**1.6 · Lo que no eres** — *"¿Con qué rol te confunden y no quieres que te confundan?"*
+→ bloque `POSICIONAMIENTO`
+Verónica: *"No soy Data Scientist. No soy investigadora de IA."* Es una frontera, y el prompt
+la respeta aunque la oferta pida lo contrario.
+
+---
+
+## FASE 2 — La EVIDENCIA (lo que impide inventar)
+
+Aquí no vale confirmar: hay que preguntar. Es lo que separa un CV defendible de uno bonito.
+
+**2.1 · Qué hiciste tú** — por cada puesto relevante: *"¿Qué hiciste con tus manos, no tu
+equipo?"*
+*Previene*: atribuirse el trabajo del equipo.
+
+**2.2 · Tecnologías por puesto** — *"De estas que aparecen en tu CV, ¿cuáles usaste **en este
+puesto concreto**?"*
+*Previene*: el fallo de GraphQL. En el CV de Revolut el modelo escribió *"implemented
+GraphQL and webhook patterns"* en el puesto de Bitcode, cuando el Master solo las tiene en
+habilidades sin ligarlas a ningún puesto. La tecnología era real; **la atribución, inventada**.
+
+**2.3 · Cifras** — *"¿Qué cifras puedes defender con un dato real que tengas a mano?"*
+Si no hay dato, no hay cifra. Un CV sin cifras es defendible; con una cifra inventada, no.
+
+**2.4 · Lo que conoces pero no usaste** — *"¿Qué tecnologías has tocado pero no usarías como
+argumento en una entrevista?"*
+Van a una **lista negra explícita** del usuario. Complementa al detector, que solo sabe
+comparar contra el Master.
+
+---
+
+## FASE 3 — La FRONTERA (lo único que ningún guardrail cubre)
+
+Las dos preguntas más importantes del alta, y las que nadie hace.
+
+**3.1 · Aspiración** — *"¿Qué quieres hacer que todavía no has hecho?"*
+→ va a `Roles objetivo`, **jamás a Experiencia**. El prompt trata el `PERFIL BASE` como guía
+de identidad y **nunca como evidencia**, así que declararlo ahí no puede inflar el cuerpo del
+CV. La aspiración queda dicha sin afirmar nada.
+
+**3.2 · La prueba de la entrevista** — *"¿Hay algo en tu CV actual que no podrías defender en
+veinte minutos de entrevista?"*
+
+> **Por qué existe esta pregunta.** Todos los guardrails del sistema comparan **el CV
+> generado contra el Master**. Si una afirmación sin respaldo vive **dentro del Master**, es
+> indetectable: el Master es el axioma.
+>
+> El 24-jul-2026 los dos Masters de Verónica afirmaban *"formación técnica para empresas"*.
+> Ella no había impartido todavía ningún curso a empresas. Ningún detector podía verlo, y de
+> ahí había salido ya una carta a N-iX afirmándolo. Lo paró ella, no el sistema.
+>
+> **La regla de evidencia protege la frontera oferta → CV. No protege la frontera
+> realidad → Master. Esa solo la sostiene la persona.** Con un usuario desconocido, esta
+> pregunta es lo único que hay. Conviene repetirla cada vez que edite su Master.
+
+---
+
+## FASE 4 — Arquetipos
+
+**4.1** — *"¿A qué tipo de puesto apuntas?"* Se le enseñan los arquetipos que el prompt sabe
+distinguir (ver `PROMPT-ADAPTACION-CV.md`) y elige uno o varios.
+
+**Limitación conocida**: los arquetipos están **escritos en el prompt** y son del sector
+tecnológico. Un perfil de diseño, ventas o administración no encaja en ninguno. Para abrir el
+sistema fuera de tecnología habrá que sacarlos a datos, igual que se hizo con las identidades.
+No se toca hasta que haya un usuario real que lo necesite.
+
+---
+
+## Salida de la entrevista
+
+El bloque que se pega al principio del CV Master del usuario:
+
+```
+# PERFIL BASE
+## Identidad profesional      (1.1)
+## Identidades permitidas     (1.2)
+## Orden del titular          (1.3)
+## Variante permitida         (1.4)
+## Nunca permitido            (fijo, igual para todos)
+## Roles objetivo             (3.1 + 4.1)
+## Resumen profesional        (extraído, confirmado)
+## Especialización actual     (extraído, confirmado)
+## Tecnologías principales    (2.2)
+
+POSICIONAMIENTO               (1.6)
+EVOLUCIÓN PROFESIONAL         (extraído de fechas y puestos)
+```
+
+---
+
+## Errores a evitar en el alta
+
+- **No preguntar lo que está en el CV.** Cada pregunta redundante es un usuario que abandona.
+- **No aceptar categorías donde hace falta una lista de nombres** (pregunta 1.4).
+- **No dejar que la aspiración entre en Experiencia.** Va a `Roles objetivo` y punto.
+- **No pegar tecnologías en el `PERFIL BASE` que no estén en la experiencia.** El detector
+  compara contra el texto completo del Master, `PERFIL BASE` incluido: escribir ahí una
+  tecnología la da por respaldada y **ciega el guardrail**. Incoherencia conocida entre el
+  prompt (que dice que el `PERFIL BASE` no es evidencia) y el detector (que no distingue
+  secciones). Si alguna vez muerde, se arregla excluyendo el bloque del texto que ve el
+  detector.
+
+---
+
+**Ver también**: `PROMPT-ADAPTACION-CV.md` (las reglas que esta entrevista alimenta),
+`../test_proyeccion_arquetipos.py` (los invariantes del prompt).
