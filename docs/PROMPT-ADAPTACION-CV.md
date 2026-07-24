@@ -144,6 +144,32 @@ Caso real, 23 de julio de 2026, Revolut (Applied AI Engineer, Python, IA): el CV
 **FastAPI** las dos veces que se generó, pese a estar en el Master y ser exactamente lo que
 la oferta valora. No era azar: el prompt no tenía la regla, solo la de no inventar. Ahora sí.
 
+### Proyectos propios, freelance y consultoría: no sobredimensionar la escala
+Un proyecto personal se describe por la **complejidad técnica del trabajo**, nunca por el
+tamaño aparente de la organización. La pregunta que responde el CV no es *"¿qué empresa
+era?"* sino *"¿qué sabe hacer Verónica?"*.
+
+Prohibido el lenguaje que sugiera equipos o departamentos que no existían: *"definí la
+estrategia de IA de la compañía"*, *"lideré la arquitectura de la empresa"*, *"responsable
+de la plataforma global"*, *"lideré un equipo de"*. Y nada de vocabulario de CEO
+(estrategia, dirección, transformación digital) salvo que la oferta sea para eso.
+
+En su lugar: qué construyó, qué problemas resolvió, qué tecnologías usó, qué arquitectura
+diseñó, qué decisiones de ingeniería tomó.
+
+**El resumen nunca gira alrededor del proyecto propio.** Describe la trayectoria completa;
+la experiencia actual es el ejemplo de la evolución, no el eje de la identidad. La narrativa
+correcta es *"10+ años de producto digital, especialización frontend, evolución a
+full-stack, especialización actual en AI Engineering"*, nunca *"fundadora de X que hace IA"*.
+
+**El peso de una experiencia no depende del tamaño de la empresa**, sino de la relevancia de
+las competencias para esta oferta. CookYourWeb puede ir primero por ser lo más reciente y
+especializado, pero presentado como trabajo de ingeniería.
+
+*Por qué*: 24-jul-2026. Los CV tendían a vender CookYourWeb, que es un proyecto propio, con
+una escala de organización que no corresponde. No es falso (el trabajo es real), pero un
+recruiter senior lo percibe y resta credibilidad.
+
 ### El titular no hace eco del anuncio
 La identidad del titular sale del `PERFIL BASE` tal cual está escrita, sin calificativos del
 título de la oferta. Si la oferta se titula *Applied AI Engineer* y el `PERFIL BASE` dice

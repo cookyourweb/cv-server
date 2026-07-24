@@ -1518,6 +1518,13 @@ RESUMEN / PERFIL — no pierdas experiencia real que no cabe en el titular: si l
 
 PERFIL — ANCLAJE A LA OFERTA (obligatorio): identifica 2-3 requisitos o palabras clave concretas de la DESCRIPCIÓN de la oferta que la candidata YA haya trabajado de verdad (según su CV master), e intégralos en el resumen redactados como experiencia real y demostrable ("con experiencia en X aplicada a Y", "habiendo trabajado Z en..."). PROHIBIDO incluir un requisito de la oferta que NO esté respaldado por su trayectoria real: si la oferta lo pide pero ella no lo ha hecho, NO entra. El objetivo es que el perfil resuene con la oferta usando SOLO lo que es cierto y defendible en entrevista.
 
+PROYECTOS PROPIOS, FREELANCE Y CONSULTORÍA (no sobredimensionar la escala):
+- Un proyecto personal, freelance o de consultoría se describe por la COMPLEJIDAD TÉCNICA del trabajo, NUNCA por el tamaño aparente de la organización. El lector debe entender QUÉ SABE HACER la candidata, no cómo de grande era la empresa.
+- PROHIBIDO el lenguaje que sugiera equipos, departamentos o estructuras que no existían: "definí la estrategia de IA de la compañía", "lideré la arquitectura de la empresa", "responsable de la plataforma global", "dirección técnica de", "lideré un equipo de". Nada de vocabulario de CEO (estrategia, dirección, organización, transformación digital de la empresa) salvo que la oferta sea justamente para ese tipo de puesto.
+- En su lugar, prioriza: qué construyó, qué problemas resolvió, qué tecnologías usó, qué arquitectura diseñó, qué decisiones de ingeniería tomó.
+- EL RESUMEN NUNCA GIRA ALREDEDOR DEL PROYECTO PROPIO. El resumen describe la trayectoria completa; la experiencia actual es el EJEMPLO de la evolución, no el eje de la identidad. La narrativa correcta es "10+ años de producto digital, especialización frontend, evolución a full-stack, especialización actual en AI Engineering", nunca "fundadora de X que hace IA".
+- El PESO de una experiencia no depende del tamaño de la empresa, sino de la RELEVANCIA de las competencias para esta oferta. Un proyecto propio puede ir el primero si es lo más reciente y especializado, pero presentado como trabajo de ingeniería, no como si hubiese dirigido una organización.
+
 NIVEL DEL PUESTO (aplica al CUERPO del CV — el TITULAR lo fijan las HEADLINE RULES):
 - Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director → es un rol de DESARROLLO INDIVIDUAL. En ese caso, en el CUERPO:
   · REDUCE al mínimo el liderazgo: NO abras bullets con "Lideré/Coordiné equipos" ni "formación de equipos". Reformula esos logros hacia el trabajo TÉCNICO concreto (qué construiste, qué migraste, qué arquitectura/componentes/APIs), no hacia la gestión.
@@ -1673,8 +1680,20 @@ def generar_carta():
     # Resolver idioma y leer el CV master en ese idioma
     idioma = idioma_in if idioma_in in ("en", "es") else idioma_de_oferta(puesto, descripcion, empresa)
     tiene_master = _tiene_algun_master(usuario)
-    master       = leer_cv_master_desde_drive(usuario, idioma)
-    cv_master    = master.texto
+    try:
+        master    = leer_cv_master_desde_drive(usuario, idioma)
+        cv_master = master.texto
+    except Exception as e:
+        # Mismo guard que /generar-cv: get_drive_service() -> creds.refresh() puede
+        # fallar (token caducado o revocado) ANTES del try interno de la lectura.
+        # Sin esto sale un 500 HTML opaco y el fallo tarda en diagnosticarse: paso
+        # el 24-jul-2026, con el GOOGLE_REFRESH_TOKEN caducado, y dejo la cadena de
+        # n8n rota sin ningún mensaje util.
+        logger.error("Drive auth/lectura falló en /generar-carta: %s", e)
+        return jsonify({
+            "ok": False,
+            "error": f"No se pudo autenticar/leer el CV master en Drive: {e}",
+        }), 502
 
     def _es_legible(t: str) -> bool:
         if not t:
