@@ -1,15 +1,88 @@
 # Onboarding multiusuario: de un CV cualquiera a un PERFIL BASE
 
 Spec de la entrevista de alta. **Todavía no implementado.** Escrito el 24 de julio de 2026,
-al terminar de convertir el generador en data-driven.
+ampliado el 25 con la arquitectura de tres capas y el flujo de 9 pasos.
 
-El usuario entrega **su CV y su perfil de LinkedIn**. A partir de ahí hay que construirle un
-`PERFIL BASE` como el que tiene Verónica, para que su generador funcione igual de bien.
+---
 
-- **Qué produce esta entrevista**: el bloque `PERFIL BASE` que se pega al principio de su CV
-  Master. Ver `PROMPT-ADAPTACION-CV.md`, sección *El PERFIL BASE es un CONTRATO de datos*.
-- **Por qué hace falta**: sin ese bloque el prompt cae al fallback ("deriva las identidades
-  de la experiencia") y **derivar obliga a interpretar**. De interpretar salió
+## LA LECCIÓN RAÍZ: el problema nunca fue el CV
+
+Estábamos intentando adaptar un documento que **mezclaba tres cosas distintas**:
+
+1. **Quién eres** (identidad)
+2. **Qué has hecho** (hechos)
+3. **Cómo venderlo para una oferta concreta** (adaptación)
+
+Un documento que mezcla las tres capas obliga al modelo a separarlas por su cuenta cada vez
+que genera, y ahí es donde inventa. La solución no fue una regla mejor: fue **separar las
+capas en el dato**.
+
+| Capa | Qué es | Cambia |
+|---|---|---|
+| **PERFIL BASE** | Identidad permanente | Casi nunca |
+| **Master CV** | Todos los hechos verificables | Cuando ocurren hechos nuevos |
+| **CV adaptado** | Selección y orden de esos hechos según la oferta | En cada oferta |
+
+Con las capas separadas, generar un CV deja de ser "reinterpretar quién eres" y pasa a ser
+**seleccionar y ordenar hechos que ya existen**. Eso es lo que elimina la invención.
+
+> **Si tuviéramos que crear el sistema desde cero para otra persona, empezaríamos por esta
+> arquitectura.** No por el CV. El CV es la salida, no el punto de partida.
+
+---
+
+## EL ORDEN DE LA ENTREVISTA (construir el Master ANTES de generar CVs)
+
+El error de partida sería pedir "el CV y la oferta". El orden correcto es al revés: **primero
+se construye el Master (la fuente de verdad), después se generan infinitos CV adaptados.** La
+oferta no entra hasta que el Master está terminado.
+
+Nueve pasos, en este orden estricto:
+
+1. **Identidad profesional** — antes que nada, quién eres. *¿A qué te dedicas realmente? ¿Qué
+   problemas sabes resolver? ¿Qué puestos puedes defender en una entrevista? ¿Qué puestos NO
+   quieres que aparezcan nunca?* La identidad es lo único que no cambia entre ofertas.
+2. **Objetivo profesional** — *¿Qué tipos de oferta quieres poder atacar con este Master?*
+   (Backend, Frontend Tech Lead, AI Engineer, Engineering Manager, Solutions Architect,
+   GenAI Adoption...). No para ponerlo en el CV: para saber qué variaciones debe soportar el
+   sistema. → alimenta `Tipos de oferta compatibles`.
+3. **CV actual** — ahora sí. No para mejorarlo, para **extraer hechos**: empresas, proyectos,
+   tecnologías, responsabilidades, logros, formación.
+4. **Lo que falta** — donde casi todos los CV fallan. *¿Qué haces de verdad que no aparece en
+   el CV?* Mentorizar, entrevistar, documentar, experimentar, automatizar, formar equipos,
+   definir procesos, comparar herramientas, hacer arquitectura. Ocurre, pero nadie lo escribe.
+5. **Límites** — *¿Qué NO quieres que el sistema invente nunca?* No inventar liderazgo,
+   métricas, equipos, tecnologías, cloud, IA. **Aquí nacen los guardrails de ese usuario.**
+6. **Identidad estructurada** — se construye el `PERFIL BASE`: Identidad profesional,
+   Identidades permitidas, Orden del titular, Variante permitida, Nunca permitido, Tipos de
+   oferta compatibles, Áreas de contribución, Posicionamiento, Especialización, Tecnologías
+   principales. Este bloque apenas cambiará nunca.
+7. **Experiencia** — los bullets NO se escriben pensando en una oferta, se escriben pensando
+   *¿qué ocurrió de verdad?* Cada experiencia responde: qué construiste, diseñaste, lideraste,
+   automatizaste, aprendiste; qué tecnologías, qué decisiones, qué enseñaste, qué documentaste.
+   Todavía sin pensar en ATS.
+8. **Inventario de palabras clave** — solo cuando el Master está terminado. Un inventario
+   grande (AI Engineering, LLMs, OpenAI, Claude, React, Node, Developer Productivity, AI
+   Adoption, Architecture, Technical Leadership...). No para meterlas todas: para que el
+   adaptador pueda **elegir** según la oferta.
+9. **Reglas del sistema** — al final del todo: no inventar experiencia, no cambiar seniority,
+   no crear identidades nuevas, no alterar el orden del titular, adaptar el énfasis y no los
+   hechos, priorizar la experiencia relevante, reutilizar solo información existente en el
+   Master.
+
+**Por qué este orden importa:** ATS y adaptación van al final a propósito. Si se piensa en la
+oferta antes de tener los hechos, el usuario (o el modelo) empieza a escribir para agradar en
+vez de para describir, y ahí vuelve la invención. Primero la verdad, luego la venta.
+
+---
+
+El resto de este documento detalla CÓMO ejecutar esos pasos: qué se lee en vez de preguntar,
+las preguntas ancladas en fallos reales, y dónde vive el contrato.
+
+- **Qué produce la entrevista**: el bloque `PERFIL BASE` (paso 6) + el Master de hechos
+  (paso 7). Ver `PROMPT-ADAPTACION-CV.md`, sección *El PERFIL BASE es un CONTRATO de datos*.
+- **Por qué hace falta el PERFIL BASE**: sin ese bloque el prompt cae al fallback ("deriva las
+  identidades de la experiencia") y **derivar obliga a interpretar**. De interpretar salió
   *AI Engineering Leader* en el CV de N-iX. La entrevista existe para que el modelo no tenga
   que deducir nada.
 
