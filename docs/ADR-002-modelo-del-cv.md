@@ -48,17 +48,31 @@ modelo que ya se satura que sostenga 75 restricciones en vez de 68.
 
 ## Los numeros
 
-Coste por CV con el prompt real (~6.000 tokens de entrada, ~2.500 de salida):
+**MEDIDOS, no estimados** (27-jul-2026, `POST /v1/messages/count_tokens` con el prompt
+real: reglas + CV Master EN + una oferta de Remotive; 13.816 caracteres):
 
-| Modelo | Precio ($/1M in-out) | Coste/CV | 15 CVs | ~40 CVs/mes |
-|---|---|---|---|---|
-| Haiku 4.5 (actual) | 1 / 5 | **$0,019** | $0,28 | $0,74 |
-| **Sonnet 4.6 (propuesto)** | 3 / 15 | **$0,056** | $0,83 | **$2,22** |
-| Sonnet 5 (intro hasta 31-ago-2026) | 2 / 10 | $0,037 | $0,55 | $1,48 |
+| Modelo | Precio ($/1M in-out) | Tokens in | $/CV | **40 CVs/mes** | vs Haiku |
+|---|---|---|---|---|---|
+| Haiku 4.5 (actual) | 1 / 5 | 3.532 | $0,0117 | **$0,47** | — |
+| **Sonnet 4.6 (propuesto)** | 3 / 15 | 3.532 | $0,0352 | **$1,41** | **+$0,94** |
+| Sonnet 5 (intro hasta 31-ago-2026) | 2 / 10 | **5.313** | $0,0353 | $1,41 | +$0,94 |
 
-**El sobrecoste real de la decision es ~1,50 EUR al mes.** El CV es el unico artefacto
-que ve un recruiter. Una tecnologia inventada o una cifra falsa en el CV no cuesta
-1,50 EUR: cuesta el proceso entero, y ademas es indefendible en la entrevista.
+**El sobrecoste real es $0,94 al mes. Menos de un euro. Once dolares al ano.**
+
+> Una estimacion previa de este ADR decia $0,019/CV con Haiku y ~1,50 EUR/mes de
+> sobrecoste. Estaba **inflada en un 70%**: sobreestimaba el prompt. Los numeros de
+> arriba salen de la API de conteo, no de un calculo a ojo.
+
+**Hallazgo que refuerza la decision 3 (no ir a Sonnet 5):** Sonnet 5 cuenta **5.313
+tokens donde Haiku y Sonnet 4.6 cuentan 3.532** — un 50% mas para el MISMO texto,
+porque lleva tokenizador nuevo. Su precio introductorio mas bajo ($2/$10 frente a
+$3/$15) se lo come entero: el coste por CV sale practicamente identico al de Sonnet
+4.6 ($0,0353 vs $0,0352). No hay ahorro, y si el riesgo de truncado por adaptive
+thinking. La decision de quedarse en Sonnet 4.6 se sostiene por dos motivos
+independientes.
+
+El CV es el unico artefacto que ve un recruiter. Una tecnologia inventada o una cifra
+falsa no cuesta $0,94: cuesta el proceso entero, y es indefendible en la entrevista.
 
 ## Decisiones
 
