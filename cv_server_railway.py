@@ -49,7 +49,9 @@ GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
 # ── LLM: Claude (fallback opcional) ──────────
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
-CLAUDE_MODEL   = os.getenv("CLAUDE_MODEL", "claude-3-haiku-20240307")
+CLAUDE_MODEL   = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5")  # fallback si Groq falla.
+# OJO: el default era "claude-3-haiku-20240307", RETIRADO el 19-abr-2026. La cadena de
+# fallback devolvia 404 y nadie lo habia notado porque casi nunca se ejercita.
 
 # ── Claude para el CV (calidad — va a empresas; Groq queda de fallback) ──
 # Haiku 4.5: barato (~$0,02/CV) y sigue bien el prompt de adaptación.
