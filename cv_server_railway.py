@@ -1419,9 +1419,16 @@ def index():
 def health():
     return jsonify({
         "status":       "ok",
-        "version":      "v2.3-groq",
-        "llm_provider": "groq",
-        "groq_model":   GROQ_MODEL,
+        "version":      "v2.4",
+        # QUE MODELO escribe cada cosa, leido de las variables reales. Antes esto
+        # devolvia las constantes "groq" y "v2.3-groq", que era falso: Groq es solo el
+        # fallback si Claude falla. Sin esto no se puede verificar desde fuera un
+        # cambio de CV_MODEL en Render, que es justo cuando mas falta hace.
+        "modelos":      {
+            "cv":       CV_MODEL,
+            "carta":    CARTA_MODEL,
+            "fallback": GROQ_MODEL,
+        },
         "fallbacks":    {
             "gemini":  bool(GEMINI_API_KEY),
             "claude":  bool(CLAUDE_API_KEY),
