@@ -65,3 +65,49 @@ def test_error_tipado_del_core_se_mapea():
     assert r.status_code == 404
     assert r.json()["ok"] is False
     assert "no encontrado" in r.json()["error"].lower()
+
+
+def test_los_guardrails_llegan_al_cliente():
+    """El response_model FILTRA lo que no declara. Si los guardrails no estan en
+    GenerarCVResponse, se calculan, se loguean y NUNCA llegan a quien llama: un CV
+    con una tecnologia inventada se enviaria sin que nadie viera el aviso.
+
+    Detectado el 27jul2026 al anadir el guardrail de descripcion: los otros tres
+    (cifras, tecnologias, titular) tampoco estaban declarados.
+    """
+    fake = {
+        "ok": True,
+        "link": "https://drive/x",
+        "modelo_usado": "claude-sonnet-4-6",
+        "archivo": "cv.docx",
+        "email": "a@b.com",
+        "cv_master_usado": True,
+        "idioma": "en",
+        "cv_master_url": "https://drive/master",
+        "cifras_no_respaldadas": ["166.000 usuarios"],
+        "tecnologias_no_respaldadas": ["PHP", "Symfony"],
+        "titular_fuera_de_contrato": ["usa la Variante permitida"],
+        "descripcion_oferta": {"suficiente": False, "chars": 245, "aviso": "muy corta"},
+    }
+    with patch.object(api, "generar_cv_core", return_value=fake):
+        r = client.post("/generar-cv", json=_payload())
+    body = r.json()
+    assert body["cifras_no_respaldadas"] == ["166.000 usuarios"]
+    assert body["tecnologias_no_respaldadas"] == ["PHP", "Symfony"]
+    assert body["titular_fuera_de_contrato"] == ["usa la Variante permitida"]
+    assert body["descripcion_oferta"]["suficiente"] is False
+
+
+def test_los_guardrails_vacios_son_el_caso_normal():
+    fake = {
+        "ok": True, "link": "https://drive/x", "modelo_usado": "claude-sonnet-4-6",
+        "archivo": "cv.docx", "email": "a@b.com", "cv_master_usado": True,
+        "idioma": "en", "cv_master_url": "https://drive/master",
+    }
+    with patch.object(api, "generar_cv_core", return_value=fake):
+        r = client.post("/generar-cv", json=_payload())
+    body = r.json()
+    assert body["cifras_no_respaldadas"] == []
+    assert body["tecnologias_no_respaldadas"] == []
+    assert body["titular_fuera_de_contrato"] == []
+    assert body["descripcion_oferta"] is None

@@ -20,6 +20,13 @@ class GenerarCVRequest(BaseModel):
     idioma: str | None = None  # "en" | "es"
 
 
+class DescripcionOferta(BaseModel):
+    """¿Habia material en la oferta para adaptar el CV? Guardrail de ENTRADA."""
+    suficiente: bool
+    chars: int
+    aviso: str
+
+
 class GenerarCVResponse(BaseModel):
     ok: bool
     link: str
@@ -29,6 +36,13 @@ class GenerarCVResponse(BaseModel):
     cv_master_usado: bool
     idioma: str
     cv_master_url: str
+    # GUARDRAILS. Van declarados aqui a proposito: `response_model` FILTRA todo campo
+    # que no figure en el modelo, asi que un guardrail sin declarar se calcula, se
+    # loguea y NUNCA llega a quien llama. Vacio = nada que revisar.
+    cifras_no_respaldadas: list[str] = []
+    tecnologias_no_respaldadas: list[str] = []
+    titular_fuera_de_contrato: list[str] = []
+    descripcion_oferta: DescripcionOferta | None = None
 
 
 @app.post("/generar-cv", response_model=GenerarCVResponse)

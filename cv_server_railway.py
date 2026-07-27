@@ -611,6 +611,58 @@ def detectar_titular_fuera_de_contrato(titular: str, master_texto: str) -> list:
     return avisos
 
 
+# Marcadores que deja el scraper cuando NO pudo leer la oferta. Su presencia
+# invalida la descripcion aunque venga con relleno alrededor.
+_MARCADORES_SCRAPER = (
+    "detalles limitados",
+    "sin verificacion de estado",
+    "sin verificación de estado",
+    "no tener acceso a chrome",
+)
+
+DESCRIPCION_MINIMA = int(os.getenv("DESCRIPCION_MINIMA", "400"))
+
+
+def evaluar_descripcion_oferta(descripcion: str, minimo: int = None) -> dict:
+    """¿Tiene la descripcion material suficiente para ADAPTAR el CV?
+
+    El prompt adapta el CV leyendo este campo. Si llega el titular reformulado en
+    dos lineas, el CV sale generico y `ok: true` no lo delata. Esto no rechaza la
+    peticion: avisa, igual que `cifras_no_respaldadas` y `tecnologias_no_respaldadas`.
+
+    Umbral por datos reales (27jul2026): las ofertas de Tecnoempleo y Remotive traen
+    991-1800 caracteres; las de LinkedIn e Indeed, 172-245. 400 separa ambos grupos
+    con margen. Configurable con DESCRIPCION_MINIMA.
+    """
+    minimo = DESCRIPCION_MINIMA if minimo is None else minimo
+    texto = (descripcion or "").strip()
+    bajo = texto.lower()
+
+    if any(m in bajo for m in _MARCADORES_SCRAPER):
+        return {
+            "suficiente": False,
+            "chars": len(descripcion or ""),
+            "aviso": (
+                "La descripcion lleva el marcador del scraper ('Detalles limitados'): "
+                "la oferta no se pudo leer de LinkedIn/Indeed y lo guardado es un resumen, "
+                "no el anuncio. Pega la descripcion real en Notion antes de generar el CV."
+            ),
+        }
+
+    if len(texto) < minimo:
+        return {
+            "suficiente": False,
+            "chars": len(descripcion or ""),
+            "aviso": (
+                f"La descripcion tiene {len(texto)} caracteres (minimo {minimo}). "
+                "No hay material que adaptar: el CV saldra generico. Las ofertas de "
+                "LinkedIn e Indeed suelen llegar asi; pega el anuncio real en Notion."
+            ),
+        }
+
+    return {"suficiente": True, "chars": len(descripcion or ""), "aviso": ""}
+
+
 def elegir_master(usuario: dict, idioma: str) -> MasterElegido:
     """Elige la fuente del master segun el idioma. Pura: no toca Drive.
     idioma='en' -> 'CV Master URL' (ingles); cualquier otro -> 'CV Master URL ES'
@@ -1844,6 +1896,17 @@ Elimina TODO rastro de texto generado por IA:
             email, empresa, puesto, titular_sospechoso,
         )
 
+    # 5e. Guardrail de ENTRADA (los otros tres miran la salida): ¿habia material que
+    #     adaptar? Las ofertas de LinkedIn e Indeed llegan con 172-245 caracteres, el
+    #     titular reformulado. Con eso el CV sale generico y ningun otro guardrail lo
+    #     detecta, porque un CV generico no inventa nada: simplemente no dice nada.
+    descripcion_evaluada = evaluar_descripcion_oferta(descripcion)
+    if not descripcion_evaluada["suficiente"]:
+        logger.warning(
+            "DESCRIPCION INSUFICIENTE (%s chars) para %s/%s: %s",
+            descripcion_evaluada["chars"], empresa, puesto, descripcion_evaluada["aviso"],
+        )
+
     # 6. Generar DOCX con cabecera estructurada (titular adaptado por la oferta)
     nombre_archivo = _nombre_archivo_cv(nombre, puesto)
     docx_bytes = generar_docx_con_cabecera(contenido_cv, usuario, titular, idioma)
@@ -1873,6 +1936,10 @@ Elimina TODO rastro de texto generado por IA:
         # Vacio = el titular respeta el contrato del PERFIL BASE. Si trae algo, el titular
         # cambio la identidad o su orden: revisarlo, es lo primero que lee un recruiter.
         "titular_fuera_de_contrato": titular_sospechoso,
+        # suficiente=False significa que la DESCRIPCION no daba material para adaptar:
+        # el CV es generico aunque no haya ningun otro aviso. Es lo PRIMERO que hay que
+        # mirar, porque los demas guardrails no detectan un CV correcto pero vacio.
+        "descripcion_oferta": descripcion_evaluada,
     }
 
 
