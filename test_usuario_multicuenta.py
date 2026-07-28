@@ -176,3 +176,24 @@ def test_inactivo_tampoco_responde_por_alias():
              "Activo": {"checkbox": False},
              "Email alias": {"rich_text": [{"plain_text": "otra@x.com"}]}}
     assert not srv.usuario_atiende(props, "otra@x.com")
+
+
+# ─── la CONSULTA a Notion tambien tiene que probar los nombres reales ───
+
+def test_hay_varios_nombres_candidatos_para_consultar():
+    """Caso real 28jul2026: `emails_de_usuario` se hizo tolerante al nombre del
+    campo, pero la CONSULTA a Notion seguia pidiendo 'Emails alias' en plural. La
+    propiedad se llamaba 'Email alias'. Notion devolvia 400, la segunda pasada no
+    encontraba nada, y /check-email decia que el correo no existia.
+
+    Tolerar el nombre al leer no sirve si al preguntar se usa uno solo.
+    """
+    cands = srv.campos_alias_candidatos()
+    assert "Email alias" in cands
+    assert "Emails alias" in cands
+    assert cands[0] == srv.CAMPO_EMAILS_ALIAS, "el configurado va primero"
+
+
+def test_no_hay_candidatos_repetidos():
+    cands = srv.campos_alias_candidatos()
+    assert len(cands) == len(set(cands))
