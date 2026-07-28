@@ -1,0 +1,101 @@
+"""TDD - un usuario puede recibir ofertas en VARIAS cuentas de correo.
+
+Caso real (28jul2026): a Vero le llegan ofertas a hello.cookyourweb@gmail.com y a
+verseper@hotmail.com. Como `buscar_usuario_por_email` filtraba por el campo `Email`
+exacto, hubo que crear DOS registros en Notion para que ambos buzones funcionaran.
+
+El parche se rompio solo: los dos registros derivaron. El segundo quedo con el Master
+a medias (4.689 chars, sin PERFIL BASE, frente a 8.702 del bueno), sin `Email CV` y
+con la ciudad en minusculas. Resultado: el CV de PANEL salio con la cabecera
+equivocada, el titular haciendo eco del titulo de la vacante y tecnologias ajenas,
+porque el guardrail del titular no tenia PERFIL BASE contra el que validar.
+
+La persona es UNA. Lo que hay son varias direcciones de entrada. El modelo correcto
+es un registro con N emails, no N registros.
+
+Campo nuevo en Notion (`Users`): `Emails alias`, rich_text, separados por coma o
+salto de linea. `Email` sigue siendo el principal.
+"""
+import cv_server_railway as srv
+
+
+def _props(email_principal, alias_texto=None):
+    """Simula las properties que devuelve la API de Notion."""
+    p = {"Email": {"email": email_principal}}
+    if alias_texto is not None:
+        p["Emails alias"] = {"rich_text": [{"plain_text": alias_texto}]}
+    return p
+
+
+def test_solo_el_email_principal():
+    assert srv.emails_de_usuario(_props("vero@gmail.com")) == {"vero@gmail.com"}
+
+
+def test_alias_separados_por_coma():
+    got = srv.emails_de_usuario(_props("vero@gmail.com", "otra@hotmail.com, tercera@yahoo.es"))
+    assert got == {"vero@gmail.com", "otra@hotmail.com", "tercera@yahoo.es"}
+
+
+def test_alias_separados_por_salto_de_linea():
+    got = srv.emails_de_usuario(_props("vero@gmail.com", "otra@hotmail.com\ntercera@yahoo.es"))
+    assert got == {"vero@gmail.com", "otra@hotmail.com", "tercera@yahoo.es"}
+
+
+def test_alias_con_punto_y_coma():
+    got = srv.emails_de_usuario(_props("vero@gmail.com", "otra@hotmail.com; tercera@yahoo.es"))
+    assert got == {"vero@gmail.com", "otra@hotmail.com", "tercera@yahoo.es"}
+
+
+def test_normaliza_mayusculas_y_espacios():
+    # Un correo escrito a mano en Notion llega con mayusculas o espacios sueltos.
+    got = srv.emails_de_usuario(_props("  Vero@Gmail.COM ", " Otra@Hotmail.com "))
+    assert got == {"vero@gmail.com", "otra@hotmail.com"}
+
+
+def test_campo_alias_ausente_no_rompe():
+    assert srv.emails_de_usuario({"Email": {"email": "vero@gmail.com"}}) == {"vero@gmail.com"}
+
+
+def test_alias_vacio_no_aporta_nada():
+    assert srv.emails_de_usuario(_props("vero@gmail.com", "   ")) == {"vero@gmail.com"}
+
+
+def test_separadores_consecutivos_no_crean_vacios():
+    got = srv.emails_de_usuario(_props("vero@gmail.com", "otra@hotmail.com,,\n, ;tercera@yahoo.es"))
+    assert got == {"vero@gmail.com", "otra@hotmail.com", "tercera@yahoo.es"}
+
+
+def test_un_email_repetido_no_duplica():
+    got = srv.emails_de_usuario(_props("vero@gmail.com", "vero@gmail.com, otra@hotmail.com"))
+    assert got == {"vero@gmail.com", "otra@hotmail.com"}
+
+
+def test_lo_que_no_es_email_se_descarta():
+    # Notas sueltas en el campo no deben convertirse en direcciones.
+    got = srv.emails_de_usuario(_props("vero@gmail.com", "otra@hotmail.com, (el viejo)"))
+    assert got == {"vero@gmail.com", "otra@hotmail.com"}
+
+
+# ─── coincidencia ───
+
+def test_coincide_con_el_principal():
+    assert srv.usuario_tiene_email(_props("vero@gmail.com", "otra@hotmail.com"), "vero@gmail.com")
+
+
+def test_coincide_con_un_alias():
+    assert srv.usuario_tiene_email(_props("vero@gmail.com", "otra@hotmail.com"), "otra@hotmail.com")
+
+
+def test_la_coincidencia_ignora_mayusculas():
+    assert srv.usuario_tiene_email(_props("vero@gmail.com", "Otra@Hotmail.com"), "OTRA@hotmail.COM")
+
+
+def test_no_coincide_por_subcadena():
+    # 'contains' de Notion es de subcadena: 'vero@gmail.com' esta DENTRO de
+    # 'notvero@gmail.com'. La verificacion final debe ser exacta o un usuario
+    # recibiria el CV de otro.
+    assert not srv.usuario_tiene_email(_props("notvero@gmail.com"), "vero@gmail.com")
+
+
+def test_email_desconocido_no_coincide():
+    assert not srv.usuario_tiene_email(_props("vero@gmail.com", "otra@hotmail.com"), "ajeno@x.com")
