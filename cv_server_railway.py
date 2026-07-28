@@ -924,17 +924,33 @@ def _consultar_usuario(filtro: dict, email: str, verificar: bool) -> dict | None
                        resp.status_code, filtro.get("property"), resp.text[:200])
         return None
     for page in resp.json().get("results", []):
-        if not verificar or usuario_tiene_email(page.get("properties", {}), email):
+        if not verificar or usuario_atiende(page.get("properties", {}), email):
             return page
     return None
+
+
+def usuario_atiende(props: dict, email: str) -> bool:
+    """¿Este registro atiende esta direccion? Exige que este ACTIVO.
+
+    Desactivar un registro tiene que significar "ya no atiende a nadie". Sin esto,
+    un duplicado desactivado seguia ganando: la busqueda mira primero el `Email`
+    exacto, lo encontraba ahi, y nunca llegaba al alias del registro bueno. Costo
+    un CV generado con la identidad equivocada el 28jul2026 (ver ADR-003).
+
+    Sin columna `Activo` se asume activo, para no romper bases que no la tengan.
+    """
+    activo = props.get("Activo", {}).get("checkbox", True) if "Activo" in props else True
+    return bool(activo) and usuario_tiene_email(props, email)
 
 
 def buscar_usuario_por_email(email: str) -> dict | None:
     """Consulta Notion por email (principal o alias). Devuelve el perfil o None."""
     if not NOTION_DB_USUARIOS:
         return None
+    # verificar=True tambien en la pasada por Email exacto: hay que comprobar que el
+    # registro este ACTIVO, cosa que el filtro de Notion no hace.
     page = _consultar_usuario(
-        {"property": "Email", "email": {"equals": email}}, email, verificar=False
+        {"property": "Email", "email": {"equals": email}}, email, verificar=True
     )
     if page is None:
         # Segunda pasada por los alias. `contains` es de subcadena, de ahi el

@@ -134,3 +134,45 @@ def test_un_campo_que_no_es_de_alias_se_ignora():
         "Email CV": {"rich_text": [{"plain_text": "otra@hotmail.com"}]},
     })
     assert got == {"vero@gmail.com"}
+
+
+# ─── un usuario DESACTIVADO no debe atender ninguna direccion ───
+
+def test_usuario_inactivo_no_responde_a_su_email():
+    """Caso real 28jul2026, y costo un CV enviado con la identidad equivocada.
+
+    Habia dos registros de Vero. Se desactivo el duplicado y se anadio su correo
+    como alias del bueno. Aun asi el CV siguio saliendo con la cabecera del
+    duplicado: `buscar_usuario_por_email` busca primero por `Email` exacto, y el
+    duplicado SEGUIA teniendo ese email. Lo encontraba antes de llegar al alias.
+
+    Desactivar tiene que significar 'este registro ya no atiende a nadie'. Si no,
+    el desactivado gana siempre al alias del activo.
+    """
+    props = {"Email": {"email": "vieja@hotmail.com"},
+             "Activo": {"checkbox": False}}
+    assert not srv.usuario_atiende(props, "vieja@hotmail.com")
+
+
+def test_usuario_activo_si_responde():
+    props = {"Email": {"email": "vero@gmail.com"}, "Activo": {"checkbox": True}}
+    assert srv.usuario_atiende(props, "vero@gmail.com")
+
+
+def test_usuario_activo_responde_por_alias():
+    props = {"Email": {"email": "vero@gmail.com"},
+             "Activo": {"checkbox": True},
+             "Email alias": {"rich_text": [{"plain_text": "vieja@hotmail.com"}]}}
+    assert srv.usuario_atiende(props, "vieja@hotmail.com")
+
+
+def test_sin_campo_activo_se_asume_activo():
+    # Compatibilidad: una base sin la columna no debe dejar de funcionar.
+    assert srv.usuario_atiende({"Email": {"email": "vero@gmail.com"}}, "vero@gmail.com")
+
+
+def test_inactivo_tampoco_responde_por_alias():
+    props = {"Email": {"email": "vieja@hotmail.com"},
+             "Activo": {"checkbox": False},
+             "Email alias": {"rich_text": [{"plain_text": "otra@x.com"}]}}
+    assert not srv.usuario_atiende(props, "otra@x.com")
