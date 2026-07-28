@@ -853,23 +853,84 @@ def notion_headers():
     }
 
 
+# Campo de Notion (Users) con las direcciones ADICIONALES por las que entran ofertas
+# del mismo usuario. `Email` sigue siendo la principal.
+CAMPO_EMAILS_ALIAS = "Emails alias"
+
+_SEPARADORES_EMAIL = re.compile(r"[,;\n\r]+")
+_ES_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def emails_de_usuario(props: dict) -> set:
+    """Todas las direcciones por las que se puede identificar a un usuario.
+
+    Una persona con dos buzones es UN usuario con dos emails, no dos usuarios: dos
+    registros derivan (masters distintos, campos a medias) y el CV sale distinto
+    segun por donde entre la oferta. Caso real, 28jul2026: ver ADR-003.
+    """
+    emails = set()
+    principal = (props.get("Email", {}) or {}).get("email") or ""
+    if principal.strip():
+        emails.add(principal.strip().lower())
+
+    campo = props.get(CAMPO_EMAILS_ALIAS, {}) or {}
+    crudo = "".join(t.get("plain_text", "") for t in (campo.get("rich_text") or []))
+    for trozo in _SEPARADORES_EMAIL.split(crudo):
+        t = trozo.strip().lower()
+        if t and _ES_EMAIL.match(t):
+            emails.add(t)
+    return emails
+
+
+def usuario_tiene_email(props: dict, email: str) -> bool:
+    """¿Este usuario responde a esta direccion? Comparacion EXACTA.
+
+    Importa que sea exacta: el filtro `contains` de Notion es de subcadena, asi que
+    'vero@gmail.com' casa con 'notvero@gmail.com'. Sin esta verificacion final un
+    usuario podria recibir el CV de otro.
+    """
+    return (email or "").strip().lower() in emails_de_usuario(props)
+
+
+def _consultar_usuario(filtro: dict, email: str, verificar: bool) -> dict | None:
+    """Una consulta a Users. Si verificar=True confirma el email exacto en Python."""
+    try:
+        resp = requests.post(
+            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
+            headers=notion_headers(),
+            json={"filter": filtro, "page_size": 5 if verificar else 1},
+            timeout=15,
+        )
+    except requests.RequestException as e:
+        logger.warning("Notion query fallo (%s): %s", filtro.get("property"), e)
+        return None
+    if resp.status_code != 200:
+        # Un 400 aqui suele significar que el campo no existe todavia en la base.
+        logger.warning("Notion query error %s (%s): %s",
+                       resp.status_code, filtro.get("property"), resp.text[:200])
+        return None
+    for page in resp.json().get("results", []):
+        if not verificar or usuario_tiene_email(page.get("properties", {}), email):
+            return page
+    return None
+
+
 def buscar_usuario_por_email(email: str) -> dict | None:
-    """Consulta Notion por email. Devuelve perfil completo del usuario o None."""
+    """Consulta Notion por email (principal o alias). Devuelve el perfil o None."""
     if not NOTION_DB_USUARIOS:
         return None
-    resp = requests.post(
-        f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
-        headers=notion_headers(),
-        json={"filter": {"property": "Email", "email": {"equals": email}}, "page_size": 1},
-        timeout=15,
+    page = _consultar_usuario(
+        {"property": "Email", "email": {"equals": email}}, email, verificar=False
     )
-    if resp.status_code != 200:
-        logger.warning("Notion query error %s: %s", resp.status_code, resp.text[:200])
+    if page is None:
+        # Segunda pasada por los alias. `contains` es de subcadena, de ahi el
+        # verificar=True: se confirma la coincidencia exacta en Python.
+        page = _consultar_usuario(
+            {"property": CAMPO_EMAILS_ALIAS, "rich_text": {"contains": email}},
+            email, verificar=True,
+        )
+    if page is None:
         return None
-    results = resp.json().get("results", [])
-    if not results:
-        return None
-    page = results[0]
     p = page.get("properties", {})
     return {
         "notion_id":          page.get("id", ""),
