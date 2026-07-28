@@ -868,6 +868,23 @@ _ALIAS_ACEPTADOS = {"emails alias", "email alias", "emails_alias", "email_alias"
 def _es_campo_de_alias(nombre: str) -> bool:
     return nombre.strip().lower() in _ALIAS_ACEPTADOS or nombre == CAMPO_EMAILS_ALIAS
 
+
+def campos_alias_candidatos() -> list:
+    """Nombres con los que INTENTAR la consulta a Notion, en orden.
+
+    Tolerar el nombre al LEER no sirve de nada si al PREGUNTAR se usa uno solo:
+    Notion filtra por nombre exacto y devuelve 400 si no existe. Paso el 28jul2026
+    con 'Email alias' (la propiedad) frente a 'Emails alias' (lo que se consultaba):
+    la busqueda por alias nunca encontraba nada y no habia error visible.
+    """
+    orden = [CAMPO_EMAILS_ALIAS, "Email alias", "Emails alias",
+             "Emails alternativos", "Email alternativo"]
+    vistos, out = set(), []
+    for n in orden:
+        if n.lower() not in vistos:
+            vistos.add(n.lower()); out.append(n)
+    return out
+
 _SEPARADORES_EMAIL = re.compile(r"[,;\n\r]+")
 _ES_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -955,10 +972,13 @@ def buscar_usuario_por_email(email: str) -> dict | None:
     if page is None:
         # Segunda pasada por los alias. `contains` es de subcadena, de ahi el
         # verificar=True: se confirma la coincidencia exacta en Python.
-        page = _consultar_usuario(
-            {"property": CAMPO_EMAILS_ALIAS, "rich_text": {"contains": email}},
-            email, verificar=True,
-        )
+        for campo in campos_alias_candidatos():
+            page = _consultar_usuario(
+                {"property": campo, "rich_text": {"contains": email}},
+                email, verificar=True,
+            )
+            if page is not None:
+                break
     if page is None:
         return None
     p = page.get("properties", {})
