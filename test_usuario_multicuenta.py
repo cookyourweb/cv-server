@@ -99,3 +99,38 @@ def test_no_coincide_por_subcadena():
 
 def test_email_desconocido_no_coincide():
     assert not srv.usuario_tiene_email(_props("vero@gmail.com", "otra@hotmail.com"), "ajeno@x.com")
+
+
+# ─── el nombre del campo lo escribe una persona en Notion ───
+
+def _props_campo(nombre_campo, texto):
+    return {"Email": {"email": "vero@gmail.com"},
+            nombre_campo: {"rich_text": [{"plain_text": texto}]}}
+
+
+def test_acepta_email_alias_en_singular():
+    # Caso real 28jul2026: se creo como "Email Alias" y el codigo buscaba
+    # "Emails alias". Notion distingue mayusculas y el campo no se encontraba,
+    # sin error visible: simplemente no habia alias.
+    got = srv.emails_de_usuario(_props_campo("Email Alias", "otra@hotmail.com"))
+    assert "otra@hotmail.com" in got
+
+
+def test_acepta_emails_alias_en_plural():
+    got = srv.emails_de_usuario(_props_campo("Emails alias", "otra@hotmail.com"))
+    assert "otra@hotmail.com" in got
+
+
+def test_el_nombre_del_campo_ignora_mayusculas():
+    for nombre in ("EMAILS ALIAS", "emails alias", "Emails Alias", "Email alias"):
+        got = srv.emails_de_usuario(_props_campo(nombre, "otra@hotmail.com"))
+        assert "otra@hotmail.com" in got, f"no reconocio el campo '{nombre}'"
+
+
+def test_un_campo_que_no_es_de_alias_se_ignora():
+    # "Email CV" tambien empieza por Email y NO son direcciones de entrada.
+    got = srv.emails_de_usuario({
+        "Email": {"email": "vero@gmail.com"},
+        "Email CV": {"rich_text": [{"plain_text": "otra@hotmail.com"}]},
+    })
+    assert got == {"vero@gmail.com"}

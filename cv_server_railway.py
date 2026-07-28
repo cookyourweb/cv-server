@@ -857,7 +857,18 @@ def notion_headers():
 
 # Campo de Notion (Users) con las direcciones ADICIONALES por las que entran ofertas
 # del mismo usuario. `Email` sigue siendo la principal.
-CAMPO_EMAILS_ALIAS = "Emails alias"
+#
+# El nombre lo escribe una persona en Notion, asi que se aceptan las variantes
+# razonables (singular/plural, mayusculas). Exigir coincidencia exacta produce el
+# peor fallo posible: el campo existe, el codigo no lo ve y NO hay error — el
+# usuario simplemente se queda sin alias. Paso el 28jul2026 con "Email Alias".
+CAMPO_EMAILS_ALIAS = os.getenv("CAMPO_EMAILS_ALIAS", "Emails alias")
+_ALIAS_ACEPTADOS = {"emails alias", "email alias", "emails_alias", "email_alias",
+                    "emails alternativos", "email alternativo"}
+
+
+def _es_campo_de_alias(nombre: str) -> bool:
+    return nombre.strip().lower() in _ALIAS_ACEPTADOS or nombre == CAMPO_EMAILS_ALIAS
 
 _SEPARADORES_EMAIL = re.compile(r"[,;\n\r]+")
 _ES_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -875,8 +886,11 @@ def emails_de_usuario(props: dict) -> set:
     if principal.strip():
         emails.add(principal.strip().lower())
 
-    campo = props.get(CAMPO_EMAILS_ALIAS, {}) or {}
-    crudo = "".join(t.get("plain_text", "") for t in (campo.get("rich_text") or []))
+    crudo = ""
+    for nombre, campo in props.items():
+        if _es_campo_de_alias(nombre):
+            crudo += "".join(t.get("plain_text", "") for t in ((campo or {}).get("rich_text") or []))
+            crudo += ","
     for trozo in _SEPARADORES_EMAIL.split(crudo):
         t = trozo.strip().lower()
         if t and _ES_EMAIL.match(t):
