@@ -1,4 +1,93 @@
-# 🎯 BuscarTrabajo — Guía para el equipo
+# cv-server
+
+Servicio que genera **CVs y cartas adaptados a cada oferta** con LLMs, sin inventar
+experiencia. Flask en producción, migrándose a FastAPI de forma incremental.
+
+```
+Notion (ofertas + perfil) ─┐
+                           ├─► /generar-cv ─► LLM ─► guardrails ─► Google Drive
+CV Master (Google Docs) ───┘
+```
+
+---
+
+## El problema interesante
+
+Adaptar un CV con un LLM es fácil. **Que no mienta, no.**
+
+Un modelo al que le pides "adapta este CV a esta oferta" tiende a acercar el candidato
+al puesto: añade una tecnología que la oferta pide, redondea una cifra, sube el alcance
+de un rol. Cada una de esas frases es indefendible en una entrevista.
+
+La respuesta de este servicio no es solo el CV: son **cuatro guardrails** que verifican
+la salida contra la fuente de verdad.
+
+```json
+{
+  "ok": true,
+  "link": "https://drive.google.com/...",
+  "modelo_usado": "claude-sonnet-4-6",
+  "cifras_no_respaldadas": [],
+  "tecnologias_no_respaldadas": [],
+  "titular_fuera_de_contrato": [],
+  "descripcion_oferta": { "suficiente": true, "chars": 1694, "aviso": "" }
+}
+```
+
+| Guardrail | Qué detecta | Caso real que lo motivó |
+|---|---|---|
+| `cifras_no_respaldadas` | Números que no están en el CV Master | Cifras de usuarios redondeadas hacia arriba |
+| `tecnologias_no_respaldadas` | Tecnologías que la oferta pide y el Master no respalda | *"experiencia en arquitecturas PHP/Symfony"* en un perfil sin PHP |
+| `titular_fuera_de_contrato` | Titulares que inventan identidad o suben seniority | El titular copiando el título de la vacante |
+| `descripcion_oferta` | **Entrada** insuficiente para adaptar nada | Ofertas de LinkedIn con 172 caracteres: el titular reformulado |
+
+El cuarto es el que más cuesta ver: los otros tres miran la salida, y **un CV genérico
+no inventa nada — simplemente no dice nada**. Sin mirar la entrada, `ok: true` oculta
+que no había material.
+
+### Lo que los guardrails NO detectan
+
+La inflación del **alcance del rol**: `coordinated data contracts` → `own the data
+contracts`, `Integrated APIs` → `Designed and integrated APIs`. No son tecnologías ni
+cifras, así que la comparación contra el Master no las ve. Es semántico y sigue abierto.
+
+---
+
+## Decisiones de arquitectura
+
+Documentadas como ADRs en [`docs/`](docs/):
+
+- **[ADR-001](docs/ADR-001-migracion-fastapi.md)** — Migración incremental a FastAPI.
+  Coexistencia en vez de big-bang: se extrae el núcleo (`generar_cv_core`) y las rutas
+  Flask y FastAPI son wrappers finos sobre el mismo core. Errores como excepción tipada
+  (`CVError`), contratos Pydantic, y Flask como red de seguridad hasta que FastAPI cubra
+  el endpoint en verde.
+- **[ADR-002](docs/ADR-002-modelo-del-cv.md)** — Qué modelo escribe el CV, con coste
+  medido vía `count_tokens`, no estimado. Incluye un hallazgo que invirtió la decisión:
+  un modelo más nuevo y con precio por token más bajo salía **igual de caro**, porque su
+  tokenizador cuenta un 50% más de tokens para el mismo texto.
+- **[ADR-003](docs/ADR-003-usuario-multicuenta.md)** — Un usuario con varias cuentas de
+  correo. Por qué duplicar el registro es un parche que se degrada en silencio, y por qué
+  la verificación final tiene que ser exacta (el filtro `contains` de Notion es de
+  subcadena: `vero@gmail.com` casa con `notvero@gmail.com`).
+
+## Tests
+
+```bash
+pytest -q     # 132 tests
+```
+
+Escritos primero. Cada uno documenta en su docstring **el fallo real que lo motivó**,
+con fecha, no un caso hipotético.
+
+## Stack
+
+`Python` · `Flask` → `FastAPI` · `Pydantic` · `Claude API` · `Notion API` ·
+`Google Drive API` · `python-docx` · `pytest` · `Render`
+
+---
+
+## Guía de uso del servicio
 
 **Qué es:** Sistema automatizado que cada mañana te manda 5 ofertas personalizadas por email, y al aprobar una genera el CV adaptado + carta de presentación automáticamente.
 
