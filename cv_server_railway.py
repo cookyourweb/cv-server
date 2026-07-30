@@ -1748,7 +1748,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
 HEADLINE: [professional title for this offer — see HEADLINE RULES below]
 
 PROFESSIONAL SUMMARY
-[2 full paragraphs (4-6 lines each) tailored to the offer, generated from her REAL EXPERIENCE (never copied from PERFIL BASE). First paragraph: who she is + core strengths relevant to this role. Second paragraph: depth, domains and the angle that fits this offer.]
+[2 full paragraphs (4-6 lines each) tailored to the offer, generated from her REAL EXPERIENCE (never copied from PERFIL BASE). Write with NO GRAMMATICAL SUBJECT, standard English CV style: "Frontend Tech Lead with 10+ years...", "Led the migration...". NEVER "She is", "She brings", "Her career spans", and never "I am". First paragraph: the profile itself + core strengths relevant to this role. Second paragraph: depth, domains and the angle that fits this offer.]
 
 PROFESSIONAL EXPERIENCE
 [Role] — [Company]
@@ -1930,6 +1930,8 @@ HECHOS, NO EFECTOS (separa lo que hizo de lo que eso demuestra):
 POSICIONAMIENTO (adapta el ÉNFASIS a la oferta, nunca inventes):
 - Prioriza y reordena las skills y logros del CV Master que esta oferta valora; deja en segundo plano lo que no pide. NUNCA añadas algo que no esté en el Master.
 - NO MUEVAS SKILLS A EXPERIENCIA: una tecnología que el Master lista en HABILIDADES pero NO atribuye a un puesto concreto no puede aparecer como logro de ese puesto. Puede seguir en Habilidades, ahí es legítima. Atribuirla a una experiencia donde el Master no la sitúa es inventar, aunque la tecnología sea real y ella la domine.
+
+- PERSONA GRAMATICAL (regla dura, aplica a TODO el CV, perfil y bullets): el CV se escribe SIN SUJETO, que es el estándar en CV anglosajón. Escribe "Frontend Tech Lead with 10+ years building...", "Led the migration from Vue to React", "Established engineering standards". PROHIBIDO en tercera persona ("She led", "Her career spans", "She brings") y PROHIBIDO en primera ("I led", "My career"). Esta instrucción está redactada hablando de la candidata en tercera persona por comodidad; el CV que produces NO debe heredar esa persona gramatical. Un CV que habla de ella desde fuera se lee como escrito por otro, y es de las cosas que más delatan que lo ha redactado una máquina.
 - LÍMITE DE POSICIONAMIENTO: si el CV Master incluye un bloque "POSICIONAMIENTO" (lo que la candidata ES y lo que NO es), respétalo como frontera. NUNCA posiciones a la candidata en un rol o especialidad que ese bloque niega, aunque la oferta lo pida.
 - EVOLUCIÓN: si el CV Master incluye un bloque "EVOLUCIÓN PROFESIONAL", respeta el arco temporal (de dónde viene, hacia dónde ha evolucionado); no presentes como especialidad actual algo que fue una etapa pasada, ni al revés.
 - Una tecnología usada hace años puede presentarse como algo que puede retomar rápido por su experiencia previa, SIN presentarla como especialidad actual salvo que el Master lo respalde.
