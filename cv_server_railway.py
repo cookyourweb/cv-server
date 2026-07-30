@@ -1039,6 +1039,66 @@ def buscar_oferta_en_notion(empresa: str, puesto: str) -> dict | None:
     }
 
 
+def guardar_link_cv_en_notion(empresa: str, puesto: str, link_drive: str,
+                              nombre_archivo: str) -> bool:
+    """Escribe el enlace del CV en la ficha de la oferta, aqui y ahora.
+
+    Nace el 30jul2026. Hasta hoy este enlace lo escribia n8n DESPUES de recibir
+    la respuesta de /generar-cv, en una rama paralela a la del email. El nodo que
+    llama aqui tiene timeout de 120s: con Sonnet la generacion se pasa de ahi,
+    n8n aborta, y este servidor termina y sube el DOCX a Drive igualmente. El
+    resultado es un CV huerfano — existe en Drive, y ni la ficha ni Veronica se
+    enteran. Paso tres veces el mismo dia (Cactus, Alan, Trivelta).
+
+    El enlace se escribe donde se sube el fichero para que la invariante sea
+    cierta por construccion: si el CV existe, el enlace existe. Lo que haga n8n
+    despues deja de importar para esto.
+
+    Best-effort a proposito: si Notion falla, se loguea y se sigue. Un CV
+    generado no se tira por no haber podido anotarlo.
+    """
+    if not NOTION_DB_OFERTAS or not empresa or not puesto or not link_drive:
+        return False
+    try:
+        resp = requests.post(
+            f"https://api.notion.com/v1/databases/{NOTION_DB_OFERTAS}/query",
+            headers=notion_headers(),
+            json={"filter": {"and": [
+                {"property": "Empresa", "title": {"equals": empresa}},
+                {"property": "Puesto", "rich_text": {"equals": puesto}},
+            ]}, "page_size": 1},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            logger.warning("Notion: query oferta %s error %s", empresa, resp.status_code)
+            return False
+        results = resp.json().get("results", [])
+        if not results:
+            logger.warning("Notion: no se encontro la oferta %s / %s para anotar el CV",
+                           empresa, puesto)
+            return False
+
+        page_id = results[0]["id"]
+        patch = requests.patch(
+            f"https://api.notion.com/v1/pages/{page_id}",
+            headers=notion_headers(),
+            json={"properties": {
+                "Link CV Drive": {"url": link_drive},
+                "CV usado": {"rich_text": [{"text": {"content": nombre_archivo[:2000]}}]},
+            }},
+            timeout=15,
+        )
+        if patch.status_code != 200:
+            logger.warning("Notion: patch link CV error %s: %s",
+                           patch.status_code, patch.text[:200])
+            return False
+        logger.info("Notion: enlace del CV anotado en %s / %s", empresa, puesto)
+        return True
+    except requests.RequestException as e:
+        logger.warning("Notion: no se pudo anotar el enlace del CV: %s", e)
+        return False
+
+
 def _extraer_drive_file_id(url: str) -> str:
     """Extrae el file ID de una URL de Google Drive."""
     import re
@@ -2038,9 +2098,17 @@ Elimina TODO rastro de texto generado por IA:
         logger.error("Drive upload error: %s", e)
         raise CVError(500, f"Error subiendo a Drive: {e}")
 
+    # 8. Anotar el enlace en la ficha de Notion, ahora, no via n8n. Si la cadena
+    #    de n8n muere despues (timeout de 120s del nodo que llama aqui), el CV
+    #    sigue estando localizable desde la ficha. Ver guardar_link_cv_en_notion.
+    link_anotado = guardar_link_cv_en_notion(empresa, puesto, link_drive, nombre_archivo)
+
     return {
         "ok":              True,
         "link":            link_drive,
+        # False = el CV existe en Drive pero no se pudo anotar en la ficha.
+        # Revisar a mano: es un CV que Veronica tiene y no sabe que tiene.
+        "link_anotado_en_notion": link_anotado,
         "modelo_usado":    respuesta_llm.modelo,
         "archivo":         nombre_archivo,
         "email":           email,
