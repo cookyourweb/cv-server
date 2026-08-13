@@ -424,6 +424,99 @@ def detectar_tecnologias_no_respaldadas(cv_texto: str, master_texto: str) -> lis
     return sorted(_tecnologias_en(cv_texto) - _tecnologias_en(master_texto))
 
 
+# ── Guardrail de veracidad: skills declaradas sin respaldo ───────────────────
+# El detector de arriba solo ve lo que esta dado de alta en el catalogo, y lo que
+# el modelo copia es el stack NUEVO de cada oferta: en el CV de Koinly (11ago2026)
+# entraron enteros "React 19 · Tailwind (v4) · Radix UI · Mantine" y "TanStack
+# Query" sin que saltara nada, porque ninguno de los cuatro estaba en las 173
+# variantes. No es un descuido de la lista: una lista blanca no puede cubrir un
+# mundo abierto, y el mundo abierto es justo de donde sale el riesgo.
+#
+# Aqui se invierte el sentido. La seccion de skills es una lista de AFIRMACIONES
+# separadas por puntos, y cada una se contrasta contra el Master venga de donde
+# venga. El mundo cerrado pasa al lado correcto: el de lo que el CV afirma.
+
+_CABECERAS_SKILLS = {
+    "technical skills", "skills", "competencias tecnicas", "competencias técnicas",
+    "habilidades tecnicas", "habilidades técnicas", "stack tecnico", "stack técnico",
+}
+
+_SEP_SKILLS = re.compile(r"\s*[·•]\s*")
+_PARENTESIS = re.compile(r"\(([^)]*)\)")
+
+# Describen COMO se usa una herramienta, no una herramienta aparte: "TypeScript
+# (strict)" no afirma nada que el Master tenga que respaldar por separado.
+_CALIFICADORES = {
+    "strict", "estricto", "avanzado", "advanced", "basico", "básico", "basic",
+    "intermedio", "intermediate", "experta", "experto", "expert", "senior",
+}
+
+
+def _normalizar_skill(texto: str) -> str:
+    return re.sub(r"\s+", " ", (texto or "").strip().lower())
+
+
+def _lineas_de_skills(cv_texto: str) -> list:
+    """Lineas que hay DENTRO de la seccion de skills.
+
+    Solo esa seccion: la cabecera del CV y las lineas de empresas tambien llevan
+    puntos separadores, y analizarlas llenaria el aviso de ruido."""
+    dentro, out = False, []
+    for linea in (cv_texto or "").splitlines():
+        desnuda = linea.strip().lstrip("#").strip()
+        if _normalizar_skill(desnuda).rstrip(":") in _CABECERAS_SKILLS:
+            dentro = True
+            continue
+        if not dentro:
+            continue
+        # Otra cabecera en mayusculas (EDUCATION, LANGUAGES) cierra la seccion.
+        if desnuda and "·" not in desnuda and desnuda == desnuda.upper():
+            break
+        if desnuda:
+            out.append(desnuda)
+    return out
+
+
+def _afirmaciones_de(item: str) -> list:
+    """Todo lo que un elemento de la lista afirma.
+
+    Cuenta la base y tambien lo que va entre parentesis, que es donde se
+    esconden herramientas enteras: "Vue.js (Composition API, Pinia)"."""
+    base = _PARENTESIS.sub("", item).strip()
+    dentro = [p.strip() for m in _PARENTESIS.finditer(item)
+              for p in m.group(1).split(",") if p.strip()]
+    return [base] + dentro
+
+
+def detectar_skills_no_respaldadas(cv_texto: str, master_texto: str) -> list:
+    """Skills que el CV declara y el Master no respalda, verificadas una a una.
+
+    Sin master no se alerta: no hay fuente contra la que contrastar."""
+    if not cv_texto or not master_texto:
+        return []
+
+    master = _normalizar_skill(master_texto)
+    marcadas = []
+    for linea in _lineas_de_skills(cv_texto):
+        etiqueta, dos_puntos, valores = linea.partition(":")
+        if not dos_puntos:                      # sin etiqueta de grupo
+            if "·" not in linea:                # ni lista: no es linea de skills
+                continue
+            valores = linea
+        for item in _SEP_SKILLS.split(valores):
+            item = item.strip(" .;")
+            if not item:
+                continue
+            respaldada = all(
+                _normalizar_skill(a) in master
+                for a in _afirmaciones_de(item)
+                if _normalizar_skill(a) and _normalizar_skill(a) not in _CALIFICADORES
+            )
+            if not respaldada and item not in marcadas:
+                marcadas.append(item)
+    return sorted(marcadas)
+
+
 class MasterElegido(NamedTuple):
     """Master seleccionado para un idioma, con la URL de la que sale.
 
@@ -2066,6 +2159,16 @@ Elimina TODO rastro de texto generado por IA:
         logger.warning(
             "TECNOLOGIAS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
             email, empresa, puesto, tecnologias_sospechosas,
+        )
+
+    #     Y la seccion de skills, elemento a elemento: es donde el modelo vuelca el
+    #     stack de la oferta y donde el catalogo de arriba es ciego a lo que no
+    #     tiene dado de alta, que es precisamente lo nuevo de cada oferta.
+    skills_sospechosas = detectar_skills_no_respaldadas(contenido_cv, cv_master)
+    if skills_sospechosas:
+        logger.warning(
+            "SKILLS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
+            email, empresa, puesto, skills_sospechosas,
         )
 
     # 5d. Guardrail del titular: que respete el contrato del PERFIL BASE. Es el unico
