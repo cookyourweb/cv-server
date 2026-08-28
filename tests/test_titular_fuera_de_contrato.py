@@ -22,7 +22,7 @@ detector convierte la regla del titular ancla en codigo tambien.
 Igual que los otros guardrails, NO aborta: avisa en la respuesta de /generar-cv para que
 la persona lo revise antes de enviar.
 """
-import cv_server_railway as srv
+import server as srv
 
 MASTER = """# PERFIL BASE
 

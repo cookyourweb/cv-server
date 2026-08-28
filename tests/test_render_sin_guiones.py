@@ -9,7 +9,7 @@ REAL extraida del fichero, y lo alimenta con el texto del CV que salio MAL
 """
 import re, pathlib
 
-FUENTE = pathlib.Path(__file__).with_name("cv_server_railway.py")
+FUENTE = pathlib.Path(__file__).with_name("server.py")
 
 def _cargar_sanear():
     texto = FUENTE.read_text(encoding="utf-8")

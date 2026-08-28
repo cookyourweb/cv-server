@@ -11,7 +11,7 @@ asi que puede llevar meses muerta sin que nadie lo note. Por eso los defaults de
 aqui estan cubiertos por `tests/test_modelos_retirados.py`.
 
 Lee sus credenciales del entorno igual que el servidor: no importa nada de
-`cv_server_railway`. Extraido el 28-ago-2026.
+`server`. Extraido el 28-ago-2026.
 """
 import logging
 import os

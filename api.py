@@ -1,13 +1,13 @@
 """API FastAPI del cv-server (ADR-001).
 
-Capa HTTP tipada con Pydantic sobre la lógica de negocio de cv_server_railway.
+Capa HTTP tipada con Pydantic sobre la lógica de negocio de server.
 Coexiste con Flask; se migra endpoint por endpoint. Servir con:  uvicorn api:app
 """
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from cv_server_railway import CVError, generar_cv_core
+from server import CVError, generar_cv_core
 
 app = FastAPI(title="cv-server API", version="0.1.0")
 

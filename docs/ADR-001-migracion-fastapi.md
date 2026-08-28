@@ -11,7 +11,7 @@
 
 ## Contexto
 
-- `cv-server` es hoy un monolito Flask (`cv_server_railway.py`, ~1500 líneas) con la lógica
+- `cv-server` es hoy un monolito Flask (`server.py`, ~1500 líneas) con la lógica
   de negocio y la capa HTTP **mezcladas** en las rutas. Ejemplo: `generar_cv()` mezcla el
   parsing del request, la orquestación de Drive/Notion/LLM y el armado de la respuesta en la
   misma función.
@@ -27,7 +27,7 @@
 ## Decisiones
 
 1. **Coexistencia, no big-bang.** FastAPI se añade EN PARALELO en `api.py`; Flask
-   (`cv_server_railway.py`) sigue vivo y sirviendo. Se migra endpoint por endpoint.
+   (`server.py`) sigue vivo y sirviendo. Se migra endpoint por endpoint.
 2. **Separar lógica del HTTP.** Se extrae el núcleo de cada endpoint a una función de
    orquestación (ej. `generar_cv_core(email, empresa, puesto, descripcion, idioma) -> dict`).
    La ruta Flask y la ruta FastAPI son wrappers finos que llaman al MISMO core. La extracción

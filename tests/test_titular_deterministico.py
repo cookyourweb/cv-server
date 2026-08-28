@@ -19,7 +19,7 @@ Asi que se ensambla en codigo desde el PERFIL BASE. Al modelo se le sigue pidien
 linea HEADLINE, pero solo se aprovechan sus MODIFICADORES, y unicamente si el Master los
 respalda. El fallo pasa de improbable a imposible.
 """
-import cv_server_railway as srv
+import server as srv
 
 MASTER = """# PERFIL BASE
 

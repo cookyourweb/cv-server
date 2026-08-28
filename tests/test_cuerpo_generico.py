@@ -5,11 +5,11 @@ No debe conocer identidades, títulos ni posicionamiento específicos de la
 candidata. El posicionamiento por oferta se deriva del CV Master (bloques
 "POSICIONAMIENTO" y "EVOLUCIÓN PROFESIONAL"), nunca de reglas hardcodeadas.
 
-Valida el prompt real en cv_server_railway.py como texto (sin Flask/docx).
+Valida el prompt real en server.py como texto (sin Flask/docx).
 """
 import pathlib
 
-FUENTE = pathlib.Path(__file__).with_name("cv_server_railway.py")
+FUENTE = pathlib.Path(__file__).with_name("server.py")
 
 
 def run():

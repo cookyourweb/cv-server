@@ -24,7 +24,7 @@ Es mas peligroso que una invencion: una tecnologia inventada se cae en la
 primera pregunta y se ve venir. Ocho años de React que fueron de Vue se
 sostienen hasta que el entrevistador pregunta por la epoca de las clases.
 """
-import cv_server_railway as srv
+import server as srv
 
 MASTER = """PERFIL BASE
 Frontend Tech Lead con 10+ años de experiencia.

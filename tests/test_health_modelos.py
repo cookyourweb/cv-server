@@ -13,7 +13,7 @@ patron que el bug de `modelo_usado` arreglado el 22jul: reportar una constante e
 vez de lo que de verdad pasa. Un endpoint de salud que miente sobre su configuracion
 es peor que no tenerlo: se toman decisiones con el.
 """
-import cv_server_railway as srv
+import server as srv
 
 
 def _health():

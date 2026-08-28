@@ -4,7 +4,7 @@ Dos operaciones y la eleccion de cual Master toca segun el idioma. Se autentica
 con OAuth de usuario (refresh token), no con cuenta de servicio.
 
 Lee sus credenciales del entorno igual que el servidor: no importa nada de
-`cv_server_railway`. Extraido el 28-ago-2026.
+`server`. Extraido el 28-ago-2026.
 """
 import io
 import logging

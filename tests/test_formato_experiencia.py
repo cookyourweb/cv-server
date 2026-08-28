@@ -29,7 +29,7 @@ import re
 # Dos fuentes: la PLANTILLA del prompt sigue en el servidor, y el RENDER del DOCX
 # se mudo a `docx_render.py` el 28-ago-2026. Cada test mira donde vive lo suyo.
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
-SRC = (RAIZ / "cv_server_railway.py").read_text(encoding="utf-8")
+SRC = (RAIZ / "server.py").read_text(encoding="utf-8")
 RENDER = (RAIZ / "docx_render.py").read_text(encoding="utf-8")
 
 

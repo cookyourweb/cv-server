@@ -18,7 +18,7 @@ generico y nadie se entera hasta que lo lee un recruiter.
 Esto NO rechaza la peticion (rompería el flujo de n8n y a veces se quiere generar
 igual). Avisa, como `cifras_no_respaldadas` y `tecnologias_no_respaldadas`.
 """
-import cv_server_railway as srv
+import server as srv
 
 # Descripcion real de Clipster (Remotive), recortada pero por encima del umbral.
 DESCRIPCION_BUENA = """About Clipster: Clipster is where brands and creators connect to

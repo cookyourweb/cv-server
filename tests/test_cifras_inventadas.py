@@ -5,7 +5,7 @@ platform serving millions of users". "millions" NO esta en el Master. El prompt
 YA prohibia inventar metricas y el modelo lo hizo igual: por eso se verifica la
 salida en vez de confiar en la instruccion.
 """
-import cv_server_railway as srv
+import server as srv
 
 MASTER = """Frontend Tech Lead con 10+ años de experiencia.
 Plataforma de alta disponibilidad con mas de 166.000 usuarios registrados.

@@ -8,7 +8,7 @@ la senal del titulo, que si viene en el idioma del anuncio.
 Regla: el PUESTO manda sobre la descripcion. Y un idioma explicito (body o campo
 Idioma de Notion) manda sobre cualquier deteccion.
 """
-import cv_server_railway as srv
+import server as srv
 
 DESC_ES = ("Buscamos un ingeniero con experiencia en desarrollo de aplicaciones. "
            "Ofrecemos un puesto estable, jornada completa, equipo consolidado y "

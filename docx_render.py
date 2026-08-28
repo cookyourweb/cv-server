@@ -8,7 +8,7 @@ y flechas del texto que sale hacia la empresa, nunca del texto que el parser usa
 para detectar la estructura del documento. Es una red determinista, no depende de
 que el modelo obedezca el prompt.
 
-Extraido de `cv_server_railway.py` el 28-ago-2026.
+Extraido de `server.py` el 28-ago-2026.
 """
 import io
 import re

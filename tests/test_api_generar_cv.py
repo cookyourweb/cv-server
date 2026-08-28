@@ -58,7 +58,7 @@ def test_happy_path_devuelve_response_tipado():
 
 
 def test_error_tipado_del_core_se_mapea():
-    from cv_server_railway import CVError
+    from server import CVError
 
     with patch.object(api, "generar_cv_core", side_effect=CVError(404, "Usuario no encontrado")):
         r = client.post("/generar-cv", json=_payload())

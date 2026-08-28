@@ -123,7 +123,7 @@ Documentadas como ADRs en [`docs/`](docs/):
 
 ### Deuda conocida
 
-`cv_server_railway.py` tiene unas 2.500 líneas y es un módulo demasiado grande. No está
+`server.py` tiene unas 2.500 líneas y es un módulo demasiado grande. No está
 sin mirar: el ADR-001 describe cómo se está deshaciendo, con `api.py` llevándose un
 endpoint cada vez y Flask cubriendo hasta que el nuevo está en verde. Se documenta aquí
 porque es lo primero que se ve al abrir el repo.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cv_server_railway.py  —  v2.3-groq
+server.py  —  v2.3-groq
 LLM: Groq (primario) → Gemini (fallback) → Claude (fallback)
 
 Formulario multi-pantalla:
@@ -105,7 +105,7 @@ from llm import (  # noqa: F401
 
 # Los guardrails viven en `guardrails.py`. Se reexportan aqui para no cambiar la
 # superficie publica del modulo: los endpoints y los tests los siguen viendo en
-# `cv_server_railway`.
+# `server`.
 from guardrails import (  # noqa: F401
     DESCRIPCION_MINIMA,
     construir_titular,

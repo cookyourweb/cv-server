@@ -6,7 +6,7 @@ se puede saber si Claude está funcionando en Render.
 """
 from unittest.mock import patch
 
-import cv_server_railway as srv
+import server as srv
 import llm  # las funciones VIVEN aqui: parchear el reexport de `srv` no las cambia
 
 

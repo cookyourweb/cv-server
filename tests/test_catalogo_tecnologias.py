@@ -1,7 +1,7 @@
 """TDD - una tecnologia compuesta no puede disparar tambien su nombre corto.
 
 Caso encontrado el 28-ago-2026 al preparar la extraccion de `guardrails.py`:
-`_tecnologias_en` estaba definida DOS veces en `cv_server_railway.py`, en las
+`_tecnologias_en` estaba definida DOS veces en `server.py`, en las
 lineas 406 y 690. La segunda pisaba a la primera, asi que la que se ejecutaba
 era la ingenua.
 
@@ -20,7 +20,7 @@ Importa porque `detectar_tecnologias_no_respaldadas` resta lo del CV menos lo
 del Master: una tecnologia fantasma en cualquiera de los dos lados mueve el
 resultado de un guardrail de veracidad.
 """
-import cv_server_railway as srv
+import server as srv
 
 
 def test_react_native_no_dispara_react():

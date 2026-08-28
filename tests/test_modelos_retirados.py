@@ -13,7 +13,7 @@ la lista de modelos retirados y revienta si alguno vuelve a colarse como default
 
 Al retirar un modelo nuevo: anadirlo a MODELOS_RETIRADOS con su fecha.
 """
-import cv_server_railway as srv
+import server as srv
 import real_jobs
 
 MODELOS_RETIRADOS = {
@@ -28,11 +28,11 @@ MODELOS_RETIRADOS = {
 
 def _defaults():
     return {
-        "cv_server_railway.GROQ_MODEL": srv.GROQ_MODEL,
-        "cv_server_railway.CLAUDE_MODEL": srv.CLAUDE_MODEL,
-        "cv_server_railway.CV_MODEL": srv.CV_MODEL,
-        "cv_server_railway.CARTA_MODEL": srv.CARTA_MODEL,
-        "cv_server_railway.GEMINI_MODEL": srv.GEMINI_MODEL,
+        "server.GROQ_MODEL": srv.GROQ_MODEL,
+        "server.CLAUDE_MODEL": srv.CLAUDE_MODEL,
+        "server.CV_MODEL": srv.CV_MODEL,
+        "server.CARTA_MODEL": srv.CARTA_MODEL,
+        "server.GEMINI_MODEL": srv.GEMINI_MODEL,
         "real_jobs.GROQ_MODEL_DEFAULT": real_jobs.GROQ_MODEL_DEFAULT,
     }
 

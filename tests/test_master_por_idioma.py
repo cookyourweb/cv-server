@@ -4,7 +4,7 @@ Bug: /generar-cv reportaba siempre `cv_master_url` (el master EN) aunque el CV
 se hubiera generado en español desde el master ES. La eleccion era correcta;
 lo que mentia era la respuesta.
 """
-import cv_server_railway as srv
+import server as srv
 
 EN = "https://docs.google.com/document/d/EN123/edit"
 ES = "https://docs.google.com/document/d/ES456/edit"

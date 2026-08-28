@@ -1,10 +1,10 @@
 # Prompt de adaptación del CV y la carta
 
 Fuente de verdad legible del prompt que adapta el CV del usuario a cada oferta.
-El prompt REAL vive como f-string en `cv_server_railway.py`; este documento explica su
+El prompt REAL vive como f-string en `server.py`; este documento explica su
 estructura y el PORQUÉ de cada regla, para que nadie las rompa al editar el código.
 
-- **Prompt del CV**: `cv_server_railway.py`, endpoint `/generar-cv`, líneas ~1231-1305.
+- **Prompt del CV**: `server.py`, endpoint `/generar-cv`, líneas ~1231-1305.
 - **Prompt de la carta**: `/generar-carta`, líneas ~1423-1442.
 - **Bloque de formato** (ES/EN): líneas ~1170-1229 (`bloque_formato`).
 - **Modelos**: CV con Claude Haiku 4.5 (`CV_MODEL`), carta con Claude Sonnet 4.6

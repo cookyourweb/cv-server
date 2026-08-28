@@ -5,12 +5,12 @@ Regla de arquitectura acordada con la usuaria (21-jul-2026):
 - Las identidades se leen SIEMPRE del bloque "# PERFIL BASE" del CV Master.
 - Nada de listas negras/blancas de titulos hardcodeadas en el prompt.
 
-Este test valida el codigo REAL del prompt en cv_server_railway.py sin arrastrar
+Este test valida el codigo REAL del prompt en server.py sin arrastrar
 Flask/docx: solo lee el fichero como texto y comprueba invariantes de contenido.
 """
 import pathlib
 
-FUENTE = pathlib.Path(__file__).with_name("cv_server_railway.py")
+FUENTE = pathlib.Path(__file__).with_name("server.py")
 
 
 def run():

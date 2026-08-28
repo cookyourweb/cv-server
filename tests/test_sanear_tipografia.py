@@ -1,6 +1,6 @@
 """Test aislado de sanear_tipografia().
 
-El modulo cv_server_railway importa Flask/docx en el nivel superior, que no estan
+El modulo server importa Flask/docx en el nivel superior, que no estan
 instalados en este entorno. Por eso extraemos SOLO la funcion sanear_tipografia
 del fichero fuente y la ejecutamos en un namespace limpio (solo stdlib). Asi el
 test valida el codigo REAL del fichero, sin arrastrar dependencias pesadas.
@@ -11,7 +11,7 @@ Regla NO NEGOCIABLE de la usuaria: ningun CV/carta puede salir con guiones largo
 import re
 import pathlib
 
-FUENTE = pathlib.Path(__file__).with_name("cv_server_railway.py")
+FUENTE = pathlib.Path(__file__).with_name("server.py")
 
 
 def _cargar_sanear():
@@ -20,7 +20,7 @@ def _cargar_sanear():
     # desde `_ARROWS =` hasta justo antes de `def generar_docx`.
     m = re.search(r"\n_ARROWS = .*?(?=\ndef generar_docx\()", texto, re.S)
     if not m:
-        raise AssertionError("No se encontro el bloque sanear_tipografia en cv_server_railway.py")
+        raise AssertionError("No se encontro el bloque sanear_tipografia en server.py")
     ns = {}
     exec("import re\n" + m.group(0), ns)
     return ns["sanear_tipografia"]

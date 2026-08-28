@@ -9,7 +9,7 @@ Cinco miran la SALIDA y uno la ENTRADA (`evaluar_descripcion_oferta`): un CV
 generico no inventa nada, simplemente no dice nada, y sin mirar la entrada un
 `ok: true` esconde que no habia material que adaptar.
 
-Extraido de `cv_server_railway.py` el 28-ago-2026. No importa nada del servidor:
+Extraido de `server.py` el 28-ago-2026. No importa nada del servidor:
 solo `os` y `re`, asi que se puede leer y probar aislado.
 """
 import os

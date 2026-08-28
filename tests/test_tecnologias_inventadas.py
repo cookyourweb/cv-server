@@ -10,7 +10,7 @@ que en la bandeja de un recruiter se lee como experiencia.
 El prompt YA prohibe inventar. Lo hizo igual. Por eso se verifica la SALIDA, igual
 que con las cifras.
 """
-import cv_server_railway as srv
+import server as srv
 
 MASTER = """Frontend Tech Lead con 20 años de experiencia.
 Stack: React, TypeScript, Vue.js, Angular, JavaScript, HTML5, CSS3, Node.js.

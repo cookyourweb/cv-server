@@ -6,7 +6,13 @@ de POR QUÉ el código hace lo que hace: decisiones, fixes y trampas que no se v
 el código a secas.
 
 Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
-Archivo principal: `cv_server_railway.py`. Ranking de ofertas: `real_jobs.py`.
+Archivo principal: `server.py`. Ranking de ofertas: `real_jobs.py`.
+
+**28-ago-2026 — el fichero principal se partio en seis y se renombro.** Era
+`cv_server_railway.py` con 2.640 lineas; ahora es `server.py` con 1.165 y los
+endpoints. Lo demas vive en `guardrails.py`, `notion.py`, `drive.py`,
+`docx_render.py`, `llm.py` y `templates/alta.html`. El nombre viejo decia
+*Railway* y el servicio corre en **Render** desde hace meses.
 
 **Decisiones de arquitectura:** ver `docs/ADR-*`.
 - [`docs/ADR-001-migracion-fastapi.md`](docs/ADR-001-migracion-fastapi.md) - migración incremental Flask → FastAPI + Pydantic (core puro + wrapper HTTP, coexistencia, TDD).
@@ -15,7 +21,7 @@ Archivo principal: `cv_server_railway.py`. Ranking de ofertas: `real_jobs.py`.
 
 ## Modelos LLM (estado actual)
 
-Cadena declarada en la cabecera de `cv_server_railway.py` (v2.3-groq):
+Cadena declarada en la cabecera de `server.py` (v2.3-groq):
 
 - **Ranking de ofertas** (`real_jobs.rankear_con_groq`): Groq `llama-3.3-70b-versatile`
   como primario, con fallback heurístico determinista (`_ranking_fallback`) si no hay
@@ -32,7 +38,7 @@ Todos los modelos se pueden sobreescribir por variable de entorno (`GROQ_MODEL`,
 **El prompt que adapta el CV y la carta está documentado en
 [`docs/PROMPT-ADAPTACION-CV.md`](./docs/PROMPT-ADAPTACION-CV.md)**: estructura en 3 pasos,
 HEADLINE RULES, posicionamiento por tipo de oferta y las reglas anti-IA. Léelo antes de
-tocar el f-string del prompt en `cv_server_railway.py`.
+tocar el f-string del prompt en `server.py`.
 
 ---
 
@@ -40,7 +46,7 @@ tocar el f-string del prompt en `cv_server_railway.py`.
 
 ### 20-jul — Saneador tipográfico: cero guiones largos ni flechas en CV y carta
 Commit `f0ba838`. Nueva función pura `sanear_tipografia(texto, idioma)` en
-`cv_server_railway.py:549`.
+`server.py:549`.
 
 - **Qué hace**: elimina guiones largos y medios (`—`, `–`) y flechas (`→`) del texto
   final. Las flechas se traducen a la palabra de transición del idioma ("a" en ES,

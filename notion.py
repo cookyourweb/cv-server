@@ -1,9 +1,9 @@
 """Acceso a Notion: usuarios y ofertas.
 
 Las dos bases que usa el sistema. Lee sus credenciales del entorno igual que el
-servidor, asi que no importa nada de `cv_server_railway`.
+servidor, asi que no importa nada de `server`.
 
-Extraido de `cv_server_railway.py` el 28-ago-2026.
+Extraido de `server.py` el 28-ago-2026.
 """
 import logging
 import os

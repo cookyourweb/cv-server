@@ -16,7 +16,7 @@ Eran DOS fallos, no uno:
 El contrato del payload NO es invento: sale del nodo `Code — Normalizar users
 (schedule)` del propio workflow, que es como entra el disparo de las 9:00.
 """
-import cv_server_railway as srv
+import server as srv
 
 USUARIO_NOTION = {
     "notion_id":     "3c011515-f4b2-810f-822c-d65fd09b56f0",

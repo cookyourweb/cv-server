@@ -6,7 +6,7 @@ masters se vuelve inusable y el riesgo real es leer un master equivocado.
 """
 from unittest.mock import MagicMock, patch
 
-import cv_server_railway as srv
+import server as srv
 import drive  # las funciones VIVEN aqui: parchear el reexport de `srv` no las cambia
 
 

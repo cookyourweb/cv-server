@@ -16,7 +16,7 @@ AFIRMACIONES separadas por puntos, y cada una tiene que estar respaldada por
 el Master, venga la tecnologia de donde venga. El mundo cerrado pasa al lado
 correcto: el de lo que el CV afirma.
 """
-import cv_server_railway as srv
+import server as srv
 
 MASTER = """PERFIL BASE
 Frontend Tech Lead con 10+ años de experiencia.

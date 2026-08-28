@@ -1,1 +1,1 @@
-web: gunicorn cv_server_railway:app --bind 0.0.0.0:$PORT
+web: gunicorn server:app --bind 0.0.0.0:$PORT

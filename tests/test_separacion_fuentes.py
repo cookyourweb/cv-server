@@ -7,11 +7,11 @@ Principio de arquitectura (Vero, 21-jul-2026):
 - Jerarquía: la oferta decide qué enfatizar; el PERFIL BASE desde qué identidad;
   la experiencia qué se puede afirmar; el CV es reorganización de esa evidencia.
 
-Valida el prompt real en cv_server_railway.py como texto (sin Flask/docx).
+Valida el prompt real en server.py como texto (sin Flask/docx).
 """
 import pathlib
 
-FUENTE = pathlib.Path(__file__).with_name("cv_server_railway.py")
+FUENTE = pathlib.Path(__file__).with_name("server.py")
 
 
 def run():

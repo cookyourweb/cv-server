@@ -16,7 +16,7 @@ es un registro con N emails, no N registros.
 Campo nuevo en Notion (`Users`): `Emails alias`, rich_text, separados por coma o
 salto de linea. `Email` sigue siendo el principal.
 """
-import cv_server_railway as srv
+import server as srv
 
 
 def _props(email_principal, alias_texto=None):
