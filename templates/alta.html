@@ -156,6 +156,14 @@ async function comprobarEmail() {
 // PANTALLA 2a — usuario existente
 async function accionExistente(accion) {
   const msg = document.getElementById('msgExistente');
+  // La espera es LARGA: n8n no contesta hasta recorrer sus 15 nodos, medido
+  // entre 5,3 y 10,7 segundos. Sin esto la pantalla se quedaba muerta todo ese
+  // rato y se podia pulsar dos veces, lanzando dos busquedas.
+  const botones = document.querySelectorAll('#sExistente button');
+  botones.forEach(b => b.disabled = true);
+  if (accion === 'ahora') {
+    msg.innerHTML = '<div class="msg">Buscando ofertas… esto tarda unos segundos.</div>';
+  }
   try {
     const resp = await fetch('/accion-existente', {
       method: 'POST',
@@ -176,6 +184,10 @@ async function accionExistente(accion) {
     showScreen('sListo');
   } catch(e) {
     msg.innerHTML = '<div class="msg err">Error: ' + e.message + '</div>';
+  } finally {
+    // `finally` y no solo en el camino bueno: dejar los botones muertos tras un
+    // error es peor que no haberlos deshabilitado.
+    botones.forEach(b => b.disabled = false);
   }
 }
 
