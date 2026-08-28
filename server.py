@@ -420,7 +420,24 @@ def payload_buscar_para_user(usuario: dict) -> dict:
     }
 
 
-def disparar_busqueda(usuario: dict) -> bool:
+class Resultado(NamedTuple):
+    """Se hizo la busqueda, y ademas encontro algo. Son dos cosas distintas.
+
+    El dedup puede descartar todas las ofertas porque ya estaban en Notion: la
+    busqueda se hizo, pero prometer "recibiras las ofertas" seria mentira.
+
+    Es verdadero/falso en un `if` segun `disparada`, para que quien solo mire eso
+    siga funcionando igual.
+    """
+
+    disparada: bool
+    hay_novedades: bool
+
+    def __bool__(self):
+        return self.disparada
+
+
+def disparar_busqueda(usuario: dict) -> "Resultado":
     """Pide a n8n una búsqueda para este usuario. Devuelve si n8n la aceptó.
 
     Devuelve un bool a propósito. Antes esto era fire & forget con un `warning`
@@ -431,7 +448,7 @@ def disparar_busqueda(usuario: dict) -> bool:
     """
     if not usuario or not WEBHOOK_BUSCAR_AHORA:
         logger.error("Búsqueda NO disparada: falta usuario o WEBHOOK_BUSCAR_AHORA")
-        return False
+        return Resultado(False, hay_novedades=False)
     try:
         # 45s, no 8. El webhook esta en `responseMode: lastNode`: n8n no contesta
         # hasta terminar los 15 nodos (Notion + tres fuentes de ofertas). Medido en
@@ -443,15 +460,28 @@ def disparar_busqueda(usuario: dict) -> bool:
         )
     except Exception as e:
         logger.error("Búsqueda NO disparada, n8n no responde (%s): %s", WEBHOOK_BUSCAR_AHORA, e)
-        return False
+        return Resultado(False, hay_novedades=False)
     if r.status_code >= 400:
+        # "No item to return was found" NO es un fallo: es el workflow diciendo
+        # "hecho, sin novedades". El webhook esta en `responseMode: lastNode`, asi
+        # que n8n devuelve lo que produzca el ultimo nodo, y cuando el dedup
+        # descarta todas las ofertas porque ya estaban en Notion ese nodo devuelve
+        # CERO items. n8n contesta 500 con ese mensaje aunque la ejecucion acabe
+        # en `success`. Medido el 28-ago-2026 con la ejecucion 40550.
+        if "No item to return was found" in (r.text or ""):
+            logger.info(
+                "Búsqueda hecha para %s: sin ofertas nuevas (el dedup las tenia todas)",
+                usuario.get("email", ""),
+            )
+            return Resultado(True, hay_novedades=False)
         logger.error(
-            "Búsqueda NO disparada, n8n devolvió %s en %s. Un 404 aquí = el webhook "
-            "no existe en la instancia.", r.status_code, WEBHOOK_BUSCAR_AHORA,
+            "Búsqueda NO disparada, n8n devolvió %s en %s: %s. Un 404 aquí = el "
+            "webhook no existe en la instancia.",
+            r.status_code, WEBHOOK_BUSCAR_AHORA, (r.text or "")[:200],
         )
-        return False
+        return Resultado(False, hay_novedades=False)
     logger.info("Búsqueda disparada para %s", usuario.get("email", ""))
-    return True
+    return Resultado(True, hay_novedades=True)
 
 
 @app.route("/accion-existente", methods=["POST"])
@@ -464,7 +494,7 @@ def accion_existente():
     if not email:
         return jsonify({"ok": False, "error": "email requerido"}), 400
 
-    disparada = False
+    resultado = Resultado(False, hay_novedades=False)
     if accion == "ahora":
         # El perfil hace falta ENTERO: mandando solo email y nombre, n8n buscaba
         # ofertas sin rol, sin stack y sin salario, o sea para nadie.
@@ -473,13 +503,14 @@ def accion_existente():
         except Exception as e:
             logger.error("No se pudo leer el usuario %s en Notion: %s", email, e)
             usuario = None
-        disparada = disparar_busqueda(usuario)
+        resultado = disparar_busqueda(usuario)
 
     return jsonify({
         "ok": True,
         "accion": accion,
         "email": email,
-        "busqueda_disparada": disparada,
+        "busqueda_disparada": resultado.disparada,
+        "hay_novedades": resultado.hay_novedades,
     })
 
 

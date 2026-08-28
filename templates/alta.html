@@ -174,9 +174,17 @@ async function accionExistente(accion) {
     if (accion === 'ahora') {
       // La respuesta se MIRA. Antes se tiraba y esta pantalla cantaba exito
       // aunque n8n no hubiera recibido nada.
-      document.getElementById('confirmacion').textContent = data.busqueda_disparada
-        ? 'Buscando ahora mismo. Recibirás las ofertas en unos minutos en tu email.'
-        : 'No se ha podido lanzar la búsqueda ahora mismo. Entras igualmente en el barrido de las 9:00.';
+      // Tres estados, no dos. "Recibiras las ofertas" tambien seria mentira si
+      // el dedup no dejo ninguna nueva: la busqueda se hizo y no habia novedades.
+      let mensaje;
+      if (!data.busqueda_disparada) {
+        mensaje = 'No se ha podido lanzar la búsqueda ahora mismo. Entras igualmente en el barrido de las 9:00.';
+      } else if (data.hay_novedades) {
+        mensaje = 'Buscando ahora mismo. Recibirás las ofertas en unos minutos en tu email.';
+      } else {
+        mensaje = 'Búsqueda hecha: hoy no hay ofertas nuevas para tu perfil. Las que ya tenías siguen en tu tablero.';
+      }
+      document.getElementById('confirmacion').textContent = mensaje;
     } else {
       document.getElementById('confirmacion').textContent =
         'De acuerdo. Mañana a las 9:00 recibirás tus ofertas personalizadas.';

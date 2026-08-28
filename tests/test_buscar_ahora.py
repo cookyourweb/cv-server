@@ -83,14 +83,14 @@ def test_no_manda_el_perfil_vacio():
 def test_disparar_devuelve_true_si_n8n_acepta(monkeypatch):
     monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
     monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaFalsa(200))
-    assert srv.disparar_busqueda(USUARIO_NOTION) is True
+    assert srv.disparar_busqueda(USUARIO_NOTION).disparada is True
 
 
 def test_disparar_devuelve_false_si_el_webhook_no_existe(monkeypatch):
     # Exactamente el caso de hoy: el path no esta dado de alta, n8n responde 404.
     monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-ahora")
     monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaFalsa(404))
-    assert srv.disparar_busqueda(USUARIO_NOTION) is False
+    assert srv.disparar_busqueda(USUARIO_NOTION).disparada is False
 
 
 def test_disparar_devuelve_false_si_la_red_falla(monkeypatch):
@@ -98,11 +98,11 @@ def test_disparar_devuelve_false_si_la_red_falla(monkeypatch):
         raise srv.requests.exceptions.Timeout("timeout")
     monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
     monkeypatch.setattr(srv.requests, "post", explota)
-    assert srv.disparar_busqueda(USUARIO_NOTION) is False
+    assert srv.disparar_busqueda(USUARIO_NOTION).disparada is False
 
 
 def test_disparar_devuelve_false_sin_usuario():
-    assert srv.disparar_busqueda(None) is False
+    assert srv.disparar_busqueda(None).disparada is False
 
 
 # ── El endpoint no puede decir que si cuando es que no ────────────────────
@@ -253,3 +253,71 @@ def test_el_selector_apunta_a_la_pantalla_que_existe():
 def _html_completo():
     with srv.app.test_client() as c:
         return c.get("/").get_data(as_text=True)
+
+
+# ── n8n devuelve 500 cuando el workflow no produce ofertas nuevas ─────────
+
+class RespuestaSinItems:
+    """Lo que devuelve n8n cuando el workflow acaba sin items que retornar."""
+    status_code = 500
+    text = '{"code":0,"message":"No item to return was found"}'
+
+
+def test_no_hay_ofertas_nuevas_NO_es_un_fallo(monkeypatch):
+    """Medido en produccion el 28-ago-2026.
+
+    El webhook esta en `responseMode: lastNode`, asi que n8n devuelve lo que
+    produzca el ultimo nodo. Cuando el dedup descarta todas las ofertas porque
+    ya estaban en Notion, ese nodo devuelve CERO items y n8n responde:
+
+        HTTP 500 {"code":0,"message":"No item to return was found"}
+
+    El workflow acabo en `success` (ejecucion 40550, 11 nodos, 6 segundos): la
+    busqueda SE HIZO. Tratar ese 500 como fallo hacia que la pantalla dijera "no
+    se ha podido lanzar la busqueda" cuando si se habia lanzado.
+
+    Un 500 con ESE mensaje concreto significa "hecho, sin novedades".
+    """
+    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
+    monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaSinItems())
+    assert srv.disparar_busqueda(USUARIO_NOTION).disparada is True
+
+
+def test_un_500_de_verdad_sigue_siendo_un_fallo(monkeypatch):
+    class ErrorReal:
+        status_code = 500
+        text = '{"message":"Workflow could not be started"}'
+
+    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
+    monkeypatch.setattr(srv.requests, "post", lambda *a, **k: ErrorReal())
+    assert srv.disparar_busqueda(USUARIO_NOTION).disparada is False
+
+
+def test_un_404_sigue_siendo_un_fallo(monkeypatch):
+    # El webhook que no existe: el bug original de esta manana.
+    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-ahora")
+    monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaFalsa(404))
+    assert srv.disparar_busqueda(USUARIO_NOTION).disparada is False
+
+
+def test_se_distingue_buscada_de_hay_ofertas_nuevas(monkeypatch):
+    """"Recibiras las ofertas" seria mentira si el dedup no dejo ninguna nueva.
+
+    Son dos cosas distintas y la pantalla tiene que poder decir cual: la busqueda
+    se hizo (`busqueda_disparada`) y ademas encontro algo (`hay_novedades`).
+    """
+    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
+    monkeypatch.setattr(srv, "buscar_usuario_por_email", lambda e: USUARIO_NOTION)
+    monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaSinItems())
+    with srv.app.test_client() as c:
+        r = c.post("/accion-existente",
+                   json={"email": "veronica@cookyourwebai.es", "accion": "ahora"}).get_json()
+    assert r["busqueda_disparada"] is True
+    assert r["hay_novedades"] is False
+
+
+def test_la_pantalla_tiene_TRES_estados():
+    """Se lanzo y hay novedades, se lanzo y no hay, y no se pudo lanzar."""
+    cuerpo = _accion_existente()
+    assert "hay_novedades" in cuerpo, "la pantalla no distingue si encontro algo"
+    assert "no hay ofertas nuevas" in cuerpo
