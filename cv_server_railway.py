@@ -42,16 +42,7 @@ from real_jobs import buscar_ofertas_reales
 # Los modelos y sus claves viven en `llm.py`, que es quien los usa. Aqui estaban
 # duplicados: dos definiciones del mismo valor acaban separandose siempre.
 
-# ── Google Drive ──────────────────────────────
-GOOGLE_CLIENT_ID     = os.environ["GOOGLE_CLIENT_ID"]
-GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
-GOOGLE_REFRESH_TOKEN = os.environ["GOOGLE_REFRESH_TOKEN"]
-# Dos carpetas SEPARADAS a proposito: los CV Master son la fuente de verdad y
-# se leen; los CV generados son salida y se acumulan a varios por dia. Si
-# comparten carpeta, en semanas es imposible distinguirlos y se corre el riesgo
-# de leer como master un CV generado.
-FOLDER_CV_MASTERS    = os.getenv("FOLDER_CV_MASTERS", "1duJA_G3lLbOqiUYoSJcsXAvbtJUdcmzR")
-FOLDER_CV_GENERADOS  = os.getenv("FOLDER_CV_GENERADOS", "1tHuVOIz3ratjRp8AmHsF0kGVpmy9DocY")
+# Las credenciales y carpetas de Drive viven en `drive.py`, que es quien las usa.
 
 # ── Notion ────────────────────────────────────
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
@@ -112,59 +103,6 @@ from llm import (  # noqa: F401
 
 
 
-# ══════════════════════════════════════════════
-# GOOGLE DRIVE
-# ══════════════════════════════════════════════
-
-def get_drive_service():
-    creds = Credentials(
-        token=None,
-        refresh_token=GOOGLE_REFRESH_TOKEN,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        scopes=["https://www.googleapis.com/auth/drive"],
-    )
-    creds.refresh(Request())
-    return build("drive", "v3", credentials=creds)
-
-
-def subir_cv_a_drive(docx_bytes: bytes, nombre_archivo: str) -> str:
-    service = get_drive_service()
-    file_metadata = {
-        "name":    nombre_archivo,
-        "parents": [FOLDER_CV_GENERADOS],
-    }
-    media = MediaIoBaseUpload(
-        io.BytesIO(docx_bytes),
-        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
-    file = service.files().create(
-        body=file_metadata, media_body=media, fields="id, webViewLink"
-    ).execute()
-
-    # Hacer público (solo lectura)
-    service.permissions().create(
-        fileId=file["id"],
-        body={"role": "reader", "type": "anyone"},
-    ).execute()
-
-    return file.get("webViewLink", "")
-
-
-# MimeTypes de Google Docs que necesitan export en vez de get_media
-_GDOC_EXPORT = {
-    "application/vnd.google-apps.document":       "text/plain",
-    "application/vnd.google-apps.presentation":   "text/plain",
-    "application/vnd.google-apps.spreadsheet":    "text/csv",
-}
-
-
-# ── Guardrail de veracidad: cifras inventadas ────
-# El prompt YA prohibe inventar metricas y el modelo lo hizo igual (caso real:
-# "serving millions of users", cifra que no existe en el Master). Una instruccion
-# es una peticion, no una garantia: la salida se VERIFICA contra la fuente.
-
 # Los guardrails viven en `guardrails.py`. Se reexportan aqui para no cambiar la
 # superficie publica del modulo: los endpoints y los tests los siguen viendo en
 # `cv_server_railway`.
@@ -182,96 +120,27 @@ from guardrails import (  # noqa: F401
     _tecnologias_en,
 )
 
-class MasterElegido(NamedTuple):
-    """Master seleccionado para un idioma, con la URL de la que sale.
 
-    Sin la url no se puede reportar CUAL master se usó: la respuesta acababa
-    devolviendo siempre el master inglés aunque el CV fuese en español.
-    """
-    file_id: str
-    url:     str
+# ══════════════════════════════════════════════
+# GOOGLE DRIVE
+# ══════════════════════════════════════════════
 
+# El acceso a Drive vive en `drive.py`. Se reexporta para no cambiar la
+# superficie publica del modulo.
+from drive import (  # noqa: F401
+    FOLDER_CV_GENERADOS,
+    FOLDER_CV_MASTERS,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REFRESH_TOKEN,
+    MasterCV,
+    MasterElegido,
+    elegir_master,
+    get_drive_service,
+    leer_cv_master_desde_drive,
+    subir_cv_a_drive,
+)
 
-def elegir_master(usuario: dict, idioma: str) -> MasterElegido:
-    """Elige la fuente del master segun el idioma. Pura: no toca Drive.
-    idioma='en' -> 'CV Master URL' (ingles); cualquier otro -> 'CV Master URL ES'
-    (con fallback al master ingles si no hay version española configurada)."""
-    if idioma == "en":
-        file_id = (usuario.get("cv_master_file_id") or "").strip()
-        url = usuario.get("cv_master_url", "") or ""
-    else:  # 'es' (o cualquier otro) -> master español, con fallback al ingles
-        file_id = ""
-        url = usuario.get("cv_master_url_es", "") or ""
-        if not url:
-            file_id = (usuario.get("cv_master_file_id") or "").strip()
-            url = usuario.get("cv_master_url", "") or ""
-
-    # Si no hay file_id directo, extraerlo de la URL (link de Drive/Docs)
-    if not file_id and url:
-        m = re.search(r'/d/([a-zA-Z0-9_-]+)', url) or re.search(r'id=([a-zA-Z0-9_-]+)', url)
-        if m:
-            file_id = m.group(1)
-
-    return MasterElegido(file_id, url)
-
-
-class MasterCV(NamedTuple):
-    """Texto del master y la URL de la que se leyó de verdad."""
-    texto: str
-    url:   str
-
-
-def leer_cv_master_desde_drive(usuario: dict, idioma: str = "es") -> MasterCV:
-    """Descarga el CV master en texto plano desde Drive, eligiendo la fuente segun idioma."""
-    service = get_drive_service()
-
-    file_id, url = elegir_master(usuario, idioma)
-
-    if not file_id:
-        return MasterCV("", "")
-
-    try:
-        # Detectar mimeType para saber cómo extraer el texto
-        file_meta = service.files().get(fileId=file_id, fields="mimeType, name", supportsAllDrives=True).execute()
-        mime = file_meta.get("mimeType", "")
-        name = file_meta.get("name", "")
-
-        if mime in _GDOC_EXPORT:
-            # Google Docs nativos → exportar a texto
-            export_mime = _GDOC_EXPORT[mime]
-            req = service.files().export_media(fileId=file_id, mimeType=export_mime)
-        else:
-            # Archivos binarios (DOCX, PDF, etc.) → get_media
-            req = service.files().get_media(fileId=file_id)
-
-        buf = io.BytesIO()
-        from googleapiclient.http import MediaIoBaseDownload
-        dl = MediaIoBaseDownload(buf, req)
-        done = False
-        while not done:
-            _, done = dl.next_chunk()
-        buf.seek(0)
-
-        # DOCX es un ZIP, NO texto plano: hay que parsearlo con python-docx.
-        # Decodificar sus bytes como utf-8 devuelve basura ("PK...word/document.xml")
-        # y el LLM nunca ve la experiencia real → CV genérico.
-        DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        if mime == DOCX_MIME or name.lower().endswith(".docx"):
-            doc = Document(buf)
-            partes = [p.text for p in doc.paragraphs if p.text.strip()]
-            # Las skills suelen ir en tablas → también hay que extraerlas
-            for tabla in doc.tables:
-                for fila in tabla.rows:
-                    for celda in fila.cells:
-                        if celda.text.strip():
-                            partes.append(celda.text)
-            return MasterCV("\n".join(partes), url)
-
-        # Texto plano u otros formatos legibles
-        return MasterCV(buf.read().decode("utf-8", errors="replace"), url)
-    except Exception as e:
-        logger.warning("No se pudo leer CV master (file_id=%s): %s", file_id, e)
-        return MasterCV("", url)
 
 
 # ══════════════════════════════════════════════

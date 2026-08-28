@@ -7,13 +7,14 @@ masters se vuelve inusable y el riesgo real es leer un master equivocado.
 from unittest.mock import MagicMock, patch
 
 import cv_server_railway as srv
+import drive  # las funciones VIVEN aqui: parchear el reexport de `srv` no las cambia
 
 
 def _subir_y_capturar_parents():
     service = MagicMock()
     service.files().create().execute.return_value = {"id": "X", "webViewLink": "https://drive/x"}
-    with patch.object(srv, "get_drive_service", return_value=service):
-        srv.subir_cv_a_drive(b"contenido-docx", "cv-prueba.docx")
+    with patch.object(drive, "get_drive_service", return_value=service):
+        drive.subir_cv_a_drive(b"contenido-docx", "cv-prueba.docx")
     # Ultima llamada real a create() con body
     for call in reversed(service.files().create.call_args_list):
         if "body" in call.kwargs:
