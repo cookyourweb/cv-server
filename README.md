@@ -22,8 +22,9 @@ Un modelo al que le pides "adapta este CV a esta oferta" tiende a acercar el can
 al puesto: añade una tecnología que la oferta pide, redondea una cifra, sube el alcance
 de un rol. Cada una de esas frases es indefendible en una entrevista.
 
-La respuesta de este servicio no es solo el CV: son **cinco guardrails** que verifican
-la salida contra la fuente de verdad.
+La respuesta de este servicio no es solo el CV: son **seis guardrails** que verifican
+la salida contra la fuente de verdad. Desde el 28-ago-2026 se aplican también a la
+**carta**, que hasta entonces salía sin ninguno.
 
 ```json
 {
@@ -34,6 +35,7 @@ la salida contra la fuente de verdad.
   "tecnologias_no_respaldadas": [],
   "skills_no_respaldadas": [],
   "titular_fuera_de_contrato": [],
+  "experiencia_mal_atribuida": [],
   "descripcion_oferta": { "suficiente": true, "chars": 1694, "aviso": "" }
 }
 ```
@@ -44,11 +46,29 @@ la salida contra la fuente de verdad.
 | `tecnologias_no_respaldadas` | Tecnologías del catálogo que la oferta pide y el Master no respalda | *"experiencia en arquitecturas PHP/Symfony"* en un perfil sin PHP |
 | `skills_no_respaldadas` | Cada skill declarada, verificada una a una y sin catálogo | *"React 19 · Tailwind (v4) · Radix UI · Mantine"*: el stack de la oferta, copiado entero |
 | `titular_fuera_de_contrato` | Titulares que inventan identidad o suben seniority | El titular copiando el título de la vacante |
+| `experiencia_mal_atribuida` | Años de experiencia pegados a la tecnología equivocada | El Master dice *"Vue.js, 8 años"* y la carta escribió *"más de ocho años con React y TypeScript"* |
 | `descripcion_oferta` | **Entrada** insuficiente para adaptar nada | Ofertas de LinkedIn con 172 caracteres: el titular reformulado |
 
 El de la descripción es el que más cuesta ver: los otros miran la salida, y **un CV
 genérico no inventa nada, simplemente no dice nada**. Sin mirar la entrada, `ok: true`
 oculta que no había material.
+
+`experiencia_mal_atribuida` cubre un hueco distinto de todos los demás: los otros
+comprueban si algo **existe** en el Master, este comprueba **a quién pertenece**. React
+existe, el 8 existe, y la frase que los junta es falsa.
+
+### La carta también pasa los guardrails
+
+Hasta el 18-ago-2026 los detectores se aplicaban solo a `contenido_cv`. La carta es lo
+PRIMERO que lee un humano, el CV lo abren después, y salía sin verificar. Ahora
+`/generar-carta` devuelve `avisos` con lo que encuentre.
+
+Se aplican tres: `experiencia_mal_atribuida`, `tecnologias_no_respaldadas` y
+`cifras_no_respaldadas`. `skills_no_respaldadas` queda fuera **a propósito**: lee líneas
+de skills separadas por puntos, y una carta es prosa. Aplicarlo ahí daría solo ruido.
+
+Y avisan, no abortan: un aviso puede ser una reformulación legítima, y abortar dejaría a
+la usuaria sin carta.
 
 ### El quinto guardrail nació del fallo del segundo
 
