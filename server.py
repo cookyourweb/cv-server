@@ -137,6 +137,7 @@ from llm import (  # noqa: F401
 # Los guardrails viven en `guardrails.py`. Se reexportan aqui para no cambiar la
 # superficie publica del modulo: los endpoints y los tests los siguen viendo en
 # `server`.
+import guardrails
 from guardrails import (  # noqa: F401
     DESCRIPCION_MINIMA,
     construir_titular,
@@ -1074,18 +1075,15 @@ REGLAS:
     # reformulacion legitima, y abortar dejaria a la usuaria sin carta.
     # `detectar_skills_no_respaldadas` queda fuera a proposito: lee lineas de skills
     # separadas por puntos, y una carta es prosa. Aplicarlo aqui daria ruido.
-    avisos = []
-    for nombre_regla, sospechosas in (
-        ("EXPERIENCIA MAL ATRIBUIDA", detectar_experiencia_mal_atribuida(carta, cv_master)),
-        ("TECNOLOGIAS NO RESPALDADAS", detectar_tecnologias_no_respaldadas(carta, cv_master)),
-        ("CIFRAS NO RESPALDADAS", detectar_cifras_no_respaldadas(carta, cv_master)),
-    ):
-        if sospechosas:
-            logger.warning(
-                "%s en la CARTA de %s para %s/%s: %s",
-                nombre_regla, email, empresa, puesto, sospechosas,
-            )
-            avisos.append({"regla": nombre_regla, "hallazgos": sospechosas})
+    # Este endpoint ya NO sabe cuantos guardrails hay ni cuales aplican: lo pide
+    # y el registro decide. Anadir el septimo no toca esta linea.
+    avisos = guardrails.revisar(carta, cv_master, guardrails.CARTA)
+    for aviso in avisos:
+        logger.warning(
+            "%s en la CARTA de %s para %s/%s: %s",
+            aviso["regla"].upper().replace("_", " "), email, empresa, puesto,
+            aviso["hallazgos"],
+        )
 
     return jsonify({
         "ok":              True,

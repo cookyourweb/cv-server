@@ -559,3 +559,79 @@ def evaluar_descripcion_oferta(descripcion: str, minimo: int = None) -> dict:
         }
 
     return {"suficiente": True, "chars": len(descripcion or ""), "aviso": ""}
+
+
+# ══════════════════════════════════════════════
+# REGISTRO DE GUARDRAILS
+# ══════════════════════════════════════════════
+# Antes cada endpoint enumeraba los detectores a mano, asi que anadir el septimo
+# obligaba a modificar `/generar-cv` y `/generar-carta`. Aqui el contrato es uno
+# solo y cada guardrail declara a que documentos se aplica: quien llama pide
+# `guardrails_para("carta")` y no necesita saber cuantos hay ni cuales.
+
+from dataclasses import dataclass
+from typing import Callable, Protocol
+
+CV = "cv"
+CARTA = "carta"
+
+
+class Guardrail(Protocol):
+    """Lo que cualquier guardrail tiene que ofrecer. Nada mas.
+
+    Un `Protocol` no se hereda: cualquier objeto con estos tres miembros vale.
+    El contrato es UN metodo a proposito, para que nadie tenga que implementar
+    lo que no usa.
+    """
+
+    nombre: str
+    aplica_a: frozenset
+    def revisar(self, texto: str, master: str) -> list: ...
+
+
+@dataclass(frozen=True)
+class _Detector:
+    """Envuelve una funcion detectora para que cumpla el contrato.
+
+    Las funciones ya estaban escritas y probadas: no se reescriben, se adaptan.
+    """
+
+    nombre: str
+    aplica_a: frozenset
+    funcion: Callable[[str, str], list]
+
+    def revisar(self, texto: str, master: str) -> list:
+        return self.funcion(texto, master)
+
+
+# El reparto vive AQUI, no en los endpoints, porque es el guardrail quien sabe
+# de si mismo. `skills_no_respaldadas` no se aplica a la carta a proposito: lee
+# lineas de skills separadas por puntos, y una carta es prosa.
+GUARDRAILS = [
+    _Detector("cifras_no_respaldadas", frozenset({CV, CARTA}), detectar_cifras_no_respaldadas),
+    _Detector("tecnologias_no_respaldadas", frozenset({CV, CARTA}), detectar_tecnologias_no_respaldadas),
+    _Detector("skills_no_respaldadas", frozenset({CV}), detectar_skills_no_respaldadas),
+    # OJO: hoy solo se aplica a la carta. En el CV nunca se llego a aplicar, y
+    # ese hueco se conserva aqui a proposito: cambiar comportamiento dentro de un
+    # refactor es como se rompen las cosas en silencio. Anotado para decidirlo.
+    _Detector("experiencia_mal_atribuida", frozenset({CARTA}), detectar_experiencia_mal_atribuida),
+]
+
+
+def guardrails_para(destino: str) -> list:
+    """Los guardrails que aplican a un documento: `CV` o `CARTA`."""
+    return [g for g in GUARDRAILS if destino in g.aplica_a]
+
+
+def revisar(texto: str, master: str, destino: str) -> list:
+    """Pasa el texto por sus guardrails y devuelve solo lo que encontro algo.
+
+    Avisa, no bloquea: la decision de que hacer con los hallazgos es de quien
+    llama, no de aqui.
+    """
+    hallazgos = []
+    for g in guardrails_para(destino):
+        encontrados = g.revisar(texto, master)
+        if encontrados:
+            hallazgos.append({"regla": g.nombre, "hallazgos": encontrados})
+    return hallazgos
