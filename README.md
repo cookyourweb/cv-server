@@ -3,6 +3,9 @@
 [![tests](https://github.com/cookyourweb/cv-server/actions/workflows/tests.yml/badge.svg)](https://github.com/cookyourweb/cv-server/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+> Cómo se trabaja aquí (ciclo rojo-verde-commit, hook de pre-commit y reglas de
+> commit): [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 Servicio que genera **CVs y cartas adaptados a cada oferta** con LLMs, sin inventar
 experiencia. Flask en producción, migrándose a FastAPI de forma incremental.
 
