@@ -136,3 +136,23 @@ def test_programar_manana_no_dispara_busqueda(monkeypatch):
                    json={"email": "veronica@cookyourwebai.es", "accion": "manana"}).get_json()
     assert r["busqueda_disparada"] is False
     assert r["ok"] is True
+
+
+# ── La pantalla tampoco puede cantar exito sin mirar la respuesta ─────────
+
+def _pagina():
+    with srv.app.test_client() as c:
+        return c.get("/").get_data(as_text=True)
+
+
+def test_la_pantalla_no_tira_la_respuesta_del_servidor():
+    # `accionExistente` hacia `await resp.json();` sin guardar nada y pintaba
+    # "Buscando ahora mismo" igual. Arreglar el backend no servia de nada:
+    # el mensaje no dependia de lo que contestara.
+    # La comprobacion es que TODA lectura de la respuesta se asigne a algo.
+    pagina = _pagina()
+    assert pagina.count("await resp.json();") == pagina.count("= await resp.json();")
+
+
+def test_la_pantalla_mira_si_la_busqueda_se_disparo():
+    assert "busqueda_disparada" in _pagina()

@@ -1683,10 +1683,13 @@ async function accionExistente(accion) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ email: currentEmail, nombre: currentNombre, accion })
     });
-    await resp.json();
+    const data = await resp.json();
     if (accion === 'ahora') {
-      document.getElementById('confirmacion').textContent =
-        'Buscando ahora mismo. Recibirás las ofertas en unos minutos en tu email.';
+      // La respuesta se MIRA. Antes se tiraba y esta pantalla cantaba exito
+      // aunque n8n no hubiera recibido nada.
+      document.getElementById('confirmacion').textContent = data.busqueda_disparada
+        ? 'Buscando ahora mismo. Recibirás las ofertas en unos minutos en tu email.'
+        : 'No se ha podido lanzar la búsqueda ahora mismo. Entras igualmente en el barrido de las 9:00.';
     } else {
       document.getElementById('confirmacion').textContent =
         'De acuerdo. Mañana a las 9:00 recibirás tus ofertas personalizadas.';
