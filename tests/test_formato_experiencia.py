@@ -26,8 +26,11 @@ que es más seguro que reordenar las ramas del render.
 import pathlib
 import re
 
-FUENTE = pathlib.Path(__file__).resolve().parent.parent / "cv_server_railway.py"
-SRC = FUENTE.read_text(encoding="utf-8")
+# Dos fuentes: la PLANTILLA del prompt sigue en el servidor, y el RENDER del DOCX
+# se mudo a `docx_render.py` el 28-ago-2026. Cada test mira donde vive lo suyo.
+RAIZ = pathlib.Path(__file__).resolve().parent.parent
+SRC = (RAIZ / "cv_server_railway.py").read_text(encoding="utf-8")
+RENDER = (RAIZ / "docx_render.py").read_text(encoding="utf-8")
 
 
 def test_el_puesto_va_antes_que_la_empresa_en_los_dos_idiomas():
@@ -79,7 +82,7 @@ def test_el_render_sigue_detectando_la_linea_de_puesto_por_el_guion():
 
     Documentado en PROMPT-ADAPTACION-CV.md ('no metas un saneado tipográfico global
     antes de parsear el DOCX')."""
-    assert re.search(r'if \("—" in linea or "–" in linea\)', SRC), (
+    assert re.search(r'if \("—" in linea or "–" in linea\)', RENDER), (
         "Cambió la detección de la línea de puesto/empresa en el render del DOCX: "
         "revisa que la plantilla siga usando el guion largo como marcador."
     )
