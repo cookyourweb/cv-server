@@ -1,5 +1,8 @@
 # cv-server
 
+[![tests](https://github.com/cookyourweb/cv-server/actions/workflows/tests.yml/badge.svg)](https://github.com/cookyourweb/cv-server/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Servicio que genera **CVs y cartas adaptados a cada oferta** con LLMs, sin inventar
 experiencia. Flask en producción, migrándose a FastAPI de forma incremental.
 

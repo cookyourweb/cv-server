@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  # Los modelos de los proveedores se retiran sin avisar. Este cron ejercita el
+  # canario `test_modelos_retirados.py` una vez por semana aunque nadie toque el
+  # repo: el 16-ago-2026 Groq retiro un modelo y el sistema estuvo diez dias
+  # muerto sin que ningun test corriera.
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Tests
+        # conftest.py inyecta credenciales dummy: los tests mockean las llamadas
+        # externas y no tocan Notion, Drive ni ningun LLM.
+        run: pytest -q
