@@ -6,6 +6,15 @@ de POR QUÉ el código hace lo que hace: decisiones, fixes y trampas que no se v
 el código a secas.
 
 Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
+
+> ⚠️ **Render NO lee el `Procfile`.** Tiene su propio *Start Command* guardado en
+> el panel (Settings → Start Command), y ese es el que manda. El 28-ago-2026 el
+> renombrado a `server.py` tumbo un despliegue por esto: el Procfile decia
+> `server:app` y el panel seguia diciendo `cv_server_railway:app`.
+> Si cambias el modulo o los flags de arranque, **hay que cambiarlo en los dos
+> sitios**. El comando bueno, con el timeout que necesita la generacion de CV:
+>
+>     gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120
 Archivo principal: `server.py`. Ranking de ofertas: `real_jobs.py`.
 
 **28-ago-2026 — el fichero principal se partio en seis y se renombro.** Era
