@@ -425,5 +425,5 @@ Rol: *experto en cartas de presentación*. Máximo **250 palabras**, en el idiom
 
 **Última actualización:** 24 julio 2026
 **Ver también:** `../CHANGELOG.md` (cambios técnicos), `../README.md` (guía de usuario),
-`../test_proyeccion_arquetipos.py` (invariantes del prompt: regla maestra, titular base,
+`../tests/test_proyeccion_arquetipos.py` (invariantes del prompt: regla maestra, titular base,
 arquetipos, hechos-no-efectos).

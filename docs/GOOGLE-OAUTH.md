@@ -67,7 +67,7 @@ Uno solo no basta, y ya se falló por esto el 11-ago.
 ```bash
 # 1. generar. Ojo: el venv es oculto y las dependencias no estan en el python del sistema
 ~/Desktop/proyectosActivosCookyourweb/cv-server/.venv/bin/python \
-  ~/Desktop/proyectosActivosCookyourweb/cv-server/regenera_token.py
+  ~/Desktop/proyectosActivosCookyourweb/cv-server/scripts/regenera_token.py
 # abre localhost:8080, se elige la cuenta dueña del Drive,
 # guarda el token en .env y verifica que lee CV_MASTER_VERONICA_ES
 

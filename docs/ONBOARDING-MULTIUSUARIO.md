@@ -313,4 +313,4 @@ EVOLUCIÓN PROFESIONAL         (extraído de fechas y puestos)
 ---
 
 **Ver también**: `PROMPT-ADAPTACION-CV.md` (las reglas que esta entrevista alimenta),
-`../test_proyeccion_arquetipos.py` (los invariantes del prompt).
+`../tests/test_proyeccion_arquetipos.py` (los invariantes del prompt).

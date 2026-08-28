@@ -26,7 +26,7 @@ que es más seguro que reordenar las ramas del render.
 import pathlib
 import re
 
-FUENTE = pathlib.Path(__file__).with_name("cv_server_railway.py")
+FUENTE = pathlib.Path(__file__).resolve().parent.parent / "cv_server_railway.py"
 SRC = FUENTE.read_text(encoding="utf-8")
 
 

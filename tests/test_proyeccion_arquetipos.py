@@ -24,7 +24,7 @@ el fichero como texto: no arrastra Flask/docx ni llama a ningun LLM.
 import pathlib
 import re
 
-FUENTE = pathlib.Path(__file__).with_name("cv_server_railway.py")
+FUENTE = pathlib.Path(__file__).resolve().parent.parent / "cv_server_railway.py"
 SRC = FUENTE.read_text(encoding="utf-8")
 
 
