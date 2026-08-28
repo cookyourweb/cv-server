@@ -43,8 +43,14 @@ def test_las_tecnologias_de_alrededor_se_siguen_viendo():
 
 def test_solo_hay_UNA_definicion_de_tecnologias_en():
     # El canario del bug: dos `def _tecnologias_en` en el mismo modulo y la
-    # segunda pisa a la primera en silencio.
-    fuente = (srv.__file__ or "")
-    with open(fuente, encoding="utf-8") as f:
-        cuerpo = f.read()
-    assert cuerpo.count("\ndef _tecnologias_en(") == 1
+    # segunda pisa a la primera en silencio. Desde el 28-ago-2026 la funcion vive
+    # en `guardrails.py`, asi que se comprueban los dos ficheros: si reapareciera
+    # una copia en el servidor, volveria a pisar a la buena via el re-export.
+    import guardrails
+
+    for modulo in (guardrails, srv):
+        with open(modulo.__file__, encoding="utf-8") as f:
+            cuerpo = f.read()
+        definiciones = cuerpo.count("\ndef _tecnologias_en(")
+        esperadas = 1 if modulo is guardrails else 0
+        assert definiciones == esperadas, f"{modulo.__name__}: {definiciones} definiciones"
