@@ -41,7 +41,7 @@ from real_jobs import buscar_ofertas_reales
 
 # ── LLM: Groq (primario) ──────────────────────
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]                          # requerido
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")  # default razonable
+GROQ_MODEL   = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")      # llama-3.3-70b-versatile lo retiro Groq el 16-ago-2026
 
 # ── LLM: Gemini (fallback opcional) ──────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

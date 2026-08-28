@@ -50,7 +50,7 @@ REMOTIVE_API_URL = "https://remotive.com/api/remote-jobs"
 REMOTIVE_TIMEOUT = 15  # segundos
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL_DEFAULT = "llama-3.3-70b-versatile"
+GROQ_MODEL_DEFAULT = "openai/gpt-oss-120b"  # llama-3.3-70b-versatile lo retiro Groq el 16-ago-2026
 GROQ_TIMEOUT = 30
 
 
