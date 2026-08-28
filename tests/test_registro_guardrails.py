@@ -28,10 +28,27 @@ def test_todos_los_guardrails_cumplen_el_contrato():
 
 
 def test_son_sustituibles_entre_si():
-    # Liskov: cualquiera de ellos vale donde se espera un guardrail, y todos
-    # devuelven lo mismo (una lista de hallazgos) ante la misma llamada.
+    """Liskov: un sustituto puede prometer MAS, nunca menos.
+
+    Se les pasa a todos el caso mas hostil (texto y master vacios) y se exige lo
+    mismo a cada uno: que no reviente y que devuelva una lista. Las dos formas de
+    violar Liskov aqui serian devolver `None` cuando no hay nada, o lanzar una
+    excepcion que los demas no lanzan. Las dos rompen a quien llama sin que quien
+    llama haya cambiado una linea.
+    """
     for gr in g.GUARDRAILS:
-        assert isinstance(gr.revisar("", ""), list)
+        for texto, master in (("", ""), ("algo", ""), ("", "algo")):
+            try:
+                salida = gr.revisar(texto, master)
+            except Exception as e:  # noqa: BLE001 - cazarla ES el test
+                raise AssertionError(
+                    f"{gr.nombre} lanza {type(e).__name__} con "
+                    f"texto={texto!r} master={master!r}; los demas no lanzan"
+                ) from e
+            assert isinstance(salida, list), (
+                f"{gr.nombre} devuelve {type(salida).__name__} en vez de lista: "
+                "quien llama espera poder recorrerla siempre"
+            )
 
 
 def test_el_reparto_actual_se_conserva():
