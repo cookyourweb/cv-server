@@ -657,6 +657,81 @@ def construir_titular(titular_llm: str, master_texto: str) -> str:
                       + ([seniority] if seniority else []))
 
 
+# Numeros escritos con letra: "ocho años" y "8 años" son la misma afirmacion, y el
+# modelo escribe la primera forma con mucha mas frecuencia que la segunda.
+_NUM_PALABRA = {
+    "un": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6,
+    "siete": 7, "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12,
+    "trece": 13, "catorce": 14, "quince": 15, "dieciseis": 16, "diecisiete": 17,
+    "dieciocho": 18, "diecinueve": 19, "veinte": 20,
+}
+
+# Las palabras van de mas larga a mas corta para que "dieciseis" gane a "diez".
+_ANIOS_RE = re.compile(
+    r"\b(\d{1,2}|" + "|".join(sorted(_NUM_PALABRA, key=len, reverse=True)) + r")\s*\+?\s*a[nñ]os\b",
+    re.IGNORECASE,
+)
+
+
+def _valor_anios(bruto: str) -> int:
+    bruto = bruto.lower()
+    return int(bruto) if bruto.isdigit() else _NUM_PALABRA[bruto]
+
+
+def _tecnologias_en(fragmento: str) -> set:
+    """Tecnologias del catalogo nombradas en el fragmento, en su forma canonica."""
+    nombradas = set()
+    for alias, canonico in _TEC_ALIAS.items():
+        if re.search(rf"(?<![\w.]){re.escape(alias)}(?![\w])", fragmento, re.IGNORECASE):
+            nombradas.add(canonico)
+    return nombradas
+
+
+def detectar_experiencia_mal_atribuida(texto: str, master_texto: str) -> list:
+    """Años de experiencia que el texto le pega a una tecnologia y el Master a otra.
+
+    El hueco que cubre: los tres guardrails anteriores comprueban si algo EXISTE
+    en el Master. Aqui se comprueba a QUIEN pertenece. Caso real del 18ago2026:
+    el Master dice `Vue.js - 8 años` y la carta escribio "mas de ocho años con
+    React y TypeScript". React existe, el 8 existe, y la frase es falsa.
+
+    Es mas peligroso que una invencion: una tecnologia inventada se cae en la
+    primera pregunta, unos años mal atribuidos aguantan hasta la entrevista
+    tecnica. Sin master no se alerta: no hay fuente contra la que contrastar."""
+    if not texto or not master_texto:
+        return []
+
+    # Los años son del nombre que tienen AL LADO, no de toda la linea. El Master
+    # real escribe "Vue.js (8 años), React, Angular, TypeScript, ..." en una sola
+    # linea, y leyendo la linea entera esos ocho años se repartirian entre las once
+    # tecnologias de la lista: React quedaria respaldado y la regla no serviria de
+    # nada. Paso el 18-ago-2026, con el detector en verde en sus propios tests.
+    # Se parte por comas y puntos y coma. Las filas de una tabla no llevan comas,
+    # asi que siguen entrando enteras y el numero sigue encontrando a su tecnologia.
+    duenas_por_anios = {}
+    for linea in master_texto.splitlines():
+        for trozo in re.split(r"[,;]", linea):
+            for m in _ANIOS_RE.finditer(trozo):
+                duenas_por_anios.setdefault(_valor_anios(m.group(1)), set()).update(
+                    _tecnologias_en(trozo)
+                )
+
+    # El texto generado se lee por FRASES, no por lineas: el salto de linea de un
+    # parrafo justificado parte "ocho\naños" y se perderia la afirmacion.
+    marcadas = set()
+    for frase in re.split(r"[.;:]", " ".join(texto.split())):
+        for m in _ANIOS_RE.finditer(frase):
+            duenas = duenas_por_anios.get(_valor_anios(m.group(1)))
+            if not duenas:
+                continue        # el Master no asigna esos años a ninguna tecnologia
+            for tec in _tecnologias_en(frase) - duenas:
+                marcadas.add(
+                    f"{tec}: se le atribuyen {_valor_anios(m.group(1))} años que el "
+                    f"Master asigna a {', '.join(sorted(duenas))}"
+                )
+    return sorted(marcadas)
+
+
 def detectar_titular_fuera_de_contrato(titular: str, master_texto: str) -> list:
     """Avisos si el titular generado no respeta el contrato del PERFIL BASE.
 
@@ -2365,12 +2440,33 @@ REGLAS:
     # Fuera guiones largos y flechas: la carta va a la empresa. Regla NO NEGOCIABLE.
     carta = sanear_tipografia(carta, idioma)
 
+    # GUARDRAILS DE LA CARTA. Hasta el 18-ago-2026 la carta salia SIN NINGUNO: los
+    # cuatro detectores existentes se aplicaban solo a `contenido_cv`. Y la carta es
+    # lo primero que lee un humano; el CV lo abren despues, si les interesas.
+    # Igual que en /generar-cv, esto AVISA y no aborta: un aviso puede ser una
+    # reformulacion legitima, y abortar dejaria a la usuaria sin carta.
+    # `detectar_skills_no_respaldadas` queda fuera a proposito: lee lineas de skills
+    # separadas por puntos, y una carta es prosa. Aplicarlo aqui daria ruido.
+    avisos = []
+    for nombre_regla, sospechosas in (
+        ("EXPERIENCIA MAL ATRIBUIDA", detectar_experiencia_mal_atribuida(carta, cv_master)),
+        ("TECNOLOGIAS NO RESPALDADAS", detectar_tecnologias_no_respaldadas(carta, cv_master)),
+        ("CIFRAS NO RESPALDADAS", detectar_cifras_no_respaldadas(carta, cv_master)),
+    ):
+        if sospechosas:
+            logger.warning(
+                "%s en la CARTA de %s para %s/%s: %s",
+                nombre_regla, email, empresa, puesto, sospechosas,
+            )
+            avisos.append({"regla": nombre_regla, "hallazgos": sospechosas})
+
     return jsonify({
         "ok":              True,
         "carta":           carta,
         "modelo_usado":    respuesta_llm.modelo,
         "email":           email,
         "cv_master_usado": bool(cv_master),
+        "avisos":          avisos,
     })
 
 
