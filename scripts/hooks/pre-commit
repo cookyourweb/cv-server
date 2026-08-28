@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Hook de pre-commit: la suite tiene que estar en verde ANTES de commitear.
+#
+# Vive en el repositorio, no en `.git/hooks`, para que viaje con el proyecto y se
+# pueda leer y revisar como cualquier otro fichero. Se activa una vez con:
+#
+#     git config core.hooksPath scripts/hooks
+#
+# Para saltarlo en un caso justificado: `git commit --no-verify`. Si hace falta a
+# menudo, el problema son los tests, no el hook.
+set -euo pipefail
+
+RAIZ="$(git rev-parse --show-toplevel)"
+cd "$RAIZ"
+
+if [ -x "venv/bin/python" ]; then
+  PY="venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="python3"
+else
+  echo "pre-commit: no encuentro python, me aparto" >&2
+  exit 0
+fi
+
+if ! "$PY" -c "import pytest" >/dev/null 2>&1; then
+  echo "pre-commit: pytest no esta instalado, me aparto" >&2
+  exit 0
+fi
+
+echo "pre-commit: corriendo la suite…"
+if ! "$PY" -m pytest -q; then
+  echo >&2
+  echo "COMMIT ABORTADO: la suite esta en rojo." >&2
+  echo "Arreglalo, o usa --no-verify si sabes por que lo saltas." >&2
+  exit 1
+fi
