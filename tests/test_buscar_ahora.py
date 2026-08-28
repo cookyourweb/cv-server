@@ -156,3 +156,33 @@ def test_la_pantalla_no_tira_la_respuesta_del_servidor():
 
 def test_la_pantalla_mira_si_la_busqueda_se_disparo():
     assert "busqueda_disparada" in _pagina()
+
+
+# ── El timeout: n8n no contesta hasta terminar el workflow entero ─────────
+
+def test_espera_lo_suficiente_para_que_n8n_termine(monkeypatch):
+    """Medido en produccion el 28-ago-2026: la ejecucion 40530 tardo 10,7s.
+
+    El webhook `buscar-para-user` esta en `responseMode: lastNode`, o sea que n8n
+    NO responde hasta acabar los 15 nodos: consultar Notion y llamar a tres
+    fuentes de ofertas. Con `timeout=8` el cv-server se rendia 2,7 segundos antes
+    de tiempo, y la pantalla decia "no se ha podido lanzar la busqueda" cuando la
+    busqueda SI se habia lanzado y termino en success.
+
+    Mentir diciendo que no cuando si es menos grave que al reves, pero sigue
+    siendo mentir.
+    """
+    capturado = {}
+
+    def _post(url, **kwargs):
+        capturado["timeout"] = kwargs.get("timeout")
+        return RespuestaFalsa(200)
+
+    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
+    monkeypatch.setattr(srv.requests, "post", _post)
+    srv.disparar_busqueda(USUARIO_NOTION)
+
+    assert capturado["timeout"] >= 30, (
+        f"timeout de {capturado['timeout']}s: el workflow tarda ~11s y puede ir mas "
+        "lento si Render esta frio"
+    )

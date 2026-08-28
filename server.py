@@ -427,7 +427,14 @@ def disparar_busqueda(usuario: dict) -> bool:
         logger.error("Búsqueda NO disparada: falta usuario o WEBHOOK_BUSCAR_AHORA")
         return False
     try:
-        r = requests.post(WEBHOOK_BUSCAR_AHORA, json=payload_buscar_para_user(usuario), timeout=8)
+        # 45s, no 8. El webhook esta en `responseMode: lastNode`: n8n no contesta
+        # hasta terminar los 15 nodos (Notion + tres fuentes de ofertas). Medido en
+        # produccion el 28-ago-2026: 10,7s con la instancia caliente. Con 8s el
+        # servidor se rendia antes de tiempo y la pantalla decia que la busqueda no
+        # se habia lanzado cuando SI se habia lanzado y acabo en success.
+        r = requests.post(
+            WEBHOOK_BUSCAR_AHORA, json=payload_buscar_para_user(usuario), timeout=45
+        )
     except Exception as e:
         logger.error("Búsqueda NO disparada, n8n no responde (%s): %s", WEBHOOK_BUSCAR_AHORA, e)
         return False
