@@ -582,6 +582,26 @@ class Guardrail(Protocol):
     Un `Protocol` no se hereda: cualquier objeto con estos tres miembros vale.
     El contrato es UN metodo a proposito, para que nadie tenga que implementar
     lo que no usa.
+
+    ═══ SI VAS A ESCRIBIR UN GUARDRAIL NUEVO, LEE ESTO ═══
+
+    La regla: **el sustituto puede prometer MAS, nunca menos.** Quien te llama no
+    sabe cual de los guardrails le ha tocado, asi que todos tienen que
+    comportarse igual ante la misma llamada. Si el tuyo promete menos, rompes a
+    quien llama sin que quien llama haya cambiado una linea.
+
+    Las tres formas de romperlo, y las tres pasan de verdad:
+
+    1. NO devuelvas `None` cuando no encuentres nada. Devuelve `[]`. Quien llama
+       hace `if encontrados:` y luego recorre: un `None` pasa el `if` de largo
+       pero revienta al recorrer.
+    2. NO lances excepciones que los demas no lanzan. Si el master llega vacio,
+       devuelve `[]`; los otros seis lo hacen.
+    3. NO exijas mas que los demas. Si todos aceptan texto vacio, el tuyo tambien.
+
+    `tests/test_registro_guardrails.py::test_son_sustituibles_entre_si` te lo
+    comprueba: pasa el caso mas hostil a todos y exige que ninguno lance y que
+    todos devuelvan lista.
     """
 
     nombre: str
