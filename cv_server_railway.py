@@ -687,15 +687,6 @@ def _valor_anios(bruto: str) -> int:
     return int(bruto) if bruto.isdigit() else _NUM_PALABRA[bruto]
 
 
-def _tecnologias_en(fragmento: str) -> set:
-    """Tecnologias del catalogo nombradas en el fragmento, en su forma canonica."""
-    nombradas = set()
-    for alias, canonico in _TEC_ALIAS.items():
-        if re.search(rf"(?<![\w.]){re.escape(alias)}(?![\w])", fragmento, re.IGNORECASE):
-            nombradas.add(canonico)
-    return nombradas
-
-
 def detectar_experiencia_mal_atribuida(texto: str, master_texto: str) -> list:
     """Años de experiencia que el texto le pega a una tecnologia y el Master a otra.
 
