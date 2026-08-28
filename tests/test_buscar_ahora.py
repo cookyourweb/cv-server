@@ -186,3 +186,16 @@ def test_espera_lo_suficiente_para_que_n8n_termine(monkeypatch):
         f"timeout de {capturado['timeout']}s: el workflow tarda ~11s y puede ir mas "
         "lento si Render esta frio"
     )
+
+
+def test_el_formulario_no_se_cachea():
+    """El navegador servia el HTML viejo despues de desplegar el arreglo.
+
+    Caso real del 28-ago-2026: el codigo desplegado leia `busqueda_disparada`
+    correctamente, pero la pantalla seguia mostrando el mensaje anterior porque
+    el navegador tenia la pagina en cache. Como el HTML lleva dentro el
+    JavaScript, una pagina cacheada es LOGICA cacheada.
+    """
+    with srv.app.test_client() as c:
+        cabecera = c.get("/").headers.get("Cache-Control", "")
+    assert "no-store" in cabecera, f"Cache-Control='{cabecera}'"

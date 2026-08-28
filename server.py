@@ -16,7 +16,7 @@ import logging
 import requests
 from datetime import datetime, timezone
 from typing import NamedTuple
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, make_response
 
 # Google Drive / OAuth
 from google.oauth2.credentials import Credentials
@@ -322,7 +322,13 @@ from docx_render import (  # noqa: F401
 
 @app.route("/")
 def index():
-    return render_template("alta.html")
+    # Sin cache. El HTML lleva dentro el JavaScript del formulario, asi que una
+    # pagina cacheada es LOGICA cacheada: el 28-ago-2026 se desplego el arreglo
+    # del mensaje de "Buscar ahora" y el navegador siguio ejecutando la version
+    # anterior. Son 8 KB: no hay nada que ahorrar cacheandolo.
+    respuesta = make_response(render_template("alta.html"))
+    respuesta.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return respuesta
 
 
 @app.route("/health")
