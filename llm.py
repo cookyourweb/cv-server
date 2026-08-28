@@ -21,7 +21,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.environ["GROQ_API_KEY"]
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

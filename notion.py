@@ -13,7 +13,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-NOTION_TOKEN = os.environ["NOTION_TOKEN"]
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
 NOTION_DB_OFERTAS = os.getenv("NOTION_DB_OFERTAS", "33d11515-f4b2-8176-947b-000bbafd1ca7")
 

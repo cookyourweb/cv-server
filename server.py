@@ -45,7 +45,7 @@ from real_jobs import buscar_ofertas_reales
 # Las credenciales y carpetas de Drive viven en `drive.py`, que es quien las usa.
 
 # ── Notion ────────────────────────────────────
-NOTION_TOKEN = os.environ["NOTION_TOKEN"]
+NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
 NOTION_DB_OFERTAS  = os.getenv("NOTION_DB_OFERTAS", "33d11515-f4b2-8176-947b-000bbafd1ca7")
 
@@ -63,6 +63,37 @@ WEBHOOK_BUSCAR_AHORA = os.getenv(
 # ─────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ── Configuracion: se lee, pero su ausencia NO impide importar ────────────────
+# Antes cada modulo hacia `os.environ["CLAVE"]` a nivel de modulo, o sea que
+# exigia el entorno para poder IMPORTARSE. Dos consecuencias medidas: la suite
+# tenia que inyectar credenciales falsas antes de empezar, y nadie podia abrir el
+# repositorio e importar `guardrails` para leer que hace sin montarse un `.env`.
+#
+# Ahora la validacion vive aqui, en el unico sitio donde importa de verdad, y
+# reporta TODAS las que faltan de una vez en vez de reventar con la primera.
+CREDENCIALES_REQUERIDAS = (
+    "GROQ_API_KEY",
+    "NOTION_TOKEN",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_REFRESH_TOKEN",
+)
+
+
+def credenciales_que_faltan(entorno=None) -> list:
+    """Las credenciales requeridas que no estan puestas o estan vacias."""
+    entorno = os.environ if entorno is None else entorno
+    return [c for c in CREDENCIALES_REQUERIDAS if not (entorno.get(c) or "").strip()]
+
+
+_faltan = credenciales_que_faltan()
+if _faltan:
+    logger.error(
+        "FALTAN CREDENCIALES: %s. El servicio arranca igual, pero fallara en la "
+        "primera peticion que las necesite.", ", ".join(_faltan),
+    )
+
 
 app = Flask(__name__)
 

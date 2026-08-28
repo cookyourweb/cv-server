@@ -1,17 +1,8 @@
 """Config de tests.
 
-`server` lee variables de entorno REQUERIDAS al importarse
-(GROQ_API_KEY, NOTION_TOKEN, GOOGLE_*). En tests seteamos valores dummy
-para poder importar el módulo sin credenciales reales; los tests mockean
-los helpers/core, así que nunca se llama a servicios externos.
-"""
-import os
+Ya no hace falta inyectar credenciales: desde el 28-ago-2026 los modulos se
+importan sin ninguna variable de entorno. La validacion vive en `server.py` y
+reporta las que faltan al arrancar, no al importar.
 
-for _k in (
-    "GROQ_API_KEY",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET",
-    "GOOGLE_REFRESH_TOKEN",
-    "NOTION_TOKEN",
-):
-    os.environ.setdefault(_k, "test-dummy")
+Ver `tests/test_modulos_sin_entorno.py`, que lo comprueba en un proceso limpio.
+"""

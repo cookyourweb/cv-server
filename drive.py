@@ -20,9 +20,9 @@ from googleapiclient.http import MediaIoBaseUpload
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
-GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
-GOOGLE_REFRESH_TOKEN = os.environ["GOOGLE_REFRESH_TOKEN"]
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")
 FOLDER_CV_MASTERS = os.getenv("FOLDER_CV_MASTERS", "1duJA_G3lLbOqiUYoSJcsXAvbtJUdcmzR")
 FOLDER_CV_GENERADOS = os.getenv("FOLDER_CV_GENERADOS", "1tHuVOIz3ratjRp8AmHsF0kGVpmy9DocY")
 
