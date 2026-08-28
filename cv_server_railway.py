@@ -76,8 +76,15 @@ NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
 NOTION_DB_OFERTAS  = os.getenv("NOTION_DB_OFERTAS", "33d11515-f4b2-8176-947b-000bbafd1ca7")
 
 # ── Webhooks n8n ──────────────────────────────
-WEBHOOK_NUEVO_USUARIO = os.getenv("WEBHOOK_NUEVO_USUARIO", "")
-WEBHOOK_BUSCAR_AHORA  = os.getenv("WEBHOOK_BUSCAR_AHORA", "")
+# OJO (28ago2026): los paths `buscar-ahora` y `nuevo-usuario` NO EXISTEN en la
+# instancia. Se barrieron los 10 workflows nodo a nodo. Lo que la documentacion
+# llamaba WF1 nunca llego a estar dado de alta, y estas llamadas se comian un 404
+# en silencio. El unico webhook vivo que lanza una busqueda para un usuario es
+# `buscar-para-user`, dentro del workflow de PROD `CsvmtPcLVmGIZg6C`.
+N8N_HOST = os.getenv("N8N_HOST", "https://n8n-asistente-correo.onrender.com")
+WEBHOOK_BUSCAR_AHORA = os.getenv(
+    "WEBHOOK_BUSCAR_AHORA", f"{N8N_HOST}/webhook/buscar-para-user"
+)
 
 # ─────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
@@ -1815,28 +1822,90 @@ def check_email():
     return jsonify({"existe": False, "email": email})
 
 
+def payload_buscar_para_user(usuario: dict) -> dict:
+    """Traduce un usuario al contrato que espera el webhook `buscar-para-user`.
+
+    El contrato no es invento: es el que produce el nodo `Code — Normalizar users
+    (schedule)` del workflow de PROD, que es por donde entra el disparo de las 9:00.
+    Dos nombres NO coinciden con los del perfil que devuelve Notion, y por eso
+    existe esta funcion: `Salario min` viaja como `salario`, y el id de la pagina
+    como `user_id`.
+
+    Acepta las dos formas del usuario: la que devuelve `buscar_usuario_por_email`
+    y la cruda del formulario de alta (`rol_objetivo`, `salario`).
+    """
+    u = usuario or {}
+    return {
+        "user_id":       u.get("notion_id") or u.get("user_id") or "",
+        "nombre":        u.get("nombre", ""),
+        "email":         u.get("email", ""),
+        "email_usuario": u.get("email", ""),
+        "perfil":        u.get("perfil", ""),
+        "rol":           u.get("rol") or u.get("rol_objetivo") or "",
+        "stack":         u.get("stack") or [],
+        "salario":       u.get("salario_min") or u.get("salario") or 0,
+        "modalidad":     u.get("modalidad") or [],
+        "ciudad":        u.get("ciudad", ""),
+        "linkedin":      u.get("linkedin", ""),
+        "cv_master_url": u.get("cv_master_url", ""),
+        "source":        "cv-server",
+    }
+
+
+def disparar_busqueda(usuario: dict) -> bool:
+    """Pide a n8n una búsqueda para este usuario. Devuelve si n8n la aceptó.
+
+    Devuelve un bool a propósito. Antes esto era fire & forget con un `warning`
+    y quien llamaba no tenía forma de saber si había pasado algo, así que la API
+    respondía `ok: true` con el webhook devolviendo 404. Un 404 aquí significa
+    que el path no está dado de alta en n8n: es un fallo de configuración que hay
+    que ver, no un aviso que se traga el log.
+    """
+    if not usuario or not WEBHOOK_BUSCAR_AHORA:
+        logger.error("Búsqueda NO disparada: falta usuario o WEBHOOK_BUSCAR_AHORA")
+        return False
+    try:
+        r = requests.post(WEBHOOK_BUSCAR_AHORA, json=payload_buscar_para_user(usuario), timeout=8)
+    except Exception as e:
+        logger.error("Búsqueda NO disparada, n8n no responde (%s): %s", WEBHOOK_BUSCAR_AHORA, e)
+        return False
+    if r.status_code >= 400:
+        logger.error(
+            "Búsqueda NO disparada, n8n devolvió %s en %s. Un 404 aquí = el webhook "
+            "no existe en la instancia.", r.status_code, WEBHOOK_BUSCAR_AHORA,
+        )
+        return False
+    logger.info("Búsqueda disparada para %s", usuario.get("email", ""))
+    return True
+
+
 @app.route("/accion-existente", methods=["POST"])
 def accion_existente():
     """Usuario existente pulsa 'Buscar ahora' o 'Mañana 9am'."""
     datos = request.get_json(force=True)
     email = (datos.get("email") or "").strip().lower()
-    nombre = datos.get("nombre", "")
     accion = datos.get("accion", "")
 
     if not email:
         return jsonify({"ok": False, "error": "email requerido"}), 400
 
-    if accion == "ahora" and WEBHOOK_BUSCAR_AHORA:
+    disparada = False
+    if accion == "ahora":
+        # El perfil hace falta ENTERO: mandando solo email y nombre, n8n buscaba
+        # ofertas sin rol, sin stack y sin salario, o sea para nadie.
         try:
-            requests.post(
-                WEBHOOK_BUSCAR_AHORA,
-                json={"email": email, "nombre": nombre},
-                timeout=8,
-            )
+            usuario = buscar_usuario_por_email(email)
         except Exception as e:
-            logger.warning("Webhook buscar-ahora falló: %s", e)
+            logger.error("No se pudo leer el usuario %s en Notion: %s", email, e)
+            usuario = None
+        disparada = disparar_busqueda(usuario)
 
-    return jsonify({"ok": True, "accion": accion, "email": email})
+    return jsonify({
+        "ok": True,
+        "accion": accion,
+        "email": email,
+        "busqueda_disparada": disparada,
+    })
 
 
 @app.route("/registro", methods=["POST"])
@@ -1855,19 +1924,15 @@ def registro():
 
     if existente:
         # Usuario ya existe → disparar búsqueda igual
-        if WEBHOOK_BUSCAR_AHORA:
-            try:
-                requests.post(
-                    WEBHOOK_BUSCAR_AHORA,
-                    json={"email": email, "nombre": existente.get("nombre", "")},
-                    timeout=8,
-                )
-            except Exception as e:
-                logger.warning("Webhook buscar-ahora falló: %s", e)
+        disparada = disparar_busqueda(existente)
         return jsonify({
             "ok": True,
-            "mensaje": "Ya estabas registrado. Buscando ofertas ahora mismo.",
+            "mensaje": ("Ya estabas registrado. Buscando ofertas ahora mismo."
+                        if disparada else
+                        "Ya estabas registrado. No se pudo lanzar la búsqueda ahora; "
+                        "entrarás en el barrido de las 9:00."),
             "email": email,
+            "busqueda_disparada": disparada,
         })
 
     # Crear en Notion
@@ -1878,17 +1943,18 @@ def registro():
         logger.error("Notion error: %s", e)
         return jsonify({"ok": False, "error": f"Error creando usuario en Notion: {e}"}), 500
 
-    # Disparar webhook n8n nuevo-usuario (fire & forget)
-    if WEBHOOK_NUEVO_USUARIO:
-        try:
-            requests.post(WEBHOOK_NUEVO_USUARIO, json={**datos, "notion_id": notion_id}, timeout=8)
-        except Exception as e:
-            logger.warning("Webhook nuevo-usuario falló (no crítico): %s", e)
+    # El alta ya está hecha en Notion. Esto lanza la primera búsqueda: iba al
+    # webhook `nuevo-usuario`, que no existe, así que quien se registraba no
+    # recibía nada hasta el barrido de las 9:00 del día siguiente.
+    disparada = disparar_busqueda({**datos, "notion_id": notion_id})
 
     return jsonify({
         "ok":      True,
-        "mensaje": "Usuario registrado. En breve recibirás ofertas de trabajo.",
+        "mensaje": ("Usuario registrado. Buscando tus primeras ofertas ahora mismo."
+                    if disparada else
+                    "Usuario registrado. Recibirás ofertas en el barrido de las 9:00."),
         "email":   email,
+        "busqueda_disparada": disparada,
     })
 
 
