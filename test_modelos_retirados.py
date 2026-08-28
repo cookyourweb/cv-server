@@ -19,6 +19,10 @@ import real_jobs
 MODELOS_RETIRADOS = {
     "llama-3.3-70b-versatile": "Groq, 16-ago-2026",
     "claude-3-haiku-20240307": "Anthropic, 19-abr-2026",
+    # Los dos, comprobados contra la API el 28-ago-2026: 404. Google responde
+    # "no longer available, please update to models/gemini-3.6-flash".
+    "gemini-1.5-flash": "Google, retirado antes del 28-ago-2026",
+    "gemini-2.0-flash": "Google, retirado antes del 28-ago-2026",
 }
 
 

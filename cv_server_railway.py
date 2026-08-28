@@ -45,7 +45,9 @@ GROQ_MODEL   = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")      # llama-3.3-7
 
 # ── LLM: Gemini (fallback opcional) ──────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+# gemini-1.5-flash y gemini-2.0-flash dan 404 desde antes del 28-ago-2026.
+# Google responde "no longer available, please update to models/gemini-3.6-flash".
+GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 # ── LLM: Claude (fallback opcional) ──────────
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
