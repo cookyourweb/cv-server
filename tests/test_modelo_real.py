@@ -7,18 +7,19 @@ se puede saber si Claude está funcionando en Render.
 from unittest.mock import patch
 
 import cv_server_railway as srv
+import llm  # las funciones VIVEN aqui: parchear el reexport de `srv` no las cambia
 
 
 def test_call_llm_calidad_reporta_claude_cuando_claude_responde():
-    with patch.object(srv, "call_claude", return_value="texto"):
+    with patch.object(llm, "call_claude", return_value="texto"):
         r = srv.call_llm_calidad("prompt", model="claude-haiku-4-5")
     assert r.contenido == "texto"
     assert r.modelo == "claude-haiku-4-5"
 
 
 def test_call_llm_calidad_reporta_groq_cuando_claude_falla():
-    with patch.object(srv, "call_claude", side_effect=RuntimeError("sin key")), \
-         patch.object(srv, "call_llm", return_value=srv.RespuestaLLM("texto", "llama-3.3-70b-versatile")):
+    with patch.object(llm, "call_claude", side_effect=RuntimeError("sin key")), \
+         patch.object(llm, "call_llm", return_value=srv.RespuestaLLM("texto", "llama-3.3-70b-versatile")):
         r = srv.call_llm_calidad("prompt", model="claude-haiku-4-5")
     assert r.contenido == "texto"
     assert r.modelo == "llama-3.3-70b-versatile"
@@ -32,7 +33,7 @@ def test_call_llm_reporta_groq_cuando_groq_responde():
         def json(self):
             return {"choices": [{"message": {"content": "ok"}}]}
 
-    with patch.object(srv.requests, "post", return_value=_Resp()):
+    with patch.object(llm.requests, "post", return_value=_Resp()):
         r = srv.call_llm("prompt")
     assert r.contenido == "ok"
     assert r.modelo == srv.GROQ_MODEL
@@ -46,8 +47,8 @@ def test_call_llm_reporta_claude_cuando_groq_y_gemini_fallan(monkeypatch):
         def json(self):
             return {"content": [{"text": "ok claude"}]}
 
-    monkeypatch.setattr(srv, "GEMINI_API_KEY", "")
-    monkeypatch.setattr(srv, "CLAUDE_API_KEY", "k")
+    monkeypatch.setattr(llm, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(llm, "CLAUDE_API_KEY", "k")
 
     llamadas = {"n": 0}
 
@@ -57,7 +58,7 @@ def test_call_llm_reporta_claude_cuando_groq_y_gemini_fallan(monkeypatch):
             raise RuntimeError("groq caído")
         return _Resp()
 
-    monkeypatch.setattr(srv.requests, "post", _post)
+    monkeypatch.setattr(llm.requests, "post", _post)
     r = srv.call_llm("prompt")
     assert r.contenido == "ok claude"
     assert r.modelo == srv.CLAUDE_MODEL

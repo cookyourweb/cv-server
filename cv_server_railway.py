@@ -39,27 +39,8 @@ from real_jobs import buscar_ofertas_reales
 # CONFIGURACIÓN — solo variables de entorno
 # ─────────────────────────────────────────────
 
-# ── LLM: Groq (primario) ──────────────────────
-GROQ_API_KEY = os.environ["GROQ_API_KEY"]                          # requerido
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")      # llama-3.3-70b-versatile lo retiro Groq el 16-ago-2026
-
-# ── LLM: Gemini (fallback opcional) ──────────
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-# gemini-1.5-flash y gemini-2.0-flash dan 404 desde antes del 28-ago-2026.
-# Google responde "no longer available, please update to models/gemini-3.6-flash".
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-
-# ── LLM: Claude (fallback opcional) ──────────
-CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
-CLAUDE_MODEL   = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5")  # fallback si Groq falla.
-# OJO: el default era "claude-3-haiku-20240307", RETIRADO el 19-abr-2026. La cadena de
-# fallback devolvia 404 y nadie lo habia notado porque casi nunca se ejercita.
-
-# ── Claude para el CV (calidad — va a empresas; Groq queda de fallback) ──
-# Haiku 4.5: barato (~$0,02/CV) y sigue bien el prompt de adaptación.
-CV_MODEL = os.getenv("CV_MODEL", "claude-haiku-4-5")
-# Carta de presentación: Sonnet 4.6 (mejor prosa, ~$0,04/carta). Va a empresas.
-CARTA_MODEL = os.getenv("CARTA_MODEL", "claude-sonnet-4-6")
+# Los modelos y sus claves viven en `llm.py`, que es quien los usa. Aqui estaban
+# duplicados: dos definiciones del mismo valor acaban separandose siempre.
 
 # ── Google Drive ──────────────────────────────
 GOOGLE_CLIENT_ID     = os.environ["GOOGLE_CLIENT_ID"]
@@ -111,117 +92,24 @@ class CVError(Exception):
 # CAPA LLM — Groq primario, Gemini/Claude fallback
 # ══════════════════════════════════════════════
 
-class RespuestaLLM(NamedTuple):
-    """Respuesta de un LLM junto al modelo que la generó DE VERDAD.
+# La capa LLM vive en `llm.py`. Se reexporta para no cambiar la superficie
+# publica del modulo.
+from llm import (  # noqa: F401
+    CARTA_MODEL,
+    CLAUDE_API_KEY,
+    CLAUDE_MODEL,
+    CV_MODEL,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    GROQ_API_KEY,
+    GROQ_MODEL,
+    RespuestaLLM,
+    call_claude,
+    call_llm,
+    call_llm_calidad,
+    get_anthropic_client,
+)
 
-    Sin esto no se puede saber si el CV lo escribió Claude o el fallback
-    de Groq: los endpoints reportaban el modelo configurado, no el usado.
-    """
-    contenido: str
-    modelo:    str
-
-
-def call_llm(prompt: str) -> RespuestaLLM:
-    """Llama a Groq; si falla intenta Gemini y luego Claude."""
-
-    # ── 1. Groq ──────────────────────────────
-    try:
-        resp = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Content-Type":  "application/json",
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-            },
-            json={
-                "model":      GROQ_MODEL,
-                "messages":   [{"role": "user", "content": prompt}],
-                "max_tokens": 4096,
-                "temperature": 0.7,
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
-        logger.info("LLM: Groq OK (%s)", GROQ_MODEL)
-        return RespuestaLLM(content, GROQ_MODEL)
-    except Exception as e:
-        logger.warning("Groq falló: %s — probando fallbacks", e)
-
-    # ── 2. Gemini (fallback) ──────────────────
-    if GEMINI_API_KEY:
-        try:
-            resp = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                params={"key": GEMINI_API_KEY},
-                json={"contents": [{"parts": [{"text": prompt}]}]},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-            logger.info("LLM: Gemini fallback OK (%s)", GEMINI_MODEL)
-            return RespuestaLLM(content, GEMINI_MODEL)
-        except Exception as e:
-            logger.warning("Gemini fallback falló: %s — probando Claude", e)
-
-    # ── 3. Claude (fallback) ──────────────────
-    if CLAUDE_API_KEY:
-        try:
-            resp = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "Content-Type":      "application/json",
-                    "x-api-key":         CLAUDE_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                },
-                json={
-                    "model":      CLAUDE_MODEL,
-                    "max_tokens": 4096,
-                    "messages":   [{"role": "user", "content": prompt}],
-                },
-                timeout=30,
-            )
-            resp.raise_for_status()
-            content = resp.json()["content"][0]["text"]
-            logger.info("LLM: Claude fallback OK (%s)", CLAUDE_MODEL)
-            return RespuestaLLM(content, CLAUDE_MODEL)
-        except Exception as e:
-            logger.error("Claude fallback falló: %s", e)
-
-    raise RuntimeError("Todos los LLMs fallaron. Revisa las API keys y el estado de los servicios.")
-
-
-# ── Capa CALIDAD: Claude primario para el CV (lo que va a empresas) ──
-_anthropic_client = None
-
-def get_anthropic_client():
-    global _anthropic_client
-    if _anthropic_client is None:
-        if not CLAUDE_API_KEY:
-            raise RuntimeError("CLAUDE_API_KEY no configurada")
-        _anthropic_client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
-    return _anthropic_client
-
-
-def call_claude(prompt: str, model: str, max_tokens: int = 4096) -> str:
-    """Llama a Claude vía SDK oficial. Para CV/carta donde la calidad importa."""
-    resp = get_anthropic_client().messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return "".join(b.text for b in resp.content if b.type == "text")
-
-
-def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096) -> RespuestaLLM:
-    """Claude primario; si falla (rate limit, red o sin key) cae a Groq.
-    Para el CV y textos que van a una empresa — mejor que Groq, ~$0,02/CV."""
-    try:
-        contenido = call_claude(prompt, model=model, max_tokens=max_tokens)
-        logger.info("LLM calidad: Claude OK (%s)", model)
-        return RespuestaLLM(contenido, model)
-    except Exception as e:
-        logger.warning("Claude falló (%s) — cayendo a Groq", e)
-        return call_llm(prompt)
 
 
 # ══════════════════════════════════════════════
