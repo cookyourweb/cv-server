@@ -32,6 +32,15 @@ El paso 2 no es ceremonia. El 28-ago-2026 un test escrito aquí pasó a la prime
 estando el código mal: comparaba con `not in` y la subcadena que buscaba estaba
 contenida en la forma correcta. Verlo en rojo primero es lo que lo destapa.
 
+## Dónde viven los tests
+
+En `tests/`, en la raíz del repositorio. No al lado del código que prueban.
+
+Es la convención que ya se usó en la prueba técnica de osapiens, y aquí se adoptó
+el 28-ago-2026 sacando 23 ficheros de test de la raíz. El movimiento destapó dos
+tests que dependían de estar físicamente al lado del fuente que leían: una
+dependencia que nadie sabía que existía porque nunca se habían movido.
+
 ## Un commit, una unidad de trabajo
 
 Un commit tiene que poder explicarse en una frase y revertirse sin arrastrar
@@ -47,6 +56,17 @@ dentro de seis meses.
 
 Formato [convencional](https://www.conventionalcommits.org/): `fix:`, `feat:`,
 `refactor:`, `docs:`, `test:`, `chore:`, `ci:`.
+
+**`test:` es para commits que son SOLO tests**, y conviene distinguir dos cosas
+que no son lo mismo:
+
+```
+test: add test suite with TDD for input validation   <- el test fue primero
+test: add missing tests for the happy path           <- rellenar un hueco despues
+```
+
+Las dos son legítimas, pero no son iguales, y el mensaje tiene que decir cuál es.
+Llamar TDD a rellenar huecos es engañarte a ti misma dentro de seis meses.
 
 ```
 fix(guardrails): `_tecnologias_en` estaba definida dos veces y ganaba la mala
