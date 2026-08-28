@@ -88,3 +88,10 @@ Thumbs.db
 # ══════════════════════════════════════════════
 *.tmp
 *.temp
+# ══════════════════════════════════════════════
+# Material personal: nunca se publica
+# OJO: .gitignore NO desindexa lo ya trackeado. Si algo de aqui
+# aparece en `git ls-tree -r develop`, hay que sacarlo con
+# `git rm -r --cached` ademas de ignorarlo.
+# ══════════════════════════════════════════════
+docs/privado/
