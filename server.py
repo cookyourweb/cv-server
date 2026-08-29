@@ -564,6 +564,81 @@ def registro():
     })
 
 
+# Las dos plantillas viven en el modulo, no dentro de la funcion, para que un
+# test pueda leerlas. Un prompt que no se puede inspeccionar no se puede
+# vigilar, y el 29-ago-2026 pedia dos parrafos de resumen sin que nada lo
+# advirtiera. Ver tests/test_longitud_del_resumen.py
+PROMPT_ESTRUCTURA_EN = """OUTPUT FORMAT (plain text, no markdown):
+
+HEADLINE: [professional title for this offer — see HEADLINE RULES below]
+
+PROFESSIONAL SUMMARY
+[ONE single paragraph, 3-4 lines, 70 words MAXIMUM. Hard limit: whoever screens reads the headline and these three lines, and the detail is already in EXPERIENCE below, so a long summary buries what matters instead of showing it. Generated from her REAL EXPERIENCE (never copied from PERFIL BASE). Keep the career arc: where she comes from, how she evolved, what defines her today, using EVOLUCIÓN PROFESIONAL from the master. Do NOT turn it into a list of tools. Write with NO GRAMMATICAL SUBJECT, standard English CV style: "Frontend Tech Lead with 10+ years...", "Led the migration...". NEVER "She is", "She brings", "Her career spans", and never "I am".]
+
+PROFESSIONAL EXPERIENCE
+[Role] — [Company]
+[Start date] - [End date]
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+(6-9 bullets for recent/relevant roles, 3-4 for older ones — always real, never padded)
+
+TECHNICAL SKILLS
+[Skills grouped by category (Frontend, AI, Design Systems, Backend, Cloud, Testing...) with concrete tools/versions, ordered by relevance to this offer]
+
+EDUCATION
+[From the CV master]
+
+LANGUAGES
+[From the CV master]
+
+FINAL RULES:
+- First line MUST be "HEADLINE: ..." — it becomes the header title
+- Do NOT include name/email/phone, they are added programmatically
+- Do NOT use markdown (**text**, ##, ```)
+- Do NOT invent anything not in the CV master
+- EXPERIENCE reads as a career story told through ROLES: the job title opens every entry and the company follows it. A recruiter must be able to scan the left edge and see the progression (Tech Lead, then Front-End Developer, then Designer). Never lead with the company.
+- Language: the ENTIRE CV must be in English (section titles and content)"""
+
+PROMPT_ESTRUCTURA_ES = """FORMATO DE SALIDA (texto plano, sin markdown):
+
+HEADLINE: [titular profesional para esta oferta — ver REGLAS DEL HEADLINE abajo]
+
+PERFIL PROFESIONAL
+[UN solo párrafo, 3-4 líneas, 70 palabras COMO MÁXIMO. Es un tope duro: quien criba lee el titular y estas tres líneas, y el detalle ya está abajo en EXPERIENCIA, así que un perfil largo entierra lo importante en vez de enseñarlo. Generado desde su EXPERIENCIA real (NUNCA copiado del PERFIL BASE). Mantén el arco: de dónde viene, cómo ha evolucionado y qué la define hoy, usando EVOLUCIÓN PROFESIONAL del master. NO lo conviertas en una lista de herramientas.]
+
+EXPERIENCIA PROFESIONAL
+[Puesto] — [Empresa]
+[Fecha inicio] - [Fecha fin]
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+(6-9 bullets en los puestos recientes/relevantes, 3-4 en los antiguos — siempre reales, nunca de relleno)
+
+HABILIDADES TÉCNICAS
+[Skills agrupadas por categoría (Frontend, IA, Sistemas de Diseño, Backend, Cloud, Testing...) con herramientas/versiones concretas, ordenadas por relevancia para esta oferta]
+
+FORMACIÓN
+[Del CV master]
+
+IDIOMAS
+[Del CV master]
+
+REGLAS FINALES:
+- La primera línea DEBE ser "HEADLINE: ..." — se usa como titular de la cabecera
+- NO incluir nombre/email/tel, se añaden programáticamente
+- NO usar markdown (**texto**, ##, ```)
+- NO inventar nada que no esté en el CV master
+- La EXPERIENCIA se lee como una trayectoria contada a través de los PUESTOS: el puesto abre cada entrada y la empresa va detrás. Quien lee debe poder recorrer el margen izquierdo y ver la progresión (Tech Lead, antes Front-End Developer, antes Diseñadora). Nunca empieces por la empresa.
+- Idioma: TODO el CV en español (títulos de sección y contenido)"""
+
+
 def generar_cv_core(email: str, empresa: str, puesto: str,
                     descripcion: str = "", idioma_in: str = "") -> dict:
     """Núcleo de /generar-cv (sin Flask): orquesta Notion/Drive/LLM y devuelve
@@ -645,75 +720,11 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     # Titulos de seccion y regla de idioma, en el idioma de la oferta
     idioma_nombre = "English" if idioma == "en" else "Spanish"
     if idioma == "en":
-        bloque_formato = """OUTPUT FORMAT (plain text, no markdown):
-
-HEADLINE: [professional title for this offer — see HEADLINE RULES below]
-
-PROFESSIONAL SUMMARY
-[2 full paragraphs (4-6 lines each) tailored to the offer, generated from her REAL EXPERIENCE (never copied from PERFIL BASE). Write with NO GRAMMATICAL SUBJECT, standard English CV style: "Frontend Tech Lead with 10+ years...", "Led the migration...". NEVER "She is", "She brings", "Her career spans", and never "I am". First paragraph: the profile itself + core strengths relevant to this role. Second paragraph: depth, domains and the angle that fits this offer.]
-
-PROFESSIONAL EXPERIENCE
-[Role] — [Company]
-[Start date] - [End date]
-- Real achievement from the CV master, XYZ formula, prioritised by relevance
-- Real achievement from the CV master, XYZ formula, prioritised by relevance
-- Real achievement from the CV master, XYZ formula, prioritised by relevance
-- Real achievement from the CV master, XYZ formula, prioritised by relevance
-- Real achievement from the CV master, XYZ formula, prioritised by relevance
-- Real achievement from the CV master, XYZ formula, prioritised by relevance
-(6-9 bullets for recent/relevant roles, 3-4 for older ones — always real, never padded)
-
-TECHNICAL SKILLS
-[Skills grouped by category (Frontend, AI, Design Systems, Backend, Cloud, Testing...) with concrete tools/versions, ordered by relevance to this offer]
-
-EDUCATION
-[From the CV master]
-
-LANGUAGES
-[From the CV master]
-
-FINAL RULES:
-- First line MUST be "HEADLINE: ..." — it becomes the header title
-- Do NOT include name/email/phone, they are added programmatically
-- Do NOT use markdown (**text**, ##, ```)
-- Do NOT invent anything not in the CV master
-- EXPERIENCE reads as a career story told through ROLES: the job title opens every entry and the company follows it. A recruiter must be able to scan the left edge and see the progression (Tech Lead, then Front-End Developer, then Designer). Never lead with the company.
-- Language: the ENTIRE CV must be in English (section titles and content)"""
+        bloque_formato = PROMPT_ESTRUCTURA_EN
     else:
-        bloque_formato = """FORMATO DE SALIDA (texto plano, sin markdown):
+        bloque_formato = PROMPT_ESTRUCTURA_ES
 
-HEADLINE: [titular profesional para esta oferta — ver REGLAS DEL HEADLINE abajo]
 
-PERFIL PROFESIONAL
-[2 párrafos completos (4-6 líneas cada uno) adaptados a la oferta, generados desde su EXPERIENCIA real (NUNCA copiados del PERFIL BASE). Primer párrafo: quién es + fortalezas clave relevantes para este puesto. Segundo párrafo: profundidad, dominios y el ángulo que encaja con esta oferta.]
-
-EXPERIENCIA PROFESIONAL
-[Puesto] — [Empresa]
-[Fecha inicio] - [Fecha fin]
-- Logro real del CV master, fórmula XYZ, priorizado por relevancia
-- Logro real del CV master, fórmula XYZ, priorizado por relevancia
-- Logro real del CV master, fórmula XYZ, priorizado por relevancia
-- Logro real del CV master, fórmula XYZ, priorizado por relevancia
-- Logro real del CV master, fórmula XYZ, priorizado por relevancia
-- Logro real del CV master, fórmula XYZ, priorizado por relevancia
-(6-9 bullets en los puestos recientes/relevantes, 3-4 en los antiguos — siempre reales, nunca de relleno)
-
-HABILIDADES TÉCNICAS
-[Skills agrupadas por categoría (Frontend, IA, Sistemas de Diseño, Backend, Cloud, Testing...) con herramientas/versiones concretas, ordenadas por relevancia para esta oferta]
-
-FORMACIÓN
-[Del CV master]
-
-IDIOMAS
-[Del CV master]
-
-REGLAS FINALES:
-- La primera línea DEBE ser "HEADLINE: ..." — se usa como titular de la cabecera
-- NO incluir nombre/email/tel, se añaden programáticamente
-- NO usar markdown (**texto**, ##, ```)
-- NO inventar nada que no esté en el CV master
-- La EXPERIENCIA se lee como una trayectoria contada a través de los PUESTOS: el puesto abre cada entrada y la empresa va detrás. Quien lee debe poder recorrer el margen izquierdo y ver la progresión (Tech Lead, antes Front-End Developer, antes Diseñadora). Nunca empieces por la empresa.
-- Idioma: TODO el CV en español (títulos de sección y contenido)"""
 
     prompt = f"""Act as a senior tech recruiter who screens 200+ CVs daily. Adapt this candidate's CV for a specific job offer.
 
