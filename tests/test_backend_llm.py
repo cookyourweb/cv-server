@@ -15,6 +15,7 @@ principio del modulo, el arranque empieza a pagar los seis segundos y los
 200 MB en silencio, exactamente el tipo de fallo que no se nota hasta que la
 factura o el timeout lo cuentan.
 """
+import os
 import subprocess
 import sys
 import types
@@ -118,3 +119,51 @@ def test_call_llm_delega_en_el_backend_activo(monkeypatch):
     respuesta = llm.call_llm("prompt")
 
     assert respuesta.modelo == "modelo-de-prueba"
+
+
+def test_litellm_recibe_la_clave_de_claude_con_el_nombre_QUE_ESPERA(monkeypatch):
+    """El ultimo eslabon de la cascada estaba MUERTO y solo se vio probandolo.
+
+    29-ago-2026, llamadas reales contra las APIs de verdad:
+    - Groq roto        -> contesto Gemini en 23,3 s. Bien.
+    - Groq y Gemini rotos -> `APIConnectionError` en 5,5 s. MAL.
+
+    La causa: litellm busca `ANTHROPIC_API_KEY` y en este proyecto la variable se
+    llama `CLAUDE_API_KEY` desde el primer dia. Mapeandola, Claude contesto en
+    1,0 s. Es el mismo fallo silencioso de siempre: un fallback que parece vivo y
+    solo se entera de que no lo esta el dia que hace falta.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(llm, "CLAUDE_API_KEY", "sk-ant-de-mentira")
+
+    llm._alinear_credenciales_para_litellm()
+
+    assert os.getenv("ANTHROPIC_API_KEY") == "sk-ant-de-mentira"
+
+
+def test_completar_alinea_las_credenciales_antes_de_llamar(monkeypatch):
+    """No basta con que la funcion exista: `completar` tiene que usarla."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(llm, "CLAUDE_API_KEY", "sk-ant-de-mentira")
+
+    visto = {}
+
+    class _Mensaje:  content = "ok"
+    class _Choice:   message = _Mensaje()
+    class _Respuesta:
+        choices = [_Choice()]
+        model = "claude-haiku-4-5"
+
+    def _completion(**kwargs):
+        visto["anthropic"] = os.getenv("ANTHROPIC_API_KEY")
+        return _Respuesta()
+
+    falso = types.ModuleType("litellm")
+    falso.completion = _completion
+    monkeypatch.setitem(sys.modules, "litellm", falso)
+
+    llm.CascadaLiteLLM().completar("hola")
+
+    assert visto["anthropic"] == "sk-ant-de-mentira", (
+        "se llamo a litellm sin la clave de Claude: el ultimo fallback esta muerto"
+    )

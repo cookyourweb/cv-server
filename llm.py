@@ -152,6 +152,30 @@ class CascadaCasera:
         raise RuntimeError("Todos los LLMs fallaron. Revisa las API keys y el estado de los servicios.")
 
 
+# Las variables de este proyecto NO se llaman como las que busca litellm. El caso
+# real es Claude: aqui es `CLAUDE_API_KEY` desde el primer dia y litellm busca
+# `ANTHROPIC_API_KEY`. Sin este mapeo el ULTIMO eslabon de la cascada esta muerto,
+# y eso no se nota hasta el dia que caen los otros dos a la vez. Comprobado con
+# llamadas reales el 29-ago-2026: sin mapear, `APIConnectionError`; mapeando,
+# Claude contesto en 1,0 s.
+NOMBRES_QUE_ESPERA_LITELLM = {"ANTHROPIC_API_KEY": "CLAUDE_API_KEY"}
+
+
+def _alinear_credenciales_para_litellm() -> None:
+    """Publica nuestras claves con el nombre que litellm sabe buscar.
+
+    No pisa lo que ya hubiera en el entorno: si alguien define
+    `ANTHROPIC_API_KEY` a mano, manda esa.
+    """
+    for espera_litellm, la_nuestra in NOMBRES_QUE_ESPERA_LITELLM.items():
+        valor = globals().get(la_nuestra) or os.getenv(la_nuestra, "")
+        if valor:
+            # `setdefault` y no asignacion por indice: si alguien ya la definio a
+            # mano, manda la suya. Ademas deja el modulo libre de accesos por
+            # corchetes, que es lo que vigila tests/test_modulos_sin_entorno.py.
+            os.environ.setdefault(espera_litellm, valor)
+
+
 class CascadaLiteLLM:
     """La misma cascada, delegada en LiteLLM. APAGADA por defecto.
 
@@ -169,6 +193,8 @@ class CascadaLiteLLM:
 
     def completar(self, prompt: str) -> RespuestaLLM:
         import litellm  # perezoso A PROPOSITO: ver el docstring de la clase
+
+        _alinear_credenciales_para_litellm()
 
         resp = litellm.completion(
             model=f"groq/{GROQ_MODEL}",
