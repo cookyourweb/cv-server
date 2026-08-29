@@ -1,0 +1,6 @@
+# Dependencia OPCIONAL: solo hace falta si LLM_BACKEND=litellm.
+#
+# NO se instala en produccion mientras el backend por defecto sea `casera`.
+# Cuesta +146 MB de disco, +5,96 s de arranque y 207 MB de RAM. El porque de
+# tenerlo escrito y apagado esta en docs/ADR-004-backend-llm.md.
+litellm==1.98.0
