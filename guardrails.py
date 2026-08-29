@@ -572,6 +572,8 @@ def evaluar_descripcion_oferta(descripcion: str, minimo: int = None) -> dict:
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
+from pydantic import BaseModel, ConfigDict
+
 CV = "cv"
 CARTA = "carta"
 
@@ -643,15 +645,39 @@ def guardrails_para(destino: str) -> list:
     return [g for g in GUARDRAILS if destino in g.aplica_a]
 
 
-def revisar(texto: str, master: str, destino: str) -> list:
+class Aviso(BaseModel):
+    """Lo que un guardrail encontro. Es la forma que SALE POR HTTP.
+
+    Antes era un dict con dos claves y ese contrato no vivia en ningun sitio:
+    `server.py` hacia `aviso["hallazgos"]` de memoria. Un renombrado de clave no
+    rompia ni un test y reventaba en produccion a mitad de generar una carta.
+
+    Se declara aqui y no en las tripas de los detectores a proposito: **la forma
+    se declara donde el dato cruza una frontera**, no en cada paso interno. Los
+    siete detectores siguen devolviendo listas de texto, que es lo que son.
+
+    `extra="forbid"` esta puesto para que un typo en un nombre de campo sea un
+    error y no un campo nuevo que nadie lee.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    regla:     str
+    hallazgos: list[str]
+
+
+def revisar(texto: str, master: str, destino: str) -> list[Aviso]:
     """Pasa el texto por sus guardrails y devuelve solo lo que encontro algo.
 
     Avisa, no bloquea: la decision de que hacer con los hallazgos es de quien
     llama, no de aqui.
+
+    OJO al serializar: el endpoint que los publica es Flask con `jsonify`, que
+    NO sabe convertir un modelo Pydantic. Hay que pasar por `model_dump()`, y
+    eso lo vigila `tests/test_aviso_guardrail.py`.
     """
     hallazgos = []
     for g in guardrails_para(destino):
         encontrados = g.revisar(texto, master)
         if encontrados:
-            hallazgos.append({"regla": g.nombre, "hallazgos": encontrados})
+            hallazgos.append(Aviso(regla=g.nombre, hallazgos=encontrados))
     return hallazgos
