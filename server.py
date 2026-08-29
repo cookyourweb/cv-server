@@ -1125,8 +1125,8 @@ REGLAS:
     for aviso in avisos:
         logger.warning(
             "%s en la CARTA de %s para %s/%s: %s",
-            aviso["regla"].upper().replace("_", " "), email, empresa, puesto,
-            aviso["hallazgos"],
+            aviso.regla.upper().replace("_", " "), email, empresa, puesto,
+            aviso.hallazgos,
         )
 
     return jsonify({
@@ -1135,7 +1135,10 @@ REGLAS:
         "modelo_usado":    respuesta_llm.modelo,
         "email":           email,
         "cv_master_usado": bool(cv_master),
-        "avisos":          avisos,
+        # `jsonify` es de Flask y no sabe serializar un modelo Pydantic: sin este
+        # `model_dump()` la respuesta revienta. La forma que sale por la red no
+        # cambia, y eso lo vigila tests/test_aviso_guardrail.py.
+        "avisos":          [a.model_dump() for a in avisos],
     })
 
 

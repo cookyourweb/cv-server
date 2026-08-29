@@ -68,10 +68,10 @@ def test_un_destino_desconocido_no_devuelve_nada():
 def test_revisar_devuelve_solo_los_que_encuentran_algo():
     master = "Vue.js - 8 anos. 166.000 usuarios."
     hallazgos = g.revisar("Experiencia con Django", master, g.CV)
-    nombres = {h["regla"] for h in hallazgos}
+    nombres = {h.regla for h in hallazgos}
     assert "tecnologias_no_respaldadas" in nombres
     for h in hallazgos:
-        assert h["hallazgos"], "no se reporta un guardrail que no encontro nada"
+        assert h.hallazgos, "no se reporta un guardrail que no encontro nada"
 
 
 def test_ANADIR_un_guardrail_no_toca_nada_mas(monkeypatch):
@@ -85,4 +85,4 @@ def test_ANADIR_un_guardrail_no_toca_nada_mas(monkeypatch):
 
     monkeypatch.setattr(g, "GUARDRAILS", list(g.GUARDRAILS) + [Inventado()])
     hallazgos = g.revisar("aqui hay un gato", "master vacio", g.CARTA)
-    assert any(h["regla"] == "inventado_para_el_test" for h in hallazgos)
+    assert any(h.regla == "inventado_para_el_test" for h in hallazgos)
