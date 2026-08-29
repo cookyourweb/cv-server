@@ -17,6 +17,7 @@ import logging
 import os
 from typing import NamedTuple
 
+import anthropic
 import requests
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,11 @@ def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096)
         contenido = call_claude(prompt, model=model, max_tokens=max_tokens)
         logger.info("LLM calidad: Claude OK (%s)", model)
         return RespuestaLLM(contenido, model)
+    except (NameError, AttributeError, TypeError, ImportError):
+        # Bug NUESTRO, no una caida del proveedor. Degradarlo a Groq lo esconde:
+        # el 28-ago-2026 un `import` que falto dejo la capa de calidad muerta y
+        # los CVs los escribio el fallback sin que nadie se enterase.
+        raise
     except Exception as e:
         logger.warning("Claude falló (%s) — cayendo a Groq", e)
         return call_llm(prompt)
