@@ -582,6 +582,43 @@ def registro():
 # test pueda leerlas. Un prompt que no se puede inspeccionar no se puede
 # vigilar, y el 29-ago-2026 pedia dos parrafos de resumen sin que nada lo
 # advirtiera. Ver tests/test_longitud_del_resumen.py
+# ── El prompt de la carta ─────────────────────────────────────────────────────
+# 30-ago-2026. Estaba dentro de `/generar-carta` como f-string, y pedia "Maximo
+# 250 palabras" cuando la regla acordada el 29-ago son ~70. El fallo se corrigio
+# aquel dia EN LA CONVERSACION, nunca aqui, y siguio vivo en produccion.
+#
+# Aqui fuera un test puede LEERLO. Ver tests/test_prompt_carta.py.
+#
+# Es `.format()`, no f-string: la plantilla tiene que existir sin las variables.
+PROMPT_CARTA = """Eres un experto en cartas de presentación para ofertas de trabajo.
+Escribe una carta de presentación profesional para {nombre}.
+
+{contexto}
+
+OFERTA:
+- Empresa: {empresa}
+- Puesto: {puesto}
+- Descripción: {descripcion}
+
+REGLAS:
+- La oferta está en {idioma_carta}. Escribe TODA la carta en ese idioma (saludo, cuerpo y despedida).
+- LONGITUD: unas 70 palabras, cuatro o cinco líneas. Máximo 100 palabras.
+- ESTRUCTURA: presentarse, decir que has leído la oferta y que encaja, y remitir al CV.
+- UNA SOLA ancla concreta, nunca una lista. Nada de enumerar proyectos, tecnologías,
+  cifras ni tests: eso ya está en el CV. Una carta que lo cuenta todo compite con el
+  CV y pierde — el reclutador lee dos textos con lo mismo y ninguno con atención.
+- Usa SOLO experiencia real del CV master, y SOLO la relevante para este puesto.
+  NO inventes, NO exageres y NO afirmes nada difícil de defender en entrevista
+  (ni gestión de equipos ni arquitectura que no haya hecho).
+- NIVEL: si el puesto NO menciona lead/manager/responsable/principal/head, es un rol de
+  DESARROLLO INDIVIDUAL: NO uses la coordinación/liderazgo de equipos como argumento.
+- Tono profesional, directo y humano. Cero frases vacías de IA: nada de "apasionada",
+  "proactiva", "soluciones innovadoras", "emocionada de la oportunidad", "dinámica".
+- Formato carta: {instr_saludo} ... cuerpo ... despedida formal ("Atentamente," /
+  "Sincerely,") seguida de "{nombre}".
+- Devuelve SOLO el texto de la carta, sin encabezados ni comentarios."""
+
+
 PROMPT_ESTRUCTURA_EN = """OUTPUT FORMAT (plain text, no markdown):
 
 HEADLINE: [professional title for this offer — see HEADLINE RULES below]
@@ -1101,26 +1138,15 @@ def generar_carta():
     else:
         instr_saludo = 'saludo formal genérico ("Estimados/as," en español, "Dear Hiring Team," en inglés)'
 
-    prompt = f"""Eres un experto en cartas de presentación para ofertas de trabajo.
-Escribe una carta de presentación profesional para {nombre}.
-
-{contexto}
-
-OFERTA:
-- Empresa: {empresa}
-- Puesto: {puesto}
-- Descripción: {descripcion or "No disponible"}
-
-REGLAS:
-- La oferta está en {"inglés" if idioma == "en" else "español"}. Escribe TODA la carta en ese idioma (saludo, cuerpo y despedida).
-- Máximo 250 palabras.
-- Usa SOLO experiencia real del CV master, y SOLO la relevante para este puesto; conecta esa experiencia con lo que pide la oferta. NO inventes, NO exageres y NO afirmes nada difícil de defender en entrevista (ni gestión de equipos ni arquitectura que no haya hecho).
-- NIVEL: si el puesto NO menciona lead/manager/responsable/principal/head, es un rol de DESARROLLO INDIVIDUAL: NO uses la coordinación/liderazgo de equipos como argumento principal (nada de "experiencia coordinando equipos técnicos"). Enfoca el encaje TÉCNICO real (stacks, full-stack, APIs, mobile, capacidad de aprender rápido el stack de la oferta).
-- Tono profesional, directo y humano. Cero frases vacías de IA: nada de "apasionada",
-  "proactiva", "soluciones innovadoras", "emocionada de la oportunidad", "dinámica".
-- Menciona logros o tecnologías concretas del CV que encajen con la oferta.
-- Formato carta: {instr_saludo} ... cuerpo ... despedida formal ("Atentamente," / "Sincerely,") seguida de "{nombre}".
-- Devuelve SOLO el texto de la carta, sin encabezados ni comentarios."""
+    prompt = PROMPT_CARTA.format(
+        nombre=nombre,
+        contexto=contexto,
+        empresa=empresa,
+        puesto=puesto,
+        descripcion=descripcion or "No disponible",
+        idioma_carta="inglés" if idioma == "en" else "español",
+        instr_saludo=instr_saludo,
+    )
 
     try:
         respuesta_llm = call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500)
