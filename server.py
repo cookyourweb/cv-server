@@ -59,6 +59,14 @@ N8N_HOST = os.getenv("N8N_HOST", "https://n8n-asistente-correo.onrender.com")
 WEBHOOK_BUSCAR_AHORA = os.getenv(
     "WEBHOOK_BUSCAR_AHORA", f"{N8N_HOST}/webhook/buscar-para-user"
 )
+# 30-ago-2026. `buscartrabajo` y este repositorio son PUBLICOS, y en sus docs
+# estan la URL del webhook y el `user_id` de Notion. El webhook no pedia nada:
+# se disparo con `curl` a pelo, sin credenciales. Cualquiera podia lanzar
+# busquedas, gastar la cuota de Groq y de Adzuna y llenar el Notion.
+# n8n solo admite Basic, Header o JWT en un webhook, asi que va por cabecera.
+# Vacio a proposito: permite desplegar esto ANTES de activar la autenticacion
+# en n8n sin que el boton deje de funcionar en el medio.
+N8N_WEBHOOK_TOKEN = os.getenv("N8N_WEBHOOK_TOKEN", "")
 
 # ─────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
@@ -455,8 +463,14 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
         # produccion el 28-ago-2026: 10,7s con la instancia caliente. Con 8s el
         # servidor se rendia antes de tiempo y la pantalla decia que la busqueda no
         # se habia lanzado cuando SI se habia lanzado y acabo en success.
+        cabeceras = (
+            {"X-Webhook-Token": N8N_WEBHOOK_TOKEN} if N8N_WEBHOOK_TOKEN else {}
+        )
         r = requests.post(
-            WEBHOOK_BUSCAR_AHORA, json=payload_buscar_para_user(usuario), timeout=45
+            WEBHOOK_BUSCAR_AHORA,
+            json=payload_buscar_para_user(usuario),
+            headers=cabeceras,
+            timeout=45,
         )
     except Exception as e:
         logger.error("Búsqueda NO disparada, n8n no responde (%s): %s", WEBHOOK_BUSCAR_AHORA, e)

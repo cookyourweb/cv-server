@@ -321,3 +321,58 @@ def test_la_pantalla_tiene_TRES_estados():
     cuerpo = _accion_existente()
     assert "hay_novedades" in cuerpo, "la pantalla no distingue si encontro algo"
     assert "no hay ofertas nuevas" in cuerpo
+
+
+# ── El webhook va autenticado ─────────────────────────────────────────────
+# 30ago2026. `buscartrabajo` y `cv-server` son repositorios PUBLICOS, y en sus
+# docs esta tanto la URL del webhook como el `user_id` de Notion. El webhook
+# `buscar-para-user` no pedia NADA: cualquiera que leyera el repositorio podia
+# lanzar busquedas, gastar la cuota de Groq y de Adzuna y llenar el Notion.
+# Comprobado disparandolo con `curl` a pelo, sin credenciales.
+#
+# n8n solo admite Basic, Header o JWT en un webhook, asi que va por cabecera.
+# El token NO puede estar en el codigo (el repositorio es publico): sale del
+# entorno, y si no esta, la cabecera no se manda. Ese silencio es a proposito:
+# permite desplegar cv-server ANTES de activar la autenticacion en n8n, sin que
+# el boton deje de funcionar en el medio.
+
+class PostEspia:
+    def __init__(self, status=200):
+        self.status, self.kwargs = status, None
+    def __call__(self, *a, **k):
+        self.kwargs = k
+        return RespuestaFalsa(self.status)
+
+
+def test_el_disparo_manda_el_token_en_la_cabecera(monkeypatch):
+    espia = PostEspia()
+    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
+    monkeypatch.setattr(srv, "N8N_WEBHOOK_TOKEN", "un-token-de-prueba")
+    monkeypatch.setattr(srv.requests, "post", espia)
+
+    srv.disparar_busqueda(USUARIO_NOTION)
+
+    assert espia.kwargs["headers"]["X-Webhook-Token"] == "un-token-de-prueba"
+
+
+def test_sin_token_configurado_no_se_manda_cabecera_vacia(monkeypatch):
+    # Una cabecera vacia es peor que ninguna: n8n la ve presente y la rechaza,
+    # y el fallo parece de red en vez de configuracion.
+    espia = PostEspia()
+    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
+    monkeypatch.setattr(srv, "N8N_WEBHOOK_TOKEN", "")
+    monkeypatch.setattr(srv.requests, "post", espia)
+
+    srv.disparar_busqueda(USUARIO_NOTION)
+
+    assert "X-Webhook-Token" not in espia.kwargs.get("headers", {})
+
+
+def test_el_token_no_esta_escrito_en_el_codigo():
+    # El repositorio es publico: el valor sale del entorno, nunca del fichero.
+    import inspect, re
+    fuente = inspect.getsource(srv)
+    linea = [l for l in fuente.splitlines() if l.startswith("N8N_WEBHOOK_TOKEN")]
+    assert linea, "falta N8N_WEBHOOK_TOKEN"
+    assert re.search(r'os\.getenv\(\s*"N8N_WEBHOOK_TOKEN"', linea[0]), linea[0]
+    assert not re.search(r'=\s*"[A-Za-z0-9_\-]{12,}"', linea[0]), "token escrito a mano"
