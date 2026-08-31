@@ -130,3 +130,58 @@ def test_el_detector_ya_no_encuentra_nada_en_lo_construido():
         assert srv.detectar_titular_fuera_de_contrato(construido, MASTER) == [], (
             f"El titular construido a partir de {malo!r} sigue disparando el detector"
         )
+
+
+# ── Regresion 31-ago-2026: el titular TARTAMUDO ──────────────────────────────
+# Cuatro CV salieron con la seniority DOS VECES, y dos ya se enviaron (Leadtech,
+# UL Solutions). El fixture MASTER de arriba no podia cazarlo: su seniority es la
+# corta ("10+ years in digital product"), y el PERFIL BASE real la tiene LARGA.
+# Con la corta, un prefijo de la seniority no existe; con la larga, si.
+#
+# El modelo no repite la seniority: propone un PREFIJO suyo. El filtro comparaba
+# igualdad exacta contra la seniority, asi que lo aceptaba como modificador y
+# luego la seniority se pegaba otra vez al final.
+MASTER_REAL = """# PERFIL BASE
+
+## Identidad profesional
+Frontend Tech Lead | Full-Stack Developer | AI Engineer | React · TypeScript · Node.js | 10+ years in digital product · applying AI in production since 2025
+
+## Identidades permitidas
+- Frontend Tech Lead
+- Full-Stack Developer
+- AI Engineer
+
+EXPERIENCIA
+LLM integration, RAG, agent workflows, context engineering, guardrails, evaluation.
+React, TypeScript, Node.js, Python, Azure. AI systems in production since 2025.
+"""
+
+SENIORITY_REAL = "10+ years in digital product · applying AI in production since 2025"
+
+
+def test_regresion_la_seniority_no_sale_dos_veces():
+    """El CV de Mindera (AI-Systems-EN): el modelo colo un PREFIJO de la seniority."""
+    malo = ("Frontend Tech Lead | Full-Stack Developer | AI Engineer | "
+            "10+ years in digital product | " + SENIORITY_REAL)
+    out = srv.construir_titular(malo, MASTER_REAL)
+    assert out.count("10+ years in digital product") == 1, out
+
+
+def test_regresion_variante_de_la_seniority_tampoco_se_cuela():
+    """El CV de Leadtech y UL Solutions: una VARIANTE, no un prefijo literal."""
+    malo = ("Frontend Tech Lead | Full-Stack Developer | AI Engineer | "
+            "LLM Integration · RAG · Agent Workflows | "
+            "10+ years in digital product · AI systems in production since 2025 | "
+            + SENIORITY_REAL)
+    out = srv.construir_titular(malo, MASTER_REAL)
+    assert out.count("10+ years in digital product") == 1, out
+    assert out.endswith(SENIORITY_REAL), out
+
+
+def test_regresion_el_modificador_bueno_sobrevive_al_arreglo():
+    """El arreglo NO puede cargarse un modificador legitimo."""
+    bueno = ("Frontend Tech Lead | Full-Stack Developer | AI Engineer | "
+             "LLM Integration · RAG | " + SENIORITY_REAL)
+    out = srv.construir_titular(bueno, MASTER_REAL)
+    assert "LLM Integration · RAG" in out, out
+    assert out.count("10+ years in digital product") == 1, out

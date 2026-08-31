@@ -349,6 +349,29 @@ def _respaldado(modificador: str, master_texto: str) -> bool:
     return bool(palabras) and all(p.lower() in master_low for p in palabras)
 
 
+def _mancha_seniority(hueco: str, seniority: str) -> bool:
+    """El hueco es la seniority disfrazada, no un modificador.
+
+    31ago2026: cuatro CV salieron con la seniority DOS VECES (dos ya enviados). Aqui
+    se comparaba por IGUALDAD EXACTA contra la seniority, y el modelo no la repite:
+    propone una VARIANTE. Con la seniority real
+
+        "10+ years in digital product · applying AI in production since 2025"
+
+    colo "10+ years in digital product" (un prefijo) y "10+ years in digital product ·
+    AI systems in production since 2025" (otro final). Ninguna es igual, las dos
+    pasaban el filtro, y luego la seniority se pegaba otra vez al final.
+
+    La prueba correcta no es la igualdad: es si el hueco habla DE LO MISMO. Se compara
+    por el primer tramo antes del "·", que es donde vive el nucleo ("10+ years in
+    digital product"). Asi caen el prefijo y todas sus variantes de cola."""
+    if not seniority:
+        return False
+    nucleo = seniority.split("·")[0].strip().lower()
+    h = hueco.strip().lower()
+    return h == seniority.strip().lower() or bool(nucleo) and h.startswith(nucleo)
+
+
 def construir_titular(titular_llm: str, master_texto: str) -> str:
     """Ensambla el titular desde el PERFIL BASE en vez de fiarse del modelo.
 
@@ -386,7 +409,7 @@ def construir_titular(titular_llm: str, master_texto: str) -> str:
         h for h in _huecos(titular_llm)
         if not _es_identidad(h, permitidas)
         and not _mancha_identidad(h)
-        and h.lower() != seniority.lower()
+        and not _mancha_seniority(h, seniority)
         and _respaldado(h, master_texto)
     ][:2]
 
