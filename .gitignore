@@ -95,3 +95,6 @@ Thumbs.db
 # `git rm -r --cached` ademas de ignorarlo.
 # ══════════════════════════════════════════════
 docs/privado/
+
+# Registro de skills, se regenera con /sdd-init. Local, no se comparte.
+.atl/
