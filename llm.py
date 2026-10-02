@@ -50,6 +50,33 @@ class RespuestaLLM(NamedTuple):
     """
     contenido: str
     modelo:    str
+    # Lo que gasto la llamada, tal como lo informa el proveedor. None si no lo
+    # informa: nunca un cero inventado. Ver tests/test_consumo_tokens.py.
+    tokens_entrada: int | None = None
+    tokens_salida:  int | None = None
+
+
+class TextoConConsumo(str):
+    """El texto de Claude, que ademas recuerda cuantos tokens costo.
+
+    Es un `str` a proposito: quien solo quiere el texto lo usa igual que antes,
+    y los dobles de test que devuelven un `str` normal siguen valiendo.
+    """
+    tokens_entrada: int | None = None
+    tokens_salida:  int | None = None
+
+
+def describir_error(e: Exception) -> str:
+    """Tipo y codigo HTTP de un error, para registrarlo. Nunca su mensaje.
+
+    El mensaje lo arma una libreria de terceros y puede llevar la URL completa:
+    con `requests`, un `HTTPError` incluye la direccion de la peticion, y el
+    2-oct-2026 eso escribia la clave de Gemini en los registros. Ver
+    tests/test_claves_fuera_de_los_registros.py.
+    """
+    codigo = getattr(getattr(e, "response", None), "status_code", None)
+    codigo = codigo or getattr(e, "status_code", None)
+    return f"{type(e).__name__}" + (f" (HTTP {codigo})" if codigo else "")
 
 
 class BackendLLM(Protocol):
@@ -107,14 +134,16 @@ class CascadaCasera:
             logger.info("LLM: Groq OK (%s)", GROQ_MODEL)
             return RespuestaLLM(content, GROQ_MODEL)
         except Exception as e:
-            logger.warning("Groq falló: %s — probando fallbacks", e)
+            logger.warning("Groq falló: %s — probando fallbacks", describir_error(e))
 
         # ── 2. Gemini (fallback) ──────────────────
         if GEMINI_API_KEY:
             try:
                 resp = requests.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                    params={"key": GEMINI_API_KEY},
+                    # En cabecera, nunca en la URL: una URL acaba en los mensajes
+                    # de error y de ahi en los registros.
+                    headers={"x-goog-api-key": GEMINI_API_KEY},
                     json={"contents": [{"parts": [{"text": prompt}]}]},
                     timeout=30,
                 )
@@ -123,7 +152,7 @@ class CascadaCasera:
                 logger.info("LLM: Gemini fallback OK (%s)", GEMINI_MODEL)
                 return RespuestaLLM(content, GEMINI_MODEL)
             except Exception as e:
-                logger.warning("Gemini fallback falló: %s — probando Claude", e)
+                logger.warning("Gemini fallback falló: %s — probando Claude", describir_error(e))
 
         # ── 3. Claude (fallback) ──────────────────
         if CLAUDE_API_KEY:
@@ -147,7 +176,7 @@ class CascadaCasera:
                 logger.info("LLM: Claude fallback OK (%s)", CLAUDE_MODEL)
                 return RespuestaLLM(content, CLAUDE_MODEL)
             except Exception as e:
-                logger.error("Claude fallback falló: %s", e)
+                logger.error("Claude fallback falló: %s", describir_error(e))
 
         raise RuntimeError("Todos los LLMs fallaron. Revisa las API keys y el estado de los servicios.")
 
@@ -258,7 +287,11 @@ def call_claude(prompt: str, model: str, max_tokens: int = 4096) -> str:
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
-    return "".join(b.text for b in resp.content if b.type == "text")
+    texto = TextoConConsumo("".join(b.text for b in resp.content if b.type == "text"))
+    uso = getattr(resp, "usage", None)
+    texto.tokens_entrada = getattr(uso, "input_tokens", None)
+    texto.tokens_salida = getattr(uso, "output_tokens", None)
+    return texto
 
 
 def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096) -> RespuestaLLM:
@@ -267,12 +300,16 @@ def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096)
     try:
         contenido = call_claude(prompt, model=model, max_tokens=max_tokens)
         logger.info("LLM calidad: Claude OK (%s)", model)
-        return RespuestaLLM(contenido, model)
+        return RespuestaLLM(
+            str(contenido), model,
+            getattr(contenido, "tokens_entrada", None),
+            getattr(contenido, "tokens_salida", None),
+        )
     except (NameError, AttributeError, TypeError, ImportError):
         # Bug NUESTRO, no una caida del proveedor. Degradarlo a Groq lo esconde:
         # el 28-ago-2026 un `import` que falto dejo la capa de calidad muerta y
         # los CVs los escribio el fallback sin que nadie se enterase.
         raise
     except Exception as e:
-        logger.warning("Claude falló (%s) — cayendo a Groq", e)
+        logger.warning("Claude falló (%s) — cayendo a Groq", describir_error(e))
         return call_llm(prompt)
