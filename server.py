@@ -378,6 +378,15 @@ def health():
 # dice `/health`, sin gastar. Lo vigila tests/test_rutas_cerradas.py.
 
 
+def consumo_de(respuesta) -> dict:
+    """Lo que gasto una generacion. Se registra y se devuelve, sin el email."""
+    return {
+        "modelo":         respuesta.modelo,
+        "tokens_entrada": respuesta.tokens_entrada,
+        "tokens_salida":  respuesta.tokens_salida,
+    }
+
+
 def requiere_clave_maquina(vista):
     """Solo deja pasar a quien trae la clave de maquina en X-Clave-Maquina."""
     @wraps(vista)
@@ -952,6 +961,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad
         respuesta_llm = call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096)
         contenido_cv  = respuesta_llm.contenido
+        logger.info("CONSUMO cv %s", consumo_de(respuesta_llm))
     except RuntimeError as e:
         raise CVError(503, str(e))
 
@@ -1060,6 +1070,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         # Revisar a mano: es un CV que Veronica tiene y no sabe que tiene.
         "link_anotado_en_notion": link_anotado,
         "modelo_usado":    respuesta_llm.modelo,
+        "consumo":         consumo_de(respuesta_llm),
         "archivo":         nombre_archivo,
         "email":           email,
         "cv_master_usado": bool(cv_master),
@@ -1187,6 +1198,7 @@ def generar_carta():
     try:
         respuesta_llm = call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500)
         carta         = respuesta_llm.contenido
+        logger.info("CONSUMO carta %s", consumo_de(respuesta_llm))
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503
 
@@ -1220,6 +1232,7 @@ def generar_carta():
         "ok":              True,
         "carta":           carta,
         "modelo_usado":    respuesta_llm.modelo,
+        "consumo":         consumo_de(respuesta_llm),
         "email":           email,
         "cv_master_usado": bool(cv_master),
         # `jsonify` es de Flask y no sabe serializar un modelo Pydantic: sin este

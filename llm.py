@@ -50,6 +50,20 @@ class RespuestaLLM(NamedTuple):
     """
     contenido: str
     modelo:    str
+    # Lo que gasto la llamada, tal como lo informa el proveedor. None si no lo
+    # informa: nunca un cero inventado. Ver tests/test_consumo_tokens.py.
+    tokens_entrada: int | None = None
+    tokens_salida:  int | None = None
+
+
+class TextoConConsumo(str):
+    """El texto de Claude, que ademas recuerda cuantos tokens costo.
+
+    Es un `str` a proposito: quien solo quiere el texto lo usa igual que antes,
+    y los dobles de test que devuelven un `str` normal siguen valiendo.
+    """
+    tokens_entrada: int | None = None
+    tokens_salida:  int | None = None
 
 
 def describir_error(e: Exception) -> str:
@@ -273,7 +287,11 @@ def call_claude(prompt: str, model: str, max_tokens: int = 4096) -> str:
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
-    return "".join(b.text for b in resp.content if b.type == "text")
+    texto = TextoConConsumo("".join(b.text for b in resp.content if b.type == "text"))
+    uso = getattr(resp, "usage", None)
+    texto.tokens_entrada = getattr(uso, "input_tokens", None)
+    texto.tokens_salida = getattr(uso, "output_tokens", None)
+    return texto
 
 
 def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096) -> RespuestaLLM:
@@ -282,7 +300,11 @@ def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096)
     try:
         contenido = call_claude(prompt, model=model, max_tokens=max_tokens)
         logger.info("LLM calidad: Claude OK (%s)", model)
-        return RespuestaLLM(contenido, model)
+        return RespuestaLLM(
+            str(contenido), model,
+            getattr(contenido, "tokens_entrada", None),
+            getattr(contenido, "tokens_salida", None),
+        )
     except (NameError, AttributeError, TypeError, ImportError):
         # Bug NUESTRO, no una caida del proveedor. Degradarlo a Groq lo esconde:
         # el 28-ago-2026 un `import` que falto dejo la capa de calidad muerta y

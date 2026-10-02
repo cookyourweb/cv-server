@@ -43,6 +43,8 @@ class GenerarCVResponse(BaseModel):
     tecnologias_no_respaldadas: list[str] = []
     titular_fuera_de_contrato: list[str] = []
     descripcion_oferta: DescripcionOferta | None = None
+    # Tokens que gasto la generacion (ADR-004: lo paga la clave de la usuaria).
+    consumo: dict | None = None
 
 
 @app.post("/generar-cv", response_model=GenerarCVResponse)
