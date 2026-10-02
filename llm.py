@@ -52,6 +52,19 @@ class RespuestaLLM(NamedTuple):
     modelo:    str
 
 
+def describir_error(e: Exception) -> str:
+    """Tipo y codigo HTTP de un error, para registrarlo. Nunca su mensaje.
+
+    El mensaje lo arma una libreria de terceros y puede llevar la URL completa:
+    con `requests`, un `HTTPError` incluye la direccion de la peticion, y el
+    2-oct-2026 eso escribia la clave de Gemini en los registros. Ver
+    tests/test_claves_fuera_de_los_registros.py.
+    """
+    codigo = getattr(getattr(e, "response", None), "status_code", None)
+    codigo = codigo or getattr(e, "status_code", None)
+    return f"{type(e).__name__}" + (f" (HTTP {codigo})" if codigo else "")
+
+
 class BackendLLM(Protocol):
     """Lo que cualquier backend de la cascada tiene que ofrecer. Nada mas.
 
@@ -107,14 +120,16 @@ class CascadaCasera:
             logger.info("LLM: Groq OK (%s)", GROQ_MODEL)
             return RespuestaLLM(content, GROQ_MODEL)
         except Exception as e:
-            logger.warning("Groq falló: %s — probando fallbacks", e)
+            logger.warning("Groq falló: %s — probando fallbacks", describir_error(e))
 
         # ── 2. Gemini (fallback) ──────────────────
         if GEMINI_API_KEY:
             try:
                 resp = requests.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                    params={"key": GEMINI_API_KEY},
+                    # En cabecera, nunca en la URL: una URL acaba en los mensajes
+                    # de error y de ahi en los registros.
+                    headers={"x-goog-api-key": GEMINI_API_KEY},
                     json={"contents": [{"parts": [{"text": prompt}]}]},
                     timeout=30,
                 )
@@ -123,7 +138,7 @@ class CascadaCasera:
                 logger.info("LLM: Gemini fallback OK (%s)", GEMINI_MODEL)
                 return RespuestaLLM(content, GEMINI_MODEL)
             except Exception as e:
-                logger.warning("Gemini fallback falló: %s — probando Claude", e)
+                logger.warning("Gemini fallback falló: %s — probando Claude", describir_error(e))
 
         # ── 3. Claude (fallback) ──────────────────
         if CLAUDE_API_KEY:
@@ -147,7 +162,7 @@ class CascadaCasera:
                 logger.info("LLM: Claude fallback OK (%s)", CLAUDE_MODEL)
                 return RespuestaLLM(content, CLAUDE_MODEL)
             except Exception as e:
-                logger.error("Claude fallback falló: %s", e)
+                logger.error("Claude fallback falló: %s", describir_error(e))
 
         raise RuntimeError("Todos los LLMs fallaron. Revisa las API keys y el estado de los servicios.")
 
@@ -274,5 +289,5 @@ def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096)
         # los CVs los escribio el fallback sin que nadie se enterase.
         raise
     except Exception as e:
-        logger.warning("Claude falló (%s) — cayendo a Groq", e)
+        logger.warning("Claude falló (%s) — cayendo a Groq", describir_error(e))
         return call_llm(prompt)
