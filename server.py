@@ -9,12 +9,14 @@ Formulario multi-pantalla:
   1.  Si nuevo → formulario completo + botón Buscar ahora
 """
 
+import hmac
 import os
 import io
 import re
 import logging
 import requests
 from datetime import datetime, timezone
+from functools import wraps
 from typing import NamedTuple
 from flask import Flask, request, jsonify, render_template, make_response
 
@@ -67,6 +69,12 @@ WEBHOOK_BUSCAR_AHORA = os.getenv(
 # Vacio a proposito: permite desplegar esto ANTES de activar la autenticacion
 # en n8n sin que el boton deje de funcionar en el medio.
 N8N_WEBHOOK_TOKEN = os.getenv("N8N_WEBHOOK_TOKEN", "")
+
+# Clave de maquina: la llevan en la cabecera X-Clave-Maquina las llamadas que no
+# hace una persona (n8n, scripts de administracion). Es distinta de la identidad
+# de las usuarias (ADR-003). Sin variable configurada, las rutas que la exigen no
+# abren nunca: falla cerrado.
+CLAVE_MAQUINA = os.getenv("CLAVE_MAQUINA", "")
 
 # ─────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO)
@@ -365,14 +373,22 @@ def health():
     })
 
 
-@app.route("/debug")
-def debug():
-    """Prueba rápida del LLM activo (Groq primero)."""
-    try:
-        r = call_llm("Responde solo: 'Groq funcionando correctamente en cv_server v2.3'")
-        return jsonify({"ok": True, "respuesta": r.contenido, "modelo": r.modelo})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+# `/debug` se elimino el 2-oct-2026: llamaba al LLM con la clave de la duena y
+# estaba abierta a cualquiera. Lo que contaba (que modelo hay configurado) ya lo
+# dice `/health`, sin gastar. Lo vigila tests/test_rutas_cerradas.py.
+
+
+def requiere_clave_maquina(vista):
+    """Solo deja pasar a quien trae la clave de maquina en X-Clave-Maquina."""
+    @wraps(vista)
+    def protegida(*args, **kwargs):
+        recibida = request.headers.get("X-Clave-Maquina", "")
+        if not CLAVE_MAQUINA or not hmac.compare_digest(
+            recibida.encode(), CLAVE_MAQUINA.encode()
+        ):
+            return jsonify({"ok": False, "error": "no autorizado"}), 401
+        return vista(*args, **kwargs)
+    return protegida
 
 
 @app.route("/check-email", methods=["POST"])
@@ -1214,6 +1230,7 @@ def generar_carta():
 
 
 @app.route("/usuarios", methods=["GET"])
+@requiere_clave_maquina
 def usuarios():
     """Consulta usuarios activos en Notion."""
     if not NOTION_DB_USUARIOS:
