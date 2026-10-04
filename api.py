@@ -3,10 +3,13 @@
 Capa HTTP tipada con Pydantic sobre la lógica de negocio de server.
 Coexiste con Flask; se migra endpoint por endpoint. Servir con:  uvicorn api:app
 """
-from fastapi import FastAPI
+import hmac
+
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+import server
 from server import CVError, generar_cv_core
 
 app = FastAPI(title="cv-server API", version="0.1.0")
@@ -47,7 +50,14 @@ class GenerarCVResponse(BaseModel):
     consumo: dict | None = None
 
 
-@app.post("/generar-cv", response_model=GenerarCVResponse)
+def requiere_clave_maquina(x_clave_maquina: str = Header(default="")):
+    """Lo mismo que el decorador de server.py (ADR-003): sin la clave, 401. Falla cerrado."""
+    clave = server.CLAVE_MAQUINA
+    if not clave or not hmac.compare_digest(x_clave_maquina.encode(), clave.encode()):
+        raise HTTPException(status_code=401, detail="no autorizado")
+
+
+@app.post("/generar-cv", response_model=GenerarCVResponse, dependencies=[Depends(requiere_clave_maquina)])
 def generar_cv(req: GenerarCVRequest):
     """Ruta FastAPI: contrato Pydantic + delega en generar_cv_core (ADR-001)."""
     try:

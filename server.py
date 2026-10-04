@@ -397,6 +397,7 @@ def requiere_clave_maquina(vista):
         ):
             return jsonify({"ok": False, "error": "no autorizado"}), 401
         return vista(*args, **kwargs)
+    protegida.exige_clave_maquina = True  # lo comprueba tests/test_rutas_de_maquina.py
     return protegida
 
 
@@ -1093,6 +1094,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
 
 
 @app.route("/generar-cv", methods=["POST"])
+@requiere_clave_maquina
 def generar_cv():
     """Ruta Flask fina: parsea el request y delega en generar_cv_core (ADR-001)."""
     datos = request.get_json(force=True)
@@ -1110,6 +1112,7 @@ def generar_cv():
 
 
 @app.route("/generar-carta", methods=["POST"])
+@requiere_clave_maquina
 def generar_carta():
     """Genera la carta de presentación con la experiencia real del CV master.
     Usa Claude Sonnet (calidad) — la carta va a la empresa."""
@@ -1272,6 +1275,7 @@ def usuarios():
 
 
 @app.route("/buscar-ofertas-reales", methods=["POST"])
+@requiere_clave_maquina
 def buscar_ofertas_reales_endpoint():
     """
     Busca ofertas REALES en Remotive (sustituye al LLM inventando ofertas).
@@ -1302,6 +1306,7 @@ def buscar_ofertas_reales_endpoint():
 
 
 @app.route("/crear-oferta", methods=["POST"])
+@requiere_clave_maquina
 def crear_oferta():
     """Crea una oferta en Notion con TODOS sus campos.
 
