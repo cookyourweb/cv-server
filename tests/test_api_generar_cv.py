@@ -9,7 +9,17 @@ from fastapi.testclient import TestClient
 
 import api
 
-client = TestClient(api.app)
+client = TestClient(api.app, headers={"X-Clave-Maquina": "clave-de-prueba"})
+
+
+import pytest
+import server
+
+
+@pytest.fixture(autouse=True)
+def _clave_configurada(monkeypatch):
+    # La API exige la clave de maquina (ADR-003). Los tests de contrato la llevan.
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-de-prueba")
 
 
 def _payload(**over):
@@ -111,3 +121,23 @@ def test_los_guardrails_vacios_son_el_caso_normal():
     assert body["tecnologias_no_respaldadas"] == []
     assert body["titular_fuera_de_contrato"] == []
     assert body["descripcion_oferta"] is None
+
+
+# ── Clave de máquina (ADR-003): la API FastAPI exige lo mismo que la de Flask ──
+
+def test_api_generar_cv_sin_clave_401(monkeypatch):
+    import server
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-de-prueba")
+    with patch.object(api, "generar_cv_core") as core:
+        r = TestClient(api.app).post("/generar-cv", json=_payload())
+    assert r.status_code == 401
+    core.assert_not_called()
+
+
+def test_api_generar_cv_sin_clave_configurada_no_abre(monkeypatch):
+    import server
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "")
+    with patch.object(api, "generar_cv_core") as core:
+        r = client.post("/generar-cv", json=_payload(), headers={"X-Clave-Maquina": ""})
+    assert r.status_code == 401
+    core.assert_not_called()
