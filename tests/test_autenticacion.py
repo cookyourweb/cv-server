@@ -3,12 +3,23 @@
 Logica pura, reutilizable por Flask y FastAPI. Los tests nunca llaman a Google:
 las claves publicas se inyectan y los tokens se firman con claves RSA de prueba.
 """
+import base64
 import dataclasses
+import threading
+import time
 
 import pytest
+import rsa
 
 import autenticacion
-from autenticacion import ConfiguracionOIDC, ErrorDeAutenticacion, Identidad, NoInvitada, ProveedorNoDisponible
+from autenticacion import (
+    ClavesPublicas,
+    ConfiguracionOIDC,
+    ErrorDeAutenticacion,
+    Identidad,
+    NoInvitada,
+    ProveedorNoDisponible,
+)
 
 
 def test_una_identidad_es_inmutable():
@@ -78,3 +89,123 @@ def test_la_configuracion_es_incompleta_si_falta_audiencia_emisores_o_jwks(falta
 def test_las_invitadas_vacias_no_hacen_incompleta_la_configuracion():
     # Lista vacia = no invita a nadie (403), no es un fallo de configuracion (503).
     assert ConfiguracionOIDC.desde_entorno({**ENTORNO, "OIDC_INVITADAS": ""}).completa()
+
+
+# --- claves publicas (JWKS) --------------------------------------------------
+
+@pytest.fixture(scope="module")
+def par_a():
+    return rsa.newkeys(1024)
+
+
+@pytest.fixture(scope="module")
+def par_b():
+    return rsa.newkeys(1024)
+
+
+def _b64(numero: int) -> str:
+    crudo = numero.to_bytes((numero.bit_length() + 7) // 8, "big")
+    return base64.urlsafe_b64encode(crudo).rstrip(b"=").decode()
+
+
+def _jwks(**claves):
+    """claves: kid -> clave publica rsa."""
+    return {"keys": [{"kty": "RSA", "kid": k, "n": _b64(p.n), "e": _b64(p.e)} for k, p in claves.items()]}
+
+
+class Reloj:
+    def __init__(self):
+        self.ahora = 1000.0
+
+    def __call__(self):
+        return self.ahora
+
+
+class Descargador:
+    def __init__(self, *respuestas):
+        self.respuestas = list(respuestas)
+        self.llamadas = []
+
+    def __call__(self, url):
+        self.llamadas.append(url)
+        r = self.respuestas.pop(0) if len(self.respuestas) > 1 else self.respuestas[0]
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def test_pem_de_devuelve_la_clave_del_kid_en_formato_pem(par_a):
+    pub, _ = par_a
+    d = Descargador(_jwks(k1=pub))
+    pem = ClavesPublicas("https://jwks", d, reloj=Reloj()).pem_de("k1")
+    assert rsa.PublicKey.load_pkcs1(pem.encode()) == pub
+    assert d.llamadas == ["https://jwks"]
+
+
+def test_dentro_del_ttl_no_vuelve_a_descargar(par_a):
+    reloj, d = Reloj(), Descargador(_jwks(k1=par_a[0]))
+    claves = ClavesPublicas("u", d, ttl=3600, reloj=reloj)
+    claves.pem_de("k1")
+    reloj.ahora += 3599
+    claves.pem_de("k1")
+    assert len(d.llamadas) == 1
+
+
+def test_pasado_el_ttl_vuelve_a_descargar(par_a):
+    reloj, d = Reloj(), Descargador(_jwks(k1=par_a[0]))
+    claves = ClavesPublicas("u", d, ttl=3600, reloj=reloj)
+    claves.pem_de("k1")
+    reloj.ahora += 3601
+    claves.pem_de("k1")
+    assert len(d.llamadas) == 2
+
+
+def test_kid_desconocido_refresca_una_vez_y_no_mas_de_una_cada_300_segundos(par_a, par_b):
+    reloj = Reloj()
+    d = Descargador(_jwks(k1=par_a[0]), _jwks(k1=par_a[0], k2=par_b[0]))
+    claves = ClavesPublicas("u", d, reloj=reloj)
+    claves.pem_de("k1")
+    assert claves.pem_de("zzz") is None            # dentro de 300 s: no refresca
+    assert len(d.llamadas) == 1
+    reloj.ahora += 301
+    assert claves.pem_de("k2") is not None         # rotacion: refresca y la encuentra
+    assert len(d.llamadas) == 2
+    assert claves.pem_de("zzz") is None            # otra desconocida: no refresca otra vez
+    assert len(d.llamadas) == 2
+
+
+def test_sin_cache_y_con_la_descarga_caida_es_proveedor_no_disponible():
+    d = Descargador(OSError("sin red"))
+    with pytest.raises(ProveedorNoDisponible):
+        ClavesPublicas("u", d, reloj=Reloj()).pem_de("k1")
+
+
+def test_con_cache_valida_y_descarga_caida_sirve_la_cache(par_a):
+    reloj = Reloj()
+    d = Descargador(_jwks(k1=par_a[0]), OSError("sin red"))
+    claves = ClavesPublicas("u", d, ttl=3600, reloj=reloj)
+    claves.pem_de("k1")
+    reloj.ahora += 4000
+    assert claves.pem_de("k1") is not None
+
+
+def test_una_respuesta_sin_claves_validas_es_proveedor_no_disponible():
+    with pytest.raises(ProveedorNoDisponible):
+        ClavesPublicas("u", Descargador({"basura": 1}), reloj=Reloj()).pem_de("k1")
+
+
+def test_con_hilos_concurrentes_se_descarga_una_sola_vez(par_a):
+    d = Descargador(_jwks(k1=par_a[0]))
+    original = d.__call__
+
+    def lenta(url):
+        time.sleep(0.05)
+        return original(url)
+
+    claves = ClavesPublicas("u", lenta, reloj=Reloj())
+    hilos = [threading.Thread(target=claves.pem_de, args=("k1",)) for _ in range(8)]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+    assert len(d.llamadas) == 1

@@ -1,10 +1,17 @@
 """Autenticacion con Google: verificar el token y comprobar la lista de invitadas.
 
-Logica pura, sin depender de ningun framework web: la reutiliza cualquier servidor. Nada se lee del entorno al
-importar; la configuracion se pide con `ConfiguracionOIDC.desde_entorno()`.
+Logica pura, sin depender de ningun framework web: la reutiliza cualquier
+servidor. Nada se lee del entorno al importar; la configuracion se pide con
+`ConfiguracionOIDC.desde_entorno()`.
 """
+import base64
 import os
+import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
+
+import rsa
 
 
 class ErrorDeAutenticacion(Exception):
@@ -55,3 +62,68 @@ class ConfiguracionOIDC:
 
     def completa(self) -> bool:
         return bool(self.audiencia and self.emisores and self.url_jwks)
+
+
+REFRESCO_MINIMO = 300  # segundos entre descargas provocadas por un kid desconocido
+
+
+def _descargar_jwks(url: str) -> dict:
+    import requests
+
+    respuesta = requests.get(url, timeout=5)
+    respuesta.raise_for_status()
+    return respuesta.json()
+
+
+def _entero(b64url: str) -> int:
+    relleno = "=" * (-len(b64url) % 4)
+    return int.from_bytes(base64.urlsafe_b64decode(b64url + relleno), "big")
+
+
+def _pem_de_jwk(jwk: dict) -> str:
+    return rsa.PublicKey(_entero(jwk["n"]), _entero(jwk["e"])).save_pkcs1().decode()
+
+
+class ClavesPublicas:
+    """Cache kid -> PEM de las claves del proveedor, con TTL y refresco acotado."""
+
+    def __init__(self, url: str, descargar: Callable[[str], dict] | None = None,
+                 ttl: int = 3600, reloj: Callable[[], float] = time.monotonic):
+        self._url = url
+        self._descargar = descargar or _descargar_jwks
+        self._ttl = ttl
+        self._reloj = reloj
+        self._pems: dict[str, str] = {}
+        self._cargadas_en: float | None = None
+        self._ultimo_intento: float | None = None
+        self._cerrojo = threading.Lock()
+
+    def _refrescar(self) -> None:
+        self._ultimo_intento = self._reloj()
+        try:
+            claves = self._descargar(self._url)["keys"]
+            nuevas = {k["kid"]: _pem_de_jwk(k) for k in claves if k.get("kty") == "RSA"}
+        except Exception as error:
+            if not self._pems:
+                raise ProveedorNoDisponible("no se pudieron obtener las claves publicas") from error
+            return  # hay cache: se sigue sirviendo
+        if not nuevas and not self._pems:
+            raise ProveedorNoDisponible("el proveedor no publico ninguna clave RSA")
+        if nuevas:
+            self._pems = nuevas
+            self._cargadas_en = self._reloj()
+
+    def _puede_reintentar(self, ahora: float) -> bool:
+        return self._ultimo_intento is None or ahora - self._ultimo_intento >= REFRESCO_MINIMO
+
+    def pem_de(self, kid: str) -> str | None:
+        # El cerrojo cubre tambien la descarga: 8 peticiones a la vez, 1 sola descarga.
+        with self._cerrojo:
+            ahora = self._reloj()
+            if self._cargadas_en is None:
+                self._refrescar()
+            elif ahora - self._cargadas_en >= self._ttl and self._puede_reintentar(ahora):
+                self._refrescar()
+            if kid not in self._pems and self._puede_reintentar(ahora):
+                self._refrescar()
+            return self._pems.get(kid)
