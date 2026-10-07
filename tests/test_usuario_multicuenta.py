@@ -1,7 +1,7 @@
 """TDD - un usuario puede recibir ofertas en VARIAS cuentas de correo.
 
-Caso real (28jul2026): a Vero le llegan ofertas a hello.cookyourweb@gmail.com y a
-verseper@hotmail.com. Como `buscar_usuario_por_email` filtraba por el campo `Email`
+Caso real (28jul2026): a Vero le llegan ofertas a dos buzones distintos (en estos
+tests, principal@example.com y alias@example.com). Como `buscar_usuario_por_email` filtraba por el campo `Email`
 exacto, hubo que crear DOS registros en Notion para que ambos buzones funcionaran.
 
 El parche se rompio solo: los dos registros derivaron. El segundo quedo con el Master
