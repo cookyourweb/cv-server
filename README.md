@@ -82,7 +82,7 @@ existe, el 8 existe, y la frase que los junta es falsa.
 
 ### La carta también pasa los guardrails
 
-Hasta el 18-ago-2026 los detectores se aplicaban solo a `contenido_cv`. La carta es lo
+Hasta el 28-ago-2026 los detectores se aplicaban solo a `contenido_cv`. La carta es lo
 PRIMERO que lee un humano, el CV lo abren después, y salía sin verificar. Ahora
 `/generar-carta` devuelve `avisos` con lo que encuentre.
 
