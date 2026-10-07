@@ -51,6 +51,38 @@ tocar el f-string del prompt en `server.py`.
 
 ---
 
+## Octubre 2026
+
+### 7-oct · Cierre de las rutas del formulario de alta
+
+**Qué cambió**
+
+- Borradas `/check-email` y `/accion-existente`.
+- `POST /registro` exige la clave de máquina (`X-Clave-Maquina`) y ante un fallo
+  devuelve un error genérico (500), sin la excepción.
+- `GET /` sirve una página de invitación (`templates/inicio.html`) con `no-store`.
+- Borrada `templates/alta.html`: ninguna ruta la sirve ya.
+
+**Por qué**
+
+Las tres rutas se fiaban de un email que llegaba en el cuerpo de la petición, sin
+comprobar quién lo mandaba. Eso permitía:
+
+- Enumerar cuentas: preguntar si un email existía.
+- Lanzar búsquedas en nombre de otras personas.
+- Darse de alta sin invitación.
+
+Es el punto 4 del [ADR-003](docs/ADR-003-usuario-multicuenta.md).
+
+**Qué lo protege**
+
+| Test | Garantía |
+|---|---|
+| `tests/test_rutas_de_maquina.py` (inventario y `test_rutas_retiradas_no_existen`) | Toda ruta de máquina exige la clave y las rutas retiradas no existen |
+| `tests/test_pagina_de_inicio.py` | La portada no enlaza a rutas de datos y no se cachea |
+
+---
+
 ## Julio 2026
 
 ### 20-jul — Saneador tipográfico: cero guiones largos ni flechas en CV y carta
