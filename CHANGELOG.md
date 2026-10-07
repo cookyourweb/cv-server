@@ -79,7 +79,7 @@ Es el punto 4 del [ADR-003](docs/ADR-003-usuario-multicuenta.md).
 | Test | Garantía |
 |---|---|
 | `tests/test_rutas_de_maquina.py` (inventario y `test_rutas_retiradas_no_existen`) | Toda ruta de máquina exige la clave y las rutas retiradas no existen |
-| `tests/test_pagina_de_inicio.py` | La portada no enlaza a rutas de datos y no se cachea |
+| `tests/test_pagina_de_inicio.py` | La portada no tiene formulario, no llama a rutas retiradas ni enlaza a `/usuarios`. `test_buscar_ahora.py::test_la_portada_no_se_cachea` cubre `no-store` |
 
 ---
 
