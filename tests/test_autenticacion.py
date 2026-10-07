@@ -21,6 +21,7 @@ from autenticacion import (
     Identidad,
     NoInvitada,
     ProveedorNoDisponible,
+    identificar,
     verificar_token,
 )
 
@@ -312,3 +313,64 @@ def test_kid_desconocido(par_a, claves):
 def test_un_token_mal_formado_se_rechaza(token, claves):
     with pytest.raises(ErrorDeAutenticacion):
         verificar_token(token, CONFIG, claves)
+
+
+# --- identificar -------------------------------------------------------------
+
+def _config(invitadas=("ana@ejemplo.es",)):
+    return ConfiguracionOIDC(AUDIENCIA, (EMISOR,), "https://jwks", frozenset(invitadas))
+
+
+def _bearer(par, **cambios):
+    return "Bearer " + _firmar(par[1], _payload(**cambios))
+
+
+def test_una_invitada_con_token_valido_es_identificada(par_a, claves):
+    assert identificar(_bearer(par_a), _config(), claves).email == "ana@ejemplo.es"
+
+
+def test_la_lista_se_compara_sin_mayusculas_ni_espacios(par_a, claves):
+    cfg = ConfiguracionOIDC.desde_entorno({**ENTORNO, "OIDC_INVITADAS": "  ANA@Ejemplo.ES ",
+                                           "OIDC_EMISORES": EMISOR})
+    assert identificar(_bearer(par_a, email=" Ana@EJEMPLO.es "), cfg, claves).sub == "42"
+
+
+def test_una_valida_fuera_de_la_lista_es_no_invitada(par_a, claves):
+    with pytest.raises(NoInvitada):
+        identificar(_bearer(par_a, email="intrusa@ejemplo.es"), _config(), claves)
+
+
+def test_la_lista_vacia_no_invita_a_nadie(par_a, claves):
+    with pytest.raises(NoInvitada):
+        identificar(_bearer(par_a), _config(invitadas=()), claves)
+
+
+@pytest.mark.parametrize("cabecera", [None, "", "Bearer", "Bearer ", "Basic abc", "bearer x y", "abc"])
+def test_cabecera_ausente_o_que_no_es_bearer_es_401(cabecera, claves):
+    with pytest.raises(ErrorDeAutenticacion):
+        identificar(cabecera, _config(), claves)
+
+
+def test_token_invalido_en_la_cabecera_es_401(claves):
+    with pytest.raises(ErrorDeAutenticacion):
+        identificar("Bearer basura", _config(), claves)
+
+
+def test_configuracion_incompleta_es_503(par_a, claves):
+    vacia = ConfiguracionOIDC("", (), "", frozenset({"ana@ejemplo.es"}))
+    with pytest.raises(ProveedorNoDisponible):
+        identificar(_bearer(par_a), vacia, claves)
+
+
+def test_el_proveedor_caido_es_503(par_a):
+    caidas = ClavesPublicas("u", Descargador(OSError("sin red")), reloj=Reloj())
+    with pytest.raises(ProveedorNoDisponible):
+        identificar(_bearer(par_a), _config(), caidas)
+
+
+def test_el_codigo_no_lleva_ninguna_url_de_google_escrita():
+    # La URL del proveedor es configuracion (OIDC_URL_JWKS), no codigo.
+    with open(autenticacion.__file__, encoding="utf-8") as f:
+        fuente = f.read()
+    assert "googleapis" not in fuente
+    assert "accounts.google" not in fuente

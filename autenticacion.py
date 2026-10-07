@@ -160,3 +160,16 @@ def verificar_token(token: str, config: ConfiguracionOIDC, claves: ClavesPublica
     if not isinstance(email, str) or not email:
         raise ErrorDeAutenticacion("el token no trae email")
     return Identidad(datos["iss"], str(datos.get("sub", "")), email, str(datos.get("name") or ""))
+
+
+def identificar(cabecera: str | None, config: ConfiguracionOIDC, claves: ClavesPublicas) -> Identidad:
+    """De la cabecera Authorization a una Identidad invitada, o el error que toque."""
+    if not config.completa():
+        raise ProveedorNoDisponible("la autenticacion no esta configurada")
+    partes = (cabecera or "").split(" ")
+    if len(partes) != 2 or partes[0] != "Bearer" or not partes[1]:
+        raise ErrorDeAutenticacion("falta la cabecera Authorization: Bearer")
+    identidad = verificar_token(partes[1], config, claves)
+    if identidad.email.strip().lower() not in config.invitadas:
+        raise NoInvitada("la cuenta no esta en la lista de invitadas")
+    return identidad
