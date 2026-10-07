@@ -1,6 +1,6 @@
 # ADR-002: El CV lo escribe Sonnet 4.6, no Haiku 4.5
 
-**Estado:** Propuesto · 27 jul 2026
+**Estado:** Aceptado · 7 oct 2026 (propuesto el 27 jul 2026; producción escribe el CV con `claude-sonnet-4-6`, verificable en `/health`, campo `modelos`)
 **Ámbito:** `cv-server`, variable de entorno `CV_MODEL`
 **Sustituye a:** la nota de coste del `ADR-001` (sección "Nota de coste")
 
@@ -33,9 +33,9 @@ Las reglas incumplidas **ya estaban escritas en el prompt**. No falta ninguna re
 
 | Regla del prompt | Donde esta | Se incumplio |
 |---|---|---|
-| Prohibicion de cuantificadores vagos ("millions of", "miles de") | `server.py:1683` | CV de Malwarebytes: *"platform handling **millions of transactions**"* |
-| Escribe la ACCION, nunca el efecto atribuido | `server.py:1755` | Revolut: *"reducing manual effort and error rates"*. Malwarebytes: *"improving operational efficiency"* |
-| REGLA DE EVIDENCIA (solo lo respaldado por el Master) | `server.py:1679` | Malwarebytes: *"I have **designed backend services**"*. El Master solo dice *"Integrated REST APIs and coordinated data contracts **with** the backend team"* |
+| Prohibicion de cuantificadores vagos ("millions of", "miles de") | `PROMPT_CV`, regla 4bis (PROHIBICIÓN DE CIFRAS) | CV de Malwarebytes: *"platform handling **millions of transactions**"* |
+| Escribe la ACCION, nunca el efecto atribuido | `PROMPT_CV`, bloque de estilo (Escribe la ACCIÓN) | Revolut: *"reducing manual effort and error rates"*. Malwarebytes: *"improving operational efficiency"* |
+| REGLA DE EVIDENCIA (solo lo respaldado por el Master) | `PROMPT_CV`, regla 1 (REGLA DE EVIDENCIA) | Malwarebytes: *"I have **designed backend services**"*. El Master solo dice *"Integrated REST APIs and coordinated data contracts **with** the backend team"* |
 | El titular es una identidad real, no el titulo de la vacante | HEADLINE RULES | Con puesto `Senior Product Engineer (Fullstack)` el titular salio duplicado y con la vacante dentro; con `Applied AI Engineer` salio perfecto **en el mismo commit** |
 
 **El ultimo caso es el diagnostico:** mismo codigo, mismo commit en PROD, resultados
@@ -89,7 +89,7 @@ falsa no cuesta $0,94: cuesta el proceso entero, y es indefendible en la entrevi
 
 ### Por que el cambio es seguro
 
-`call_claude()` (`server.py:194`) envia **solo** `model`, `max_tokens` y
+`call_claude()` (`llm.py`) envia **solo** `model`, `max_tokens` y
 `messages`. No pasa `temperature`, `top_p`, `top_k` ni `thinking`. Esos son justo los
 parametros que rompen (400) al subir de modelo. **No hay ninguna incompatibilidad de
 API entre Haiku 4.5 y Sonnet 4.6 en este codigo.**

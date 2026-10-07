@@ -4,11 +4,16 @@ Fuente de verdad legible del prompt que adapta el CV del usuario a cada oferta.
 El prompt REAL vive como f-string en `server.py`; este documento explica su
 estructura y el PORQUÉ de cada regla, para que nadie las rompa al editar el código.
 
-- **Prompt del CV**: `server.py`, endpoint `/generar-cv`, líneas ~1231-1305.
-- **Prompt de la carta**: `/generar-carta`, líneas ~1423-1442.
-- **Bloque de formato** (ES/EN): líneas ~1170-1229 (`bloque_formato`).
-- **Modelos**: CV con Claude Haiku 4.5 (`CV_MODEL`), carta con Claude Sonnet 4.6
-  (`CARTA_MODEL`). Groq queda de fallback dentro de `call_llm_calidad`.
+- **Prompt del CV**: constante `PROMPT_CV` en `server.py`, usada por `generar_cv_core`.
+  Dentro de ella, la sección `HEADLINE RULES` fija el titular.
+- **Prompt de la carta**: constante `PROMPT_CARTA` en `server.py`, usada por `generar_carta`.
+- **Bloque de formato** (ES/EN): `PROMPT_ESTRUCTURA_ES` y `PROMPT_ESTRUCTURA_EN`, que
+  `generar_cv_core` elige según el idioma de la oferta y pasa a `PROMPT_CV` como
+  `bloque_formato`.
+- **Modelos**: CV y carta con `claude-sonnet-4-6` en producción. Los fija el entorno
+  (`CV_MODEL`, `CARTA_MODEL`), no el código: el valor por defecto de `CV_MODEL` en
+  `llm.py` sigue siendo Haiku 4.5 (ver ADR-002). Si Claude falla, `call_llm_calidad`
+  cae a Groq (`openai/gpt-oss-120b`). `/health` muestra los modelos activos.
 
 > Regla de oro del proyecto: **el CV NUNCA inventa**. Todo sale del CV master del usuario.
 > El prompt solo cambia ORDEN, ÉNFASIS y TITULAR, nunca el contenido real.

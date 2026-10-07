@@ -11,8 +11,8 @@
 
 ## Contexto
 
-A Vero le llegan ofertas a **dos buzones**: `hello.cookyourweb@gmail.com` y
-`verseper@hotmail.com`. `buscar_usuario_por_email` filtraba la base `Users` por el
+A la usuaria le llegan ofertas a **dos buzones**: `principal@example.com` y
+`alias@example.com`. `buscar_usuario_por_email` filtraba la base `Users` por el
 campo `Email` con `equals`, asi que solo reconocia una direccion.
 
 La solucion que se adopto en su momento fue **crear un segundo registro** en `Users`,
@@ -24,12 +24,12 @@ con el otro correo. Funcionaba: las ofertas de ambos buzones encontraban usuario
 
 Estado al detectarlo (28jul2026):
 
-| Campo | `hello.cookyourweb@gmail.com` | `verseper@hotmail.com` |
+| Campo | `principal@example.com` | `alias@example.com` |
 |---|---|---|
-| `Name` | Verónica Serna Pérez | veronica serna |
-| `Email CV` | verserper@gmail.com | **vacio** |
+| `Name` | Persona Ejemplo | persona ejemplo |
+| `Email CV` | cv@example.com | **vacio** |
 | `CV Master URL` | **8.702 chars, con `PERFIL BASE`** | **4.689 chars, SIN `PERFIL BASE`** |
-| `Ciudad` | Valdemorillo, Madrid | madrid |
+| `Ciudad` | Ciudad, Provincia | madrid |
 | `Rol objetivo` | AI Engineer · Full-Stack · Tech Lead… | Senior Frontend Develo**p**er *(typo)* |
 | `Perfil` | 3 lineas (IA, RAG, agentes) | "Desarrolladora frontend developer senior" |
 | `Stack` | React, TS, Vue, Node, Python, AI/ML… | solo "React Typescript" |
@@ -37,7 +37,7 @@ Estado al detectarlo (28jul2026):
 El CV de PANEL Sistemas se genero contra el segundo registro. Consecuencias, todas
 en el documento que ve un recruiter:
 
-1. Cabecera con `madrid` y `verseper@hotmail.com`.
+1. Cabecera con `madrid` y `alias@example.com`.
 2. Titular `Tech Lead Full Stack | Java · Angular · APIs REST | Arquitectura de
    Microservicios`: **el titulo literal de la vacante**. Eco puro, prohibido por las
    HEADLINE RULES.
@@ -100,15 +100,15 @@ Ambas son puras y testeables sin tocar Notion (15 tests en
 ## Migracion (manual, en Notion)
 
 1. En `Users`, añadir la propiedad **`Emails alias`** de tipo **Text**.
-2. En el registro bueno (`Verónica Serna Pérez` / `hello.cookyourweb@gmail.com`),
-   poner en `Emails alias`: `verseper@hotmail.com`
+2. En el registro bueno (`Persona Ejemplo` / `principal@example.com`),
+   poner en `Emails alias`: `alias@example.com`
 3. En las ofertas cuyo campo `Usuario` apunte al registro duplicado, reapuntarlas al
    bueno.
-4. **Desactivar** (`Activo` = off) el registro `veronica serna` / `verseper@hotmail.com`.
+4. **Desactivar** (`Activo` = off) el registro `persona ejemplo` / `alias@example.com`.
    Desactivar antes que borrar: si alguna oferta historica lo referencia, la relacion
    no se rompe.
-5. Verificar: `POST /generar-cv` con `email: verseper@hotmail.com` debe devolver un CV
-   con la cabecera de `Verónica Serna Pérez` y `verserper@gmail.com`.
+5. Verificar: `POST /generar-cv` con `email: alias@example.com` debe devolver un CV
+   con la cabecera de `Persona Ejemplo` y `cv@example.com`.
 
 ## Pendiente
 

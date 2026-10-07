@@ -4,10 +4,22 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > Cómo se trabaja aquí (ciclo rojo-verde-commit, hook de pre-commit y reglas de
-> commit): [`CONTRIBUTING.md`](CONTRIBUTING.md).
+> commit): [`CONTRIBUTING.md`](CONTRIBUTING.md). ¿Vienes a **usar** el servicio y no a
+> leer el código? La guía está en [`docs/GUIA-DE-USO.md`](docs/GUIA-DE-USO.md).
 
-Servicio que genera **CVs y cartas adaptados a cada oferta** con LLMs, sin inventar
-experiencia. Flask en producción, migrándose a FastAPI de forma incremental.
+**Qué es.** Un servicio que genera el CV y la carta de presentación adaptados a cada
+oferta con LLMs, sin inventar experiencia. Flask en producción, migrándose a FastAPI de
+forma incremental.
+
+**Por qué importa.** Un CV con una frase inventada es indefendible en una entrevista, y
+un servicio abierto en internet no puede fiarse de quién dice ser quien lo llama.
+
+**Dos problemas difíciles resueltos aquí:**
+
+| Problema | Solución | Dónde leerlo |
+|---|---|---|
+| Que el LLM no invente | Seis guardrails que verifican la salida (y la entrada) contra la fuente de verdad | [El problema interesante](#el-problema-interesante) |
+| Que solo entre quien está invitada | Token de Google verificado (OIDC) para personas, clave de máquina para n8n | [Acceso por invitación](#acceso-por-invitación) |
 
 ```
 Notion (ofertas + perfil) ─┐
@@ -15,8 +27,9 @@ Notion (ofertas + perfil) ─┐
 CV Master (Google Docs) ───┘
 ```
 
-> ¿Vienes a **usar** el servicio y no a leer el código? La guía está en
-> [`docs/GUIA-DE-USO.md`](docs/GUIA-DE-USO.md).
+**Modelos.** En producción, el CV y la carta los escribe `claude-sonnet-4-6`, con
+`openai/gpt-oss-120b` (Groq) de fallback. El modelo lo fijan las variables de entorno
+`CV_MODEL` y `CARTA_MODEL`, no el código; `GET /health` muestra los que están activos.
 
 ---
 
@@ -123,24 +136,90 @@ Documentadas como ADRs en [`docs/`](docs/):
   correo. Por qué duplicar el registro es un parche que se degrada en silencio, y por qué
   la verificación final tiene que ser exacta (el filtro `contains` de Notion es de
   subcadena: `vero@gmail.com` casa con `notvero@gmail.com`).
+- **[ADR-004](docs/ADR-004-backend-llm.md)**. LiteLLM se escribe y se deja apagado
+  (`LLM_BACKEND`). Se midió: +146 MB de disco, +5,96 s de arranque y 207 MB de RAM frente
+  a 9 MB.
+
+> **La autenticación está en el ADR-003 del repo `buscartrabajo`**
+> (`docs/adr/ADR-003-autenticacion.md`), que no es el ADR-003 de arriba.
 
 ### Deuda conocida
 
-`server.py` tiene unas 2.500 líneas y es un módulo demasiado grande. No está
+`server.py` tiene unas 1.340 líneas y sigue siendo un módulo demasiado grande. No está
 sin mirar: el ADR-001 describe cómo se está deshaciendo, con `api.py` llevándose un
 endpoint cada vez y Flask cubriendo hasta que el nuevo está en verde. Se documenta aquí
 porque es lo primero que se ve al abrir el repo.
 
+## Rutas
+
+| Ruta | Acceso | Para qué |
+|---|---|---|
+| `GET /` | Pública | Página de invitación (`templates/inicio.html`) |
+| `GET /health` | Pública | Estado, modelos activos y rama/commit desplegados |
+| `GET /yo` | Token de Google (`Authorization: Bearer`) | Quién es la usuaria |
+| `POST /registro` | Clave de máquina | Alta de usuaria |
+| `POST /generar-cv` | Clave de máquina | CV adaptado a una oferta |
+| `POST /generar-carta` | Clave de máquina | Carta adaptada a una oferta |
+| `GET /usuarios` | Clave de máquina | Listado de usuarias |
+| `POST /crear-oferta` | Clave de máquina | Alta de una oferta |
+| `POST /buscar-ofertas-reales` | Clave de máquina | Búsqueda y ranking de ofertas |
+
+La clave de máquina viaja en la cabecera `X-Clave-Maquina` y vale lo que diga la variable
+`CLAVE_MAQUINA`. Sin ella configurada, esas rutas no abren nunca (falla cerrado). El
+inventario de rutas lo protege `tests/test_rutas_de_maquina.py`.
+
+## Acceso por invitación
+
+Dos puertas distintas, según quién llame:
+
+| Quién | Cómo entra |
+|---|---|
+| Una persona (el panel) | Token de identidad de Google en `GET /yo` |
+| Una máquina (n8n) | Cabecera `X-Clave-Maquina` |
+
+**Cómo funciona `/yo`.** El panel manda el token de Google en `Authorization: Bearer`.
+`autenticacion.py` lo valida: algoritmo RS256 (fijo, el token no elige el verificador),
+firma contra las claves públicas de Google (JWKS en caché 3600 s; un `kid` desconocido
+provoca una descarga nueva, como mucho cada 300 s), emisor en `OIDC_EMISORES`, audiencia
+igual a `OIDC_AUDIENCIA`, caducidad con 60 s de margen y `email_verified` verdadero.
+
+| Código | Significado |
+|---|---|
+| 200 | `{sub, email, nombre}` |
+| 401 | Falta el token o no es válido |
+| 403 | Token válido, pero el email no está invitado |
+| 503 | Falta configuración o no se alcanzan las claves públicas |
+
+**Invitadas.** La lista es la variable `INVITADAS` (emails separados por comas, vacía =
+nadie entra). Es provisional hasta que haya base de datos de usuarias.
+
+**CORS.** Solo `/yo` y `/health` lo admiten, con coincidencia exacta de origen contra
+`CORS_ORIGENES`. Vacío = ningún origen.
+
+**El client id de Google es público a propósito.** Aparece en el panel y no protege nada
+por sí mismo: lo que protege es la comprobación de la audiencia, que rechaza tokens
+emitidos para otra aplicación.
+
+**Arranque en local** (con las variables `OIDC_*` e `INVITADAS` de [`.env.example`](.env.example)
+exportadas en la shell, no cargadas desde un fichero):
+
+```bash
+export CORS_ORIGENES=http://localhost:4200
+.venv/bin/gunicorn server:app --bind 127.0.0.1:5000
+```
+
+La decisión de diseño completa está en el ADR-003 del repo `buscartrabajo`.
+
 ## Tests
 
 ```bash
-pytest -q     # 146 tests
+pytest -q     # 375 tests
 ```
 
-Escritos primero. Cada uno documenta en su docstring **el fallo real que lo motivó**,
+Los tests se escriben primero. Cada uno documenta en su docstring **el fallo real que lo motivó**,
 con fecha, no un caso hipotético.
 
 ## Stack
 
-`Python` · `Flask` → `FastAPI` · `Pydantic` · `Claude API` · `Notion API` ·
+`Python` · `Flask` y `FastAPI` · `Pydantic` · `Claude API` · `Notion API` ·
 `Google Drive API` · `python-docx` · `pytest` · `Render`

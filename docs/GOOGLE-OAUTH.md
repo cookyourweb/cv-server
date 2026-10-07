@@ -10,11 +10,11 @@ el mecanismo: era **qué proyecto de Google**.
 
 | Qué | Valor |
 |---|---|
-| Proyecto de Google | `sylvan-surf-138623`, número de proyecto `36051363838` |
+| Proyecto de Google | `<id-del-proyecto>`, número de proyecto `<numero-de-proyecto>` |
 | Cómo se identificó | CONFIRMADO por Vero el 18-ago-2026 en la consola de Google. Antes era solo una inferencia por eliminación |
-| Cliente que usa Render | `cv-server-render-web`, tipo Aplicación web, creado el 2 may 2026, ID `36051363838-6fpkf...` |
-| Otro cliente del proyecto | `subirCv`, tipo Escritorio, creado el 9 abr 2026, ID `36051363838-9ton5...`. NO es el de Render |
-| Cómo distinguirlos | Por los caracteres tras el guion en `GOOGLE_CLIENT_ID`: `6fpkf` es el web de Render, `9ton5` es el de escritorio |
+| Cliente que usa Render | `cv-server-render-web`, tipo Aplicación web, creado el 2 may 2026, ID `<numero-de-proyecto>-<prefijo-web>...` |
+| Otro cliente del proyecto | `subirCv`, tipo Escritorio, creado el 9 abr 2026, ID `<numero-de-proyecto>-<prefijo-escritorio>...`. NO es el de Render |
+| Cómo distinguirlos | Por los caracteres tras el guion en `GOOGLE_CLIENT_ID`: `<prefijo-web>` es el web de Render, `<prefijo-escritorio>` es el de escritorio (los prefijos reales se consultan en la consola de Google, no se publican aquí) |
 | Permiso solicitado | `https://www.googleapis.com/auth/drive` (Drive completo, categoría restringida) |
 | Dónde viven las credenciales | Render, servicio `cv-server`, pestaña Environment |
 | Variables | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |
@@ -45,7 +45,7 @@ Regenerado el 11-ago, muerto el 18-ago.
 
 Publicar la pantalla de consentimiento:
 
-`console.cloud.google.com/auth/audience?project=sylvan-surf-138623` y pulsar
+`console.cloud.google.com/auth/audience?project=<id-del-proyecto>` y pulsar
 PUBLICAR APLICACIÓN.
 
 Al pasar a "In production" desaparece la caducidad de siete días. Sale un aviso
@@ -86,7 +86,7 @@ mensaje útil. El estado de la ejecución sale `success` aunque haya fallado.
 
 ## Registro: 18 de agosto de 2026, resuelto
 
-1. Confirmado en la consola que el proyecto es `sylvan-surf-138623` y que el
+1. Confirmado en la consola que el proyecto es `<id-del-proyecto>` y que el
    cliente de Render es `cv-server-render-web`, tipo Aplicación web.
 2. **Publicada la aplicación a producción.**
 3. Regenerado el token DESPUÉS de publicar, que es el orden que importa.
