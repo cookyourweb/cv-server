@@ -20,6 +20,8 @@ import server as srv
 CLAVE = "clave-de-prueba-larga-y-aleatoria"
 RUTAS_DE_MAQUINA = ["/generar-cv", "/generar-carta", "/crear-oferta", "/buscar-ofertas-reales"]
 PUBLICAS = {"/", "/health", "/check-email", "/registro", "/accion-existente", "/static/<path:filename>"}
+# /yo no usa la clave de maquina: se protege con el token de Google de la usuaria.
+PUBLICAS.add("/yo")
 DATOS = {"email": "a@b.com", "empresa": "ACME", "puesto": "Frontend", "descripcion": "React"}
 
 

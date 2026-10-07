@@ -1343,6 +1343,28 @@ def crear_oferta():
 
 
 # ══════════════════════════════════════════════
+# IDENTIDAD DE LA USUARIA (token de Google, ver autenticacion.py)
+# ══════════════════════════════════════════════
+from autenticacion import (  # noqa: E402
+    ClavesPublicas, ConfiguracionOIDC, ErrorDeAutenticacion, identificar,
+)
+
+# Construir esto no descarga nada ni exige variables: el import nunca falla.
+CONFIG_OIDC = ConfiguracionOIDC.desde_entorno()
+CLAVES = ClavesPublicas(CONFIG_OIDC.url_jwks)
+
+
+@app.route("/yo", methods=["GET"])
+def yo():
+    """Quien es la usuaria que llama, segun su token de Google."""
+    try:
+        quien = identificar(request.headers.get("Authorization"), CONFIG_OIDC, CLAVES)
+    except ErrorDeAutenticacion:
+        return jsonify({"ok": False, "error": "no autenticada"}), 401
+    return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre})
+
+
+# ══════════════════════════════════════════════
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
