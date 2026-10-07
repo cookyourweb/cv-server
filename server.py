@@ -502,6 +502,7 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
 
 
 @app.route("/registro", methods=["POST"])
+@requiere_clave_maquina
 def registro():
     """Registra usuario nuevo en Notion y dispara webhook n8n."""
     datos = request.get_json(force=True)
@@ -532,9 +533,9 @@ def registro():
     try:
         notion_page = crear_usuario_en_notion(datos)
         notion_id = notion_page.get("id", "")
-    except Exception as e:
-        logger.error("Notion error: %s", e)
-        return jsonify({"ok": False, "error": f"Error creando usuario en Notion: {e}"}), 500
+    except Exception:
+        logger.exception("Error creando usuario en Notion")
+        return jsonify({"ok": False, "error": "no se pudo completar el registro"}), 500
 
     # El alta ya está hecha en Notion. Esto lanza la primera búsqueda: iba al
     # webhook `nuevo-usuario`, que no existe, así que quien se registraba no
