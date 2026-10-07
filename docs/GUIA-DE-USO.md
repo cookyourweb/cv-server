@@ -11,21 +11,17 @@ Si lo que buscas es el detalle técnico, está en el [README](../README.md).
 
 ## Cómo empezar
 
-### Paso 1. Abre el formulario de registro
+El servicio es una **beta privada**. No hay formulario público: el acceso es por
+invitación y la cuenta la crea la administradora.
 
-**[cv-server-ggd8.onrender.com/registro](https://cv-server-ggd8.onrender.com/registro)**
+### Paso 1. Pide tu invitación
 
-La primera vez puede tardar entre 30 y 60 segundos en cargar: el servidor está en el
-plan gratuito de Render y se duerme tras 15 minutos sin actividad. Si parece colgado,
-espera un minuto antes de recargar.
-
-### Paso 2. Rellena el formulario
-
-Obligatorios:
+Escribe a administración y cuéntale qué buscas, en tus propias palabras. Para crearte la
+cuenta necesita:
 
 - Nombre completo
 - Email, el que usarás para recibir las ofertas
-- Perfil libre: qué buscas, en tus propias palabras
+- Perfil libre: qué buscas
 
 Opcionales, pero cuanto más completes más precisas salen las ofertas:
 
@@ -35,25 +31,24 @@ Opcionales, pero cuanto más completes más precisas salen las ofertas:
 - Stack técnico
 - Salario mínimo anual en euros
 - LinkedIn, la URL completa
-- CV Master URL, que es el importante y va en el paso siguiente
 
-### Paso 3. Sube tu CV Master a Drive
+### Paso 2. Aporta tu CV Master
 
 El sistema adapta TU CV a cada oferta, así que necesita una versión base de la que partir.
 
 **Opción A, recomendada.** Sube un `.txt` con tu CV completo a tu Google Drive, hazlo
-público con "cualquiera con el enlace puede ver", y pega el enlace en el campo
-"CV Master URL".
+público con "cualquiera con el enlace puede ver", y manda el enlace a administración.
 
-**Opción B.** Deja el campo vacío y pide a quien te invitó que suba tu CV a la carpeta
-compartida con el nombre `CV_Master_{tu_email_con_guiones}.txt`.
+**Opción B.** Manda el CV a administración y lo sube a la carpeta compartida con el
+nombre `CV_Master_{tu_email_con_guiones}.txt`.
 
-### Paso 4. Envía el formulario
+### Paso 3. Espera el primer envío
 
-Si es tu primer registro, verás "Listo, mañana a las 9:00 recibirás tus primeras ofertas".
+Cuando la administradora crea tu cuenta, el sistema lanza una primera búsqueda y recibes
+tus primeras ofertas por email. Desde ahí, el envío es diario a las 9:00.
 
-Si tu email ya existe, verás dos botones: **Buscar ahora**, que te manda las ofertas en
-unos minutos, o **Mañana a las 9**, que espera al envío programado.
+Si alguien visita la dirección del servicio sin invitación, solo ve una página que explica
+que es una beta privada. Es normal: no hay nada que rellenar.
 
 ---
 
@@ -85,14 +80,14 @@ a la empresa por su cuenta**: solo te lo deja preparado.
 
 Tu perfil vive en una base de datos de Notion. Para cambiar email, stack o salario,
 pausar los envíos sin borrarte, o eliminar tu cuenta, contacta con quien te invitó.
-Más adelante habrá un botón de "editar mi perfil" en el propio formulario.
+Más adelante habrá una forma de editar tu perfil tú misma.
 
 ---
 
 ## Si algo falla
 
-**El formulario no carga.** Espera 60 segundos, que el servidor se despierta con la
-primera visita del día. Si a los dos minutos sigue igual, avisa.
+**La página del servicio tarda en cargar.** Espera 60 segundos, que el servidor se despierta
+con la primera visita del día. Si a los dos minutos sigue igual, avisa.
 
 **No llega el email de las ofertas.** Mira en spam y en promociones, y comprueba el
 remitente. Si no aparece, avisa indicando el email con el que te registraste.
@@ -142,10 +137,10 @@ Las que superen los filtros ese día, con un tope diario. Fines de semana y fest
 también, no hay pausa.
 
 **¿Puedo usarlo desde el móvil?**
-Sí, el formulario y los emails están adaptados.
+Sí, los emails están adaptados.
 
 **¿Puedo invitar a alguien?**
-Todavía no. Manda el contacto a administración y se añade a mano.
+Todavía no. Manda el contacto a administración y se da de alta a mano.
 
 ---
 

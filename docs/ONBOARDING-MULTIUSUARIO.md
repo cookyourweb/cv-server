@@ -106,8 +106,22 @@ generando los CV de Verónica. Una pregunta sin fallo detrás no entra.
 
 ## Se engancha al alta que YA existe
 
-No es un formulario nuevo. El registro actual (`/registro`, formulario multistep servido en
-`/`) ya crea el usuario en Notion con estos campos:
+No es un alta nueva. El registro actual lo hace la administradora con `POST /registro`, que
+desde el 7-oct-2026 exige la clave de máquina. El formulario público que se servía en `/`
+se eliminó: hoy `/` es una página de invitación. El alta crea el usuario en Notion con
+estos campos:
+
+```bash
+curl -X POST "$BASE/registro" \
+  -H "Content-Type: application/json" \
+  -H "X-Clave-Maquina: $CLAVE_MAQUINA" \
+  -d '{"nombre": "...", "email": "persona@example.com", "perfil": "...",
+       "rol_objetivo": "...", "ciudad": "...", "stack": ["..."],
+       "modalidad": ["..."], "salario_min": 0, "linkedin": "...",
+       "cv_master_url": "..."}'
+```
+
+Solo `email` es obligatorio para la ruta; el resto rellena el perfil en Notion.
 
 | Campo en Notion | Qué es | Para la entrevista |
 |---|---|---|
