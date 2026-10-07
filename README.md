@@ -23,7 +23,7 @@ un servicio abierto en internet no puede fiarse de quién dice ser quien lo llam
 
 ```
 Notion (ofertas + perfil) ─┐
-                           ├─► /generar-cv ─► LLM ─► guardrails ─► Google Drive
+                           ├── /generar-cv ── LLM ── guardrails ── Google Drive
 CV Master (Google Docs) ───┘
 ```
 

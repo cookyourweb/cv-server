@@ -53,7 +53,7 @@ real: reglas + CV Master EN + una oferta de Remotive; 13.816 caracteres):
 
 | Modelo | Precio ($/1M in-out) | Tokens in | $/CV | **40 CVs/mes** | vs Haiku |
 |---|---|---|---|---|---|
-| Haiku 4.5 (actual) | 1 / 5 | 3.532 | $0,0117 | **$0,47** | — |
+| Haiku 4.5 (actual) | 1 / 5 | 3.532 | $0,0117 | **$0,47** | n/a |
 | **Sonnet 4.6 (propuesto)** | 3 / 15 | 3.532 | $0,0352 | **$1,41** | **+$0,94** |
 | Sonnet 5 (intro hasta 31-ago-2026) | 2 / 10 | **5.313** | $0,0353 | $1,41 | +$0,94 |
 
@@ -64,7 +64,7 @@ real: reglas + CV Master EN + una oferta de Remotive; 13.816 caracteres):
 > arriba salen de la API de conteo, no de un calculo a ojo.
 
 **Hallazgo que refuerza la decision 3 (no ir a Sonnet 5):** Sonnet 5 cuenta **5.313
-tokens donde Haiku y Sonnet 4.6 cuentan 3.532** — un 50% mas para el MISMO texto,
+tokens donde Haiku y Sonnet 4.6 cuentan 3.532**, un 50% mas para el MISMO texto,
 porque lleva tokenizador nuevo. Su precio introductorio mas bajo ($2/$10 frente a
 $3/$15) se lo come entero: el coste por CV sale practicamente identico al de Sonnet
 4.6 ($0,0353 vs $0,0352). No hay ahorro, y si el riesgo de truncado por adaptive

@@ -57,7 +57,7 @@
 
 ## Estado de implementación
 
-- **Slice 1 (en curso):** `/generar-cv` → `generar_cv_core` + `api.py` (FastAPI/Pydantic) + tests.
+- **Slice 1 (en curso):** `/generar-cv` pasa a `generar_cv_core` + `api.py` (FastAPI/Pydantic) + tests.
 - **Siguientes:** `/generar-carta`, `/usuarios`, `/crear-oferta`, etc., mismo patrón.
 
 ## Ejemplo de la API (para entenderla rápido)
@@ -93,7 +93,7 @@ curl -X POST http://localhost:8000/generar-cv \
 }
 ```
 
-**Falta un campo requerido** (ej. sin `empresa`) → **422 automático**, sin que corra nada del
+**Falta un campo requerido** (ej. sin `empresa`): **422 automático**, sin que corra nada del
 core. Ese es el guardrail de Pydantic en acción:
 
 ```json

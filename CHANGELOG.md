@@ -1,4 +1,4 @@
-# CHANGELOG técnico — cv-server
+# CHANGELOG técnico: cv-server
 
 Doc técnico interno del `cv-server` (repo `github.com/cookyourweb/cv-server`, rama `main`).
 La guía de USUARIO (registro y uso diario) es `docs/GUIA-DE-USO.md`; el `README.md` presenta
@@ -9,7 +9,7 @@ el código a secas.
 Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
 
 > ⚠️ **Render NO lee el `Procfile`.** Tiene su propio *Start Command* guardado en
-> el panel (Settings → Start Command), y ese es el que manda. El 28-ago-2026 el
+> el panel (Settings, Start Command), y ese es el que manda. El 28-ago-2026 el
 > renombrado a `server.py` tumbo un despliegue por esto: el Procfile decia
 > `server:app` y el panel seguia diciendo `cv_server_railway:app`.
 > Si cambias el modulo o los flags de arranque, **hay que cambiarlo en los dos
@@ -18,7 +18,7 @@ Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
 >     gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120
 Archivo principal: `server.py`. Ranking de ofertas: `real_jobs.py`.
 
-**28-ago-2026 — el fichero principal se partio en seis y se renombro.** Era
+**28-ago-2026. El fichero principal se partio en seis y se renombro.** Era
 `cv_server_railway.py` con 2.640 lineas; ahora es `server.py` con 1.165 y los
 endpoints. Lo demas vive en `guardrails.py`, `notion.py`, `drive.py`,
 `docx_render.py`, `llm.py` y `templates/alta.html` (borrada el 7-oct). El nombre viejo decia
@@ -133,11 +133,11 @@ Es el punto 4 del ADR-003 de autenticación, que vive en el repo `buscartrabajo`
 
 ## Julio 2026
 
-### 20-jul — Saneador tipográfico: cero guiones largos ni flechas en CV y carta
+### 20-jul: Saneador tipográfico. Cero guiones largos ni flechas en CV y carta
 Commit `f0ba838`. Nueva función pura `sanear_tipografia(texto, idioma)` en
 `server.py`.
 
-- **Qué hace**: elimina guiones largos y medios (`—`, `–`) y flechas (`→`) del texto
+- **Qué hace**: elimina guiones largos, guiones medios y flechas del texto
   final. Las flechas se traducen a la palabra de transición del idioma ("a" en ES,
   "to" en EN); los guiones a guion normal. Es rastro tipográfico de IA y NO puede
   salir a una empresa.
@@ -149,14 +149,14 @@ Commit `f0ba838`. Nueva función pura `sanear_tipografia(texto, idioma)` en
   parsear, perdés las negritas y la estructura.
 - **Tests**: `test_sanear_tipografia.py` y `test_render_sin_guiones.py`.
 
-### 03-jul — Titulares: identidad real + especialización, y años de experiencia ajustables
+### 03-jul: Titulares: identidad real + especialización, y años de experiencia ajustables
 Commits `9136979`, `d70a5c6`.
 
 - Sistema de titulares que combina identidad real (Full-Stack e IA delante cuando
   aplica) con resumen adaptado por oferta.
 - Años de experiencia: base **10+**, ajustable por oferta. NO clavar 15+.
 
-### 01-jul — Refinado de reglas de CV y seniority del titular
+### 01-jul: Refinado de reglas de CV y seniority del titular
 Commits `1c3702a`, `e95cf17`, `5c9d4e5`, `0da513c`.
 
 - Descartar el bloque "ANÁLISIS INTERNO" del CV (no debe salir al documento final).
@@ -172,7 +172,7 @@ Commits `1c3702a`, `e95cf17`, `5c9d4e5`, `0da513c`.
 Estos fixes fueron de configuración en Render o Brevo, no de código. Por eso no dejan
 rastro en el historial y por eso se documentan aquí: si alguien clona el repo, no los ve.
 
-### 17-jul — 500 en /generar-cv: token de Google caducado en Render
+### 17-jul: 500 en /generar-cv: token de Google caducado en Render
 - **Síntoma**: `/generar-cv` y `/generar-carta` devolvían 500 y rompían la cadena de
   aprobación de ofertas en n8n (al Aprobar no llegaba carta/CV/email).
 - **Causa raíz** (confirmada con huellas de token): Render tenía el
@@ -185,7 +185,7 @@ rastro en el historial y por eso se documentan aquí: si alguien clona el repo, 
   fiarse del nombre). Utilidades para regenerar el token: `regenera_token.py`,
   `get_refresh_token.py`, `diagnostico_drive.py`.
 
-### 18-jul — El email de aprobación va por Brevo, no por Gmail
+### 18-jul: El email de aprobación va por Brevo, no por Gmail
 - El mail que se manda al aprobar una oferta sale por **Brevo** (SMTP API), no por Gmail.
 - Sender verificado: `remitente@example.com`. La credencial de Brevo en n8n debe
   usar la API key viva y ese sender exacto; un mismatch de sender o key hace que Brevo

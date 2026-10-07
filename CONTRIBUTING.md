@@ -75,8 +75,8 @@ Medido sobre las 519 combinaciones del catalogo, difieren en 9, todas con
 tecnologias de VARIAS palabras, donde el espacio del medio no es caracter de
 palabra:
 
-  "react native"  ->  {React Native}          correcto
-                  ->  {React, React Native}   ingenua, se inventa React
+  "react native"  =>  {React Native}          correcto
+                  =>  {React, React Native}   ingenua, se inventa React
 ```
 
 Cuando hay un número, va el número. "Mejora el rendimiento" no dice nada;

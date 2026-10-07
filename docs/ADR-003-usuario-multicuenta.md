@@ -52,7 +52,7 @@ depende de un dato solo protege cuando el dato existe.
 La duplicacion es un parche con una fecha de caducidad que nadie ve venir: **funciona
 el dia que se crea y se degrada en silencio**. Cada vez que se afina el Master, el
 perfil o el stack, se toca UN registro. El otro se queda atras, y no hay ningun aviso
-— hasta que una oferta entra por el buzon equivocado y sale un CV con la identidad de
+hasta que una oferta entra por el buzon equivocado y sale un CV con la identidad de
 otra persona.
 
 El modelo del dominio es claro: **la persona es UNA. Lo que hay son varias direcciones
@@ -68,7 +68,7 @@ de entrada.** Un registro por buzon confunde la identidad con el canal.
 
 `buscar_usuario_por_email` hace **dos pasadas**:
 
-1. `Email equals <email>` — camino rapido, comportamiento de siempre.
+1. `Email equals <email>`: camino rapido, comportamiento de siempre.
 2. Si no hay resultado: `Emails alias contains <email>`, y **verifica la coincidencia
    exacta en Python**.
 
@@ -80,10 +80,10 @@ otro. Cubierto por `test_no_coincide_por_subcadena`.
 
 ### Funciones puras
 
-- `emails_de_usuario(props) -> set[str]` — todas las direcciones, normalizadas a
+- `emails_de_usuario(props) -> set[str]`: todas las direcciones, normalizadas a
   minusculas y sin espacios. Descarta lo que no tenga forma de email, para que una
   nota suelta en el campo ("(el viejo)") no se convierta en direccion.
-- `usuario_tiene_email(props, email) -> bool` — comparacion exacta.
+- `usuario_tiene_email(props, email) -> bool`: comparacion exacta.
 
 Ambas son puras y testeables sin tocar Notion (15 tests en
 `test_usuario_multicuenta.py`).
