@@ -72,7 +72,7 @@ comprobar quién lo mandaba. Eso permitía:
 - Lanzar búsquedas en nombre de otras personas.
 - Darse de alta sin invitación.
 
-Es el punto 4 del [ADR-003](docs/ADR-003-usuario-multicuenta.md).
+Es el punto 4 del ADR-003 de autenticación, que vive en el repo `buscartrabajo` (`docs/adr/ADR-003-autenticacion.md`): el usuario sale del token y de ningún otro sitio.
 
 **Qué lo protege**
 
