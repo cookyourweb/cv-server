@@ -401,29 +401,6 @@ def requiere_clave_maquina(vista):
     return protegida
 
 
-@app.route("/check-email", methods=["POST"])
-def check_email():
-    """Comprueba si un email ya existe en Notion. Devuelve {existe, nombre}."""
-    datos = request.get_json(force=True)
-    email = (datos.get("email") or "").strip().lower()
-    if not email:
-        return jsonify({"existe": False, "error": "email requerido"}), 400
-
-    try:
-        usuario = buscar_usuario_por_email(email)
-    except Exception as e:
-        logger.error("Error check-email: %s", e)
-        return jsonify({"existe": False, "error": str(e)}), 500
-
-    if usuario and usuario.get("activo"):
-        return jsonify({
-            "existe": True,
-            "nombre": usuario.get("nombre", ""),
-            "email":  email,
-        })
-    return jsonify({"existe": False, "email": email})
-
-
 def payload_buscar_para_user(usuario: dict) -> dict:
     """Traduce un usuario al contrato que espera el webhook `buscar-para-user`.
 
@@ -522,36 +499,6 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
         return Resultado(False, hay_novedades=False)
     logger.info("Búsqueda disparada para %s", usuario.get("email", ""))
     return Resultado(True, hay_novedades=True)
-
-
-@app.route("/accion-existente", methods=["POST"])
-def accion_existente():
-    """Usuario existente pulsa 'Buscar ahora' o 'Mañana 9am'."""
-    datos = request.get_json(force=True)
-    email = (datos.get("email") or "").strip().lower()
-    accion = datos.get("accion", "")
-
-    if not email:
-        return jsonify({"ok": False, "error": "email requerido"}), 400
-
-    resultado = Resultado(False, hay_novedades=False)
-    if accion == "ahora":
-        # El perfil hace falta ENTERO: mandando solo email y nombre, n8n buscaba
-        # ofertas sin rol, sin stack y sin salario, o sea para nadie.
-        try:
-            usuario = buscar_usuario_por_email(email)
-        except Exception as e:
-            logger.error("No se pudo leer el usuario %s en Notion: %s", email, e)
-            usuario = None
-        resultado = disparar_busqueda(usuario)
-
-    return jsonify({
-        "ok": True,
-        "accion": accion,
-        "email": email,
-        "busqueda_disparada": resultado.disparada,
-        "hay_novedades": resultado.hay_novedades,
-    })
 
 
 @app.route("/registro", methods=["POST"])

@@ -105,39 +105,6 @@ def test_disparar_devuelve_false_sin_usuario():
     assert srv.disparar_busqueda(None).disparada is False
 
 
-# ── El endpoint no puede decir que si cuando es que no ────────────────────
-
-def _accion(monkeypatch, status, usuario=USUARIO_NOTION):
-    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
-    monkeypatch.setattr(srv, "buscar_usuario_por_email", lambda e: usuario)
-    monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaFalsa(status))
-    with srv.app.test_client() as c:
-        return c.post("/accion-existente",
-                      json={"email": "veronica@cookyourwebai.es", "accion": "ahora"}).get_json()
-
-
-def test_accion_existente_confirma_la_busqueda_cuando_se_dispara(monkeypatch):
-    assert _accion(monkeypatch, 200)["busqueda_disparada"] is True
-
-
-def test_accion_existente_no_miente_cuando_el_webhook_falla(monkeypatch):
-    r = _accion(monkeypatch, 404)
-    assert r["busqueda_disparada"] is False
-
-
-def test_accion_existente_no_miente_si_el_usuario_no_esta(monkeypatch):
-    assert _accion(monkeypatch, 200, usuario=None)["busqueda_disparada"] is False
-
-
-def test_programar_manana_no_dispara_busqueda(monkeypatch):
-    monkeypatch.setattr(srv, "buscar_usuario_por_email", lambda e: USUARIO_NOTION)
-    with srv.app.test_client() as c:
-        r = c.post("/accion-existente",
-                   json={"email": "veronica@cookyourwebai.es", "accion": "manana"}).get_json()
-    assert r["busqueda_disparada"] is False
-    assert r["ok"] is True
-
-
 # ── La pantalla tampoco puede cantar exito sin mirar la respuesta ─────────
 
 def _pagina():
@@ -280,7 +247,9 @@ def test_no_hay_ofertas_nuevas_NO_es_un_fallo(monkeypatch):
     """
     monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
     monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaSinItems())
-    assert srv.disparar_busqueda(USUARIO_NOTION).disparada is True
+    resultado = srv.disparar_busqueda(USUARIO_NOTION)
+    assert resultado.disparada is True
+    assert resultado.hay_novedades is False  # antes lo cubria /accion-existente
 
 
 def test_un_500_de_verdad_sigue_siendo_un_fallo(monkeypatch):
@@ -298,22 +267,6 @@ def test_un_404_sigue_siendo_un_fallo(monkeypatch):
     monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-ahora")
     monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaFalsa(404))
     assert srv.disparar_busqueda(USUARIO_NOTION).disparada is False
-
-
-def test_se_distingue_buscada_de_hay_ofertas_nuevas(monkeypatch):
-    """"Recibiras las ofertas" seria mentira si el dedup no dejo ninguna nueva.
-
-    Son dos cosas distintas y la pantalla tiene que poder decir cual: la busqueda
-    se hizo (`busqueda_disparada`) y ademas encontro algo (`hay_novedades`).
-    """
-    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
-    monkeypatch.setattr(srv, "buscar_usuario_por_email", lambda e: USUARIO_NOTION)
-    monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaSinItems())
-    with srv.app.test_client() as c:
-        r = c.post("/accion-existente",
-                   json={"email": "veronica@cookyourwebai.es", "accion": "ahora"}).get_json()
-    assert r["busqueda_disparada"] is True
-    assert r["hay_novedades"] is False
 
 
 def test_la_pantalla_tiene_TRES_estados():

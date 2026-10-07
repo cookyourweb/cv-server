@@ -19,7 +19,7 @@ import server as srv
 
 CLAVE = "clave-de-prueba-larga-y-aleatoria"
 RUTAS_DE_MAQUINA = ["/generar-cv", "/generar-carta", "/crear-oferta", "/buscar-ofertas-reales"]
-PUBLICAS = {"/", "/health", "/check-email", "/registro", "/accion-existente", "/static/<path:filename>"}
+PUBLICAS = {"/", "/health", "/registro", "/static/<path:filename>"}
 # /yo no usa la clave de maquina: se protege con el token de Google de la usuaria.
 PUBLICAS.add("/yo")
 DATOS = {"email": "a@b.com", "empresa": "ACME", "puesto": "Frontend", "descripcion": "React"}
@@ -85,10 +85,12 @@ def test_con_la_clave_buena_pasa_el_decorador(cliente, ruta):
     assert r.status_code != 401
 
 
-@pytest.mark.parametrize("ruta", ["/check-email", "/registro", "/accion-existente"])
-def test_rutas_del_formulario_siguen_abiertas(cliente, ruta):
-    # Las llama el navegador: si se cierran, el formulario de alta deja de funcionar.
-    assert cliente.post(ruta, json={"email": "a@b.com"}).status_code != 401
+@pytest.mark.parametrize("ruta", ["/check-email", "/accion-existente"])
+def test_rutas_retiradas_no_existen(cliente, ruta):
+    # Cualquiera podia preguntar si un email existia y disparar busquedas ajenas.
+    # Se borran, no se protegen: nadie legitimo las llama ya.
+    assert cliente.post(ruta, json={"email": "a@b.com"}).status_code == 404
+    assert cliente.get(ruta).status_code == 404
 
 
 def test_inventario_de_rutas():
