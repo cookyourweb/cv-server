@@ -1346,7 +1346,8 @@ def crear_oferta():
 # IDENTIDAD DE LA USUARIA (token de Google, ver autenticacion.py)
 # ══════════════════════════════════════════════
 from autenticacion import (  # noqa: E402
-    ClavesPublicas, ConfiguracionOIDC, ErrorDeAutenticacion, identificar,
+    ClavesPublicas, ConfiguracionOIDC, ErrorDeAutenticacion, NoInvitada,
+    ProveedorNoDisponible, identificar,
 )
 
 # Construir esto no descarga nada ni exige variables: el import nunca falla.
@@ -1361,6 +1362,10 @@ def yo():
         quien = identificar(request.headers.get("Authorization"), CONFIG_OIDC, CLAVES)
     except ErrorDeAutenticacion:
         return jsonify({"ok": False, "error": "no autenticada"}), 401
+    except NoInvitada:
+        return jsonify({"ok": False, "error": "acceso no permitido"}), 403
+    except ProveedorNoDisponible:
+        return jsonify({"ok": False, "error": "servicio no disponible"}), 503
     return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre})
 
 

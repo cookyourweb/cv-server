@@ -54,3 +54,28 @@ def test_la_clave_de_maquina_no_sustituye_al_token(cliente, monkeypatch):
     monkeypatch.setattr(srv, "CLAVE_MAQUINA", "clave-de-prueba-larga-y-aleatoria")
     r = cliente.get("/yo", headers={"X-Clave-Maquina": "clave-de-prueba-larga-y-aleatoria"})
     assert r.status_code == 401
+
+
+# --- 403 y 503 ---------------------------------------------------------------
+
+def test_valida_pero_no_invitada_responde_403(monkeypatch, par):
+    _preparar(monkeypatch, par, invitadas=("otra@ejemplo.es",))
+    with srv.app.test_client() as c:
+        r = c.get("/yo", headers=_bearer(par))
+    assert r.status_code == 403
+    assert "ana@ejemplo.es" not in r.get_data(as_text=True)
+
+
+def test_configuracion_incompleta_responde_503(monkeypatch, par):
+    _preparar(monkeypatch, par)
+    monkeypatch.setattr(srv, "CONFIG_OIDC", ConfiguracionOIDC("", (), "", frozenset()))
+    with srv.app.test_client() as c:
+        assert c.get("/yo", headers=_bearer(par)).status_code == 503
+
+
+def test_jwks_inalcanzable_sin_cache_responde_503_con_cuerpo_generico(monkeypatch, par):
+    _preparar(monkeypatch, par, descarga=Descargador(OSError("conexion rechazada por jwks")))
+    with srv.app.test_client() as c:
+        r = c.get("/yo", headers=_bearer(par))
+    assert r.status_code == 503
+    assert "jwks" not in r.get_data(as_text=True).lower()
