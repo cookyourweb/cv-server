@@ -57,8 +57,8 @@ class ConfiguracionOIDC:
         return cls(
             audiencia=(e.get("OIDC_AUDIENCIA") or "").strip(),
             emisores=tuple(_lista(e.get("OIDC_EMISORES"))),
-            url_jwks=(e.get("OIDC_URL_JWKS") or "").strip(),
-            invitadas=frozenset(p.lower() for p in _lista(e.get("OIDC_INVITADAS"))),
+            url_jwks=(e.get("OIDC_JWKS_URL") or "").strip(),
+            invitadas=frozenset(p.lower() for p in _lista(e.get("INVITADAS"))),
         )
 
     def completa(self) -> bool:

@@ -59,8 +59,8 @@ def test_el_modulo_no_importa_flask():
 ENTORNO = {
     "OIDC_AUDIENCIA": "cliente-123",
     "OIDC_EMISORES": " emisor-a , emisor-b ,",
-    "OIDC_URL_JWKS": "https://claves.ejemplo/jwks",
-    "OIDC_INVITADAS": " Ana@Ejemplo.es, ,bea@ejemplo.es ",
+    "OIDC_JWKS_URL": "https://claves.ejemplo/jwks",
+    "INVITADAS": " Ana@Ejemplo.es, ,bea@ejemplo.es ",
 }
 
 
@@ -84,7 +84,7 @@ def test_desde_entorno_lee_el_entorno_real_si_no_se_le_pasa_uno(monkeypatch):
     assert ConfiguracionOIDC.desde_entorno().audiencia == "real"
 
 
-@pytest.mark.parametrize("falta", ["OIDC_AUDIENCIA", "OIDC_EMISORES", "OIDC_URL_JWKS"])
+@pytest.mark.parametrize("falta", ["OIDC_AUDIENCIA", "OIDC_EMISORES", "OIDC_JWKS_URL"])
 def test_la_configuracion_es_incompleta_si_falta_audiencia_emisores_o_jwks(falta):
     c = ConfiguracionOIDC.desde_entorno({**ENTORNO, falta: "  "})
     assert not c.completa()
@@ -92,7 +92,7 @@ def test_la_configuracion_es_incompleta_si_falta_audiencia_emisores_o_jwks(falta
 
 def test_las_invitadas_vacias_no_hacen_incompleta_la_configuracion():
     # Lista vacia = no invita a nadie (403), no es un fallo de configuracion (503).
-    assert ConfiguracionOIDC.desde_entorno({**ENTORNO, "OIDC_INVITADAS": ""}).completa()
+    assert ConfiguracionOIDC.desde_entorno({**ENTORNO, "INVITADAS": ""}).completa()
 
 
 # --- claves publicas (JWKS) --------------------------------------------------
@@ -330,7 +330,7 @@ def test_una_invitada_con_token_valido_es_identificada(par_a, claves):
 
 
 def test_la_lista_se_compara_sin_mayusculas_ni_espacios(par_a, claves):
-    cfg = ConfiguracionOIDC.desde_entorno({**ENTORNO, "OIDC_INVITADAS": "  ANA@Ejemplo.ES ",
+    cfg = ConfiguracionOIDC.desde_entorno({**ENTORNO, "INVITADAS": "  ANA@Ejemplo.ES ",
                                            "OIDC_EMISORES": EMISOR})
     assert identificar(_bearer(par_a, email=" Ana@EJEMPLO.es "), cfg, claves).sub == "42"
 
@@ -369,7 +369,7 @@ def test_el_proveedor_caido_es_503(par_a):
 
 
 def test_el_codigo_no_lleva_ninguna_url_de_google_escrita():
-    # La URL del proveedor es configuracion (OIDC_URL_JWKS), no codigo.
+    # La URL del proveedor es configuracion (OIDC_JWKS_URL), no codigo.
     with open(autenticacion.__file__, encoding="utf-8") as f:
         fuente = f.read()
     assert "googleapis" not in fuente
