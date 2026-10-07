@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import rsa
+from google.auth import jwt
 
 
 class ErrorDeAutenticacion(Exception):
@@ -64,6 +65,8 @@ class ConfiguracionOIDC:
         return bool(self.audiencia and self.emisores and self.url_jwks)
 
 
+ALGORITMOS = ("RS256",)  # lista cerrada: el alg del token nunca elige el verificador
+MARGEN_RELOJ = 60  # segundos de tolerancia en exp e iat
 REFRESCO_MINIMO = 300  # segundos entre descargas provocadas por un kid desconocido
 
 
@@ -127,3 +130,33 @@ class ClavesPublicas:
             if kid not in self._pems and self._puede_reintentar(ahora):
                 self._refrescar()
             return self._pems.get(kid)
+
+
+def verificar_token(token: str, config: ConfiguracionOIDC, claves: ClavesPublicas) -> Identidad:
+    """Comprueba firma, audiencia, caducidad, emisor y email verificado."""
+    try:
+        cabecera = jwt.decode_header(token)
+        kid = cabecera.get("kid")
+        if cabecera.get("alg") not in ALGORITMOS or not isinstance(kid, str):
+            raise ErrorDeAutenticacion("algoritmo o kid no admitidos")
+    except ValueError as error:
+        raise ErrorDeAutenticacion("token mal formado") from error
+
+    pem = claves.pem_de(kid)  # ProveedorNoDisponible sube tal cual
+    if pem is None:
+        raise ErrorDeAutenticacion("kid desconocido")
+
+    try:
+        datos = jwt.decode(token, certs=pem, audience=config.audiencia,
+                           clock_skew_in_seconds=MARGEN_RELOJ)
+    except Exception as error:
+        raise ErrorDeAutenticacion("token no verificable") from error
+
+    if datos.get("iss") not in config.emisores:
+        raise ErrorDeAutenticacion("emisor no admitido")
+    if datos.get("email_verified") is not True:
+        raise ErrorDeAutenticacion("email sin verificar")
+    email = datos.get("email")
+    if not isinstance(email, str) or not email:
+        raise ErrorDeAutenticacion("el token no trae email")
+    return Identidad(datos["iss"], str(datos.get("sub", "")), email, str(datos.get("name") or ""))

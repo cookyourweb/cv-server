@@ -5,11 +5,13 @@ las claves publicas se inyectan y los tokens se firman con claves RSA de prueba.
 """
 import base64
 import dataclasses
+import json
 import threading
 import time
 
 import pytest
 import rsa
+from google.auth import crypt, jwt
 
 import autenticacion
 from autenticacion import (
@@ -19,6 +21,7 @@ from autenticacion import (
     Identidad,
     NoInvitada,
     ProveedorNoDisponible,
+    verificar_token,
 )
 
 
@@ -209,3 +212,103 @@ def test_con_hilos_concurrentes_se_descarga_una_sola_vez(par_a):
     for h in hilos:
         h.join()
     assert len(d.llamadas) == 1
+
+
+# --- verificar_token ---------------------------------------------------------
+
+EMISOR = "https://emisor.ejemplo"
+AUDIENCIA = "cliente-123"
+CONFIG = ConfiguracionOIDC(AUDIENCIA, (EMISOR, "otro-emisor"), "https://jwks", frozenset())
+
+
+def _payload(**cambios):
+    ahora = int(time.time())
+    base = {"iss": EMISOR, "aud": AUDIENCIA, "sub": "42", "email": "ana@ejemplo.es",
+            "email_verified": True, "name": "Ana", "iat": ahora, "exp": ahora + 600}
+    base.update(cambios)
+    return {k: v for k, v in base.items() if v is not None}
+
+
+def _firmar(privada, payload, kid="k1"):
+    firmante = crypt.RSASigner.from_string(privada.save_pkcs1().decode(), kid)
+    return jwt.encode(firmante, payload, header={"kid": kid}).decode()
+
+
+def _a_mano(header, payload, firma=b"firma"):
+    def trozo(d):
+        return base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
+    return f"{trozo(header)}.{trozo(payload)}.{base64.urlsafe_b64encode(firma).rstrip(b'=').decode()}"
+
+
+@pytest.fixture
+def claves(par_a):
+    return ClavesPublicas("https://jwks", Descargador(_jwks(k1=par_a[0])), reloj=Reloj())
+
+
+def test_un_token_valido_devuelve_la_identidad(par_a, claves):
+    token = _firmar(par_a[1], _payload())
+    assert verificar_token(token, CONFIG, claves) == Identidad(EMISOR, "42", "ana@ejemplo.es", "Ana")
+
+
+def test_el_nombre_ausente_queda_vacio(par_a, claves):
+    token = _firmar(par_a[1], _payload(name=None))
+    assert verificar_token(token, CONFIG, claves).nombre == ""
+
+
+def test_firmado_con_otra_clave_y_el_mismo_kid_se_rechaza(par_b, claves):
+    token = _firmar(par_b[1], _payload(), kid="k1")
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(token, CONFIG, claves)
+
+
+@pytest.mark.parametrize("alg", ["HS256", "none", "RS512"])
+def test_algoritmos_distintos_de_rs256_se_rechazan(alg, claves):
+    token = _a_mano({"alg": alg, "kid": "k1", "typ": "JWT"}, _payload())
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(token, CONFIG, claves)
+
+
+def test_audiencia_incorrecta(par_a, claves):
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(_firmar(par_a[1], _payload(aud="ajeno")), CONFIG, claves)
+
+
+def test_caducado_mas_alla_de_60_segundos_se_rechaza(par_a, claves):
+    ahora = int(time.time())
+    token = _firmar(par_a[1], _payload(iat=ahora - 900, exp=ahora - 120))
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(token, CONFIG, claves)
+
+
+def test_caducado_dentro_de_los_60_segundos_de_margen_se_acepta(par_a, claves):
+    ahora = int(time.time())
+    token = _firmar(par_a[1], _payload(iat=ahora - 900, exp=ahora - 30))
+    assert verificar_token(token, CONFIG, claves).email == "ana@ejemplo.es"
+
+
+def test_emisor_fuera_de_la_lista(par_a, claves):
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(_firmar(par_a[1], _payload(iss="https://falso")), CONFIG, claves)
+
+
+@pytest.mark.parametrize("valor", [False, None, "true", 1])
+def test_email_verified_tiene_que_ser_el_booleano_true(valor, par_a, claves):
+    token = _firmar(par_a[1], _payload(email_verified=valor))
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(token, CONFIG, claves)
+
+
+def test_sin_email_se_rechaza(par_a, claves):
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(_firmar(par_a[1], _payload(email=None)), CONFIG, claves)
+
+
+def test_kid_desconocido(par_a, claves):
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(_firmar(par_a[1], _payload(), kid="otro"), CONFIG, claves)
+
+
+@pytest.mark.parametrize("token", ["", "basura", "a.b", "a.b.c", "....", "x" * 50])
+def test_un_token_mal_formado_se_rechaza(token, claves):
+    with pytest.raises(ErrorDeAutenticacion):
+        verificar_token(token, CONFIG, claves)
