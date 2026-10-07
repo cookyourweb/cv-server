@@ -5,14 +5,12 @@ Caso real (2oct2026), revisando cv-server antes de abrirlo a otras usuarias:
 - `/debug` llamaba al LLM con la clave de la duena. Cualquiera que conociera la
   direccion le gastaba saldo, sin limite y sin dejar rastro.
 - `/usuarios` devolvia nombre y email de las usuarias activas a quien lo pidiera,
-  y el formulario de alta tenia un enlace visible a ella.
+  y el formulario de alta (ya retirado) tenia un enlace visible a ella.
 
 `/debug` desaparece: lo que hacia ya lo dice `/health` sin gastar nada.
 `/usuarios` exige la clave de maquina, la misma que llevaran despues las llamadas
 de n8n (ADR-003). Sin clave configurada no abre nunca: falla cerrado.
 """
-from pathlib import Path
-
 import pytest
 
 import server as srv
@@ -83,9 +81,3 @@ def test_sin_clave_configurada_no_abre_nunca(monkeypatch, configurada):
         assert c.get("/usuarios").status_code == 401
         assert c.get("/usuarios", headers={"X-Clave-Maquina": ""}).status_code == 401
 
-
-# ── formulario de alta ──────────────────────────────────
-
-def test_el_formulario_no_enlaza_a_la_lista_de_usuarios():
-    html = (Path(srv.__file__).parent / "templates" / "alta.html").read_text()
-    assert 'href="/usuarios"' not in html

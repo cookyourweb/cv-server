@@ -326,9 +326,6 @@ from docx_render import (  # noqa: F401
     generar_docx_con_cabecera,
     sanear_tipografia,
 )
-# El formulario de alta vive en `templates/alta.html`. Estaba aqui dentro como
-# 237 lineas de HTML, CSS y JavaScript en una cadena de Python, en el mismo
-# fichero que los prompts y la logica de Notion.
 
 
 

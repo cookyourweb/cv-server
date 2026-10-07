@@ -184,7 +184,7 @@ def test_hay_varios_nombres_candidatos_para_consultar():
     """Caso real 28jul2026: `emails_de_usuario` se hizo tolerante al nombre del
     campo, pero la CONSULTA a Notion seguia pidiendo 'Emails alias' en plural. La
     propiedad se llamaba 'Email alias'. Notion devolvia 400, la segunda pasada no
-    encontraba nada, y /check-email decia que el correo no existia.
+    encontraba nada, y /check-email (ruta eliminada el 7-oct-2026) decia que el correo no existia.
 
     Tolerar el nombre al leer no sirve si al preguntar se usa uno solo.
     """

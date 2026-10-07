@@ -136,7 +136,7 @@ def test_espera_lo_suficiente_para_que_n8n_termine(monkeypatch):
     )
 
 
-def test_el_formulario_no_se_cachea():
+def test_la_portada_no_se_cachea():
     """El navegador servia el HTML viejo despues de desplegar el arreglo.
 
     Caso real del 28-ago-2026: el codigo desplegado leia `busqueda_disparada`
