@@ -12,11 +12,16 @@ estructura y el PORQUÉ de cada regla, para que nadie las rompa al editar el có
   `bloque_formato`.
 - **Modelos**: CV y carta con `claude-sonnet-4-6` en producción. Los fija el entorno
   (`CV_MODEL`, `CARTA_MODEL`), no el código: el valor por defecto de `CV_MODEL` en
-  `llm.py` sigue siendo Haiku 4.5 (ver ADR-002). Si Claude falla, `call_llm_calidad`
-  cae a Groq (`openai/gpt-oss-120b`). `/health` muestra los modelos activos.
+  `llm.py` sigue siendo Haiku 4.5 (ver ADR-002). Si Claude falla, cae a Groq
+  (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku (`call_llm_calidad` y
+  `call_llm` en `llm.py`). Cada respuesta informa en `modelo_usado` del modelo que la
+  escribió de verdad. `/health` muestra los modelos activos.
 
-> Regla de oro del proyecto: **el CV NUNCA inventa**. Todo sale del CV master del usuario.
-> El prompt solo cambia ORDEN, ÉNFASIS y TITULAR, nunca el contenido real.
+> Regla de oro del proyecto: **el CV no debe inventar**. Todo sale del CV master del usuario.
+> El prompt solo cambia ORDEN, ÉNFASIS y TITULAR, no el contenido real. Es una petición al
+> modelo, no una garantía: los detectores avisan de cifras y tecnologías no respaldadas, pero
+> la inflación del alcance del rol (`coordinated` pasa a `owned`) no se detecta
+> automáticamente.
 
 ## Modelo mental: IDENTIDAD vs POSICIONAMIENTO
 

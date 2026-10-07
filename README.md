@@ -8,7 +8,7 @@
 > leer el código? La guía está en [`docs/GUIA-DE-USO.md`](docs/GUIA-DE-USO.md).
 
 **Qué es.** Un servicio que genera el CV y la carta de presentación adaptados a cada
-oferta con LLMs, sin inventar experiencia. Flask en producción, migrándose a FastAPI de
+oferta con LLMs, diseñado para no inventar experiencia. Flask en producción, migrándose a FastAPI de
 forma incremental.
 
 **Por qué importa.** Un CV con una frase inventada es indefendible en una entrevista, y
@@ -18,7 +18,7 @@ un servicio abierto en internet no puede fiarse de quién dice ser quien lo llam
 
 | Problema | Solución | Dónde leerlo |
 |---|---|---|
-| Que el LLM no invente | Seis guardrails que verifican la salida (y la entrada) contra la fuente de verdad | [El problema interesante](#el-problema-interesante) |
+| Detectar cuándo el LLM inventa | Seis detectores deterministas contra el CV Master: cinco sobre el CV (cuatro se devuelven en la respuesta y uno solo se registra en el log) y tres sobre la carta. Avisan, no bloquean. El titular no se acepta tal cual lo escribe el modelo: se reconstruye de forma determinista desde el `PERFIL BASE` (`construir_titular`) | [El problema interesante](#el-problema-interesante) |
 | Que solo entre quien está invitada | Token de Google verificado (OIDC) para personas, clave de máquina para n8n | [Acceso por invitación](#acceso-por-invitación) |
 
 ```
@@ -27,8 +27,10 @@ Notion (ofertas + perfil) ─┐
 CV Master (Google Docs) ───┘
 ```
 
-**Modelos.** En producción, el CV y la carta los escribe `claude-sonnet-4-6`, con
-`openai/gpt-oss-120b` (Groq) de fallback. El modelo lo fijan las variables de entorno
+**Modelos.** En producción, el CV y la carta los escribe `claude-sonnet-4-6`. Si Claude
+falla, cae a Groq (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku
+(`call_llm_calidad` y `call_llm` en `llm.py`). Cada respuesta informa en `modelo_usado`
+del modelo que la escribió de verdad. El modelo lo fijan las variables de entorno
 `CV_MODEL` y `CARTA_MODEL`, no el código; `GET /health` muestra los que están activos.
 
 ---
@@ -41,9 +43,13 @@ Un modelo al que le pides "adapta este CV a esta oferta" tiende a acercar el can
 al puesto: añade una tecnología que la oferta pide, redondea una cifra, sube el alcance
 de un rol. Cada una de esas frases es indefendible en una entrevista.
 
-La respuesta de este servicio no es solo el CV: son **seis guardrails** que verifican
-la salida contra la fuente de verdad. Desde el 28-ago-2026 se aplican también a la
-**carta**, que hasta entonces salía sin ninguno.
+La respuesta de este servicio no es solo el CV: son **seis detectores deterministas**
+que comparan el texto generado contra el CV Master. Desde el 28-ago-2026 tres de ellos
+se aplican también a la **carta**, que hasta entonces salía sin ninguno. Avisan, no
+bloquean.
+
+Respuesta real de `POST /generar-cv` (los campos de guardrails que devuelve hoy; el
+resto de campos, como `link` o `consumo`, se omiten):
 
 ```json
 {
@@ -52,21 +58,19 @@ la salida contra la fuente de verdad. Desde el 28-ago-2026 se aplican también a
   "modelo_usado": "claude-sonnet-4-6",
   "cifras_no_respaldadas": [],
   "tecnologias_no_respaldadas": [],
-  "skills_no_respaldadas": [],
   "titular_fuera_de_contrato": [],
-  "experiencia_mal_atribuida": [],
   "descripcion_oferta": { "suficiente": true, "chars": 1694, "aviso": "" }
 }
 ```
 
-| Guardrail | Qué detecta | Caso real que lo motivó |
-|---|---|---|
-| `cifras_no_respaldadas` | Números que no están en el CV Master | Cifras de usuarios redondeadas hacia arriba |
-| `tecnologias_no_respaldadas` | Tecnologías del catálogo que la oferta pide y el Master no respalda | *"experiencia en arquitecturas PHP/Symfony"* en un perfil sin PHP |
-| `skills_no_respaldadas` | Cada skill declarada, verificada una a una y sin catálogo | *"React 19 · Tailwind (v4) · Radix UI · Mantine"*: el stack de la oferta, copiado entero |
-| `titular_fuera_de_contrato` | Titulares que inventan identidad o suben seniority | El titular copiando el título de la vacante |
-| `experiencia_mal_atribuida` | Años de experiencia pegados a la tecnología equivocada | El Master dice *"Vue.js, 8 años"* y la carta escribió *"más de ocho años con React y TypeScript"* |
-| `descripcion_oferta` | **Entrada** insuficiente para adaptar nada | Ofertas de LinkedIn con 172 caracteres: el titular reformulado |
+| Guardrail | Dónde aplica | Qué detecta | Caso real que lo motivó |
+|---|---|---|---|
+| `cifras_no_respaldadas` | CV (devuelto) y carta | Números que no están en el CV Master | Cifras de usuarios redondeadas hacia arriba |
+| `tecnologias_no_respaldadas` | CV (devuelto) y carta | Tecnologías del catálogo que la oferta pide y el Master no respalda | *"experiencia en arquitecturas PHP/Symfony"* en un perfil sin PHP |
+| `skills_no_respaldadas` | CV (solo registrado en el log, hoy no se devuelve) | Cada skill declarada, verificada una a una y sin catálogo | *"React 19 · Tailwind (v4) · Radix UI · Mantine"*: el stack de la oferta, copiado entero |
+| `titular_fuera_de_contrato` | CV (devuelto) | Titulares que inventan identidad o suben seniority | El titular copiando el título de la vacante |
+| `experiencia_mal_atribuida` | Solo carta (devuelto en `avisos`) | Años de experiencia pegados a la tecnología equivocada | El Master dice *"Vue.js, 8 años"* y la carta escribió *"más de ocho años con React y TypeScript"* |
+| `descripcion_oferta` | Entrada del CV (devuelto) | **Entrada** insuficiente para adaptar nada | Ofertas de LinkedIn con 172 caracteres: el titular reformulado |
 
 El de la descripción es el que más cuesta ver: los otros miran la salida, y **un CV
 genérico no inventa nada, simplemente no dice nada**. Sin mirar la entrada, `ok: true`
@@ -99,7 +103,8 @@ No fue un descuido de la lista. Lo que un modelo copia son las tecnologías **nu
 cada oferta, que por definición no están en un catálogo escrito antes de leerla: una
 lista blanca no puede cubrir un mundo abierto.
 
-`skills_no_respaldadas` invierte el sentido. La sección de skills de un CV es una lista
+`skills_no_respaldadas` (hoy solo se registra en el log, no se devuelve en la respuesta)
+invierte el sentido. La sección de skills de un CV es una lista
 de afirmaciones separadas por puntos, así que cada una se contrasta contra el Master
 venga la tecnología de donde venga, sin catálogo de por medio. El mundo cerrado pasa al
 lado correcto: el de lo que el CV afirma. Verifica también lo que va dentro de los
@@ -116,6 +121,35 @@ ni cifras, así que la comparación contra el Master no las ve. Es semántico y 
 Y una limitación de fondo de todos ellos: un guardrail solo puede ser tan bueno como su
 fuente de verdad. Si el CV Master está incompleto, marca como no respaldado algo que sí
 es real. Los falsos positivos no son un fallo del detector, son agujeros del Master.
+
+### Riesgo conocido: inyección de instrucciones
+
+La descripción de la oferta es texto de terceros y **no está aislada en el prompt**: se
+inserta tal cual junto a las instrucciones (`PROMPT_CV` y `PROMPT_CARTA` en `server.py`).
+Una oferta maliciosa podría intentar darle órdenes al modelo.
+
+Lo que limita el daño, sin eliminarlo:
+
+- Los detectores comparan contra el CV Master, no contra la oferta. Una tecnología o cifra
+  que la oferta le dicte al modelo y que el Master no respalde se marca.
+- El titular no se acepta como lo escribe el modelo: se reconstruye desde el `PERFIL BASE`
+  (si el Master lo tiene; sin él se usa el del modelo).
+
+No hay hoy un delimitador ni un filtro de instrucciones sobre la oferta.
+
+---
+
+## IA en cifras
+
+| Qué | Dato | Dónde leerlo |
+|---|---|---|
+| Coste por petición | CV unos 0,05 USD y carta unos 0,013 USD con `claude-sonnet-4-6` (medición del 2-oct-2026, prompt de unos 9.600 tokens de entrada) | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
+| Por qué este modelo | Coste medido con `count_tokens` y fallos reales de Haiku | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
+| Cadena de respaldo | Claude, luego Groq, luego Gemini, luego Claude Haiku; `modelo_usado` dice cuál escribió | [`llm.py`](llm.py) |
+| Evaluación | `evaluacion.py` es pura (no llama a ningún modelo) y sus tests corren en la suite como red contra regresiones. Generar de verdad contra el LLM se lanza a mano | [`evaluacion.py`](evaluacion.py), [`tests/test_evaluacion.py`](tests/test_evaluacion.py) |
+| Modos de fallo conocidos | Descripción de oferta demasiado corta (CV genérico, avisado en `descripcion_oferta`); inflación del alcance del rol, no detectada; respuesta escrita por un modelo de respaldo | [Lo que los guardrails NO detectan](#lo-que-los-guardrails-no-detectan) |
+| Inyección de instrucciones | Riesgo conocido, mitigado solo en parte | [Riesgo conocido](#riesgo-conocido-inyección-de-instrucciones) |
+| Claves fuera de los logs | La clave de Gemini va en cabecera, no en la URL, y los errores de los proveedores se registran por tipo y código HTTP, no con su mensaje; lo vigila un test | [`tests/test_claves_fuera_de_los_registros.py`](tests/test_claves_fuera_de_los_registros.py) |
 
 ---
 
@@ -149,6 +183,16 @@ Documentadas como ADRs en [`docs/`](docs/):
 sin mirar: el ADR-001 describe cómo se está deshaciendo, con `api.py` llevándose un
 endpoint cada vez y Flask cubriendo hasta que el nuevo está en verde. Se documenta aquí
 porque es lo primero que se ve al abrir el repo.
+
+Otras dos deudas conocidas:
+
+- **Datos personales en los logs.** Los registros de `/generar-cv` y `/generar-carta`
+  incluyen el email de la usuaria, la empresa y el puesto (por ejemplo, en los avisos de
+  guardrails).
+- **Modelo por defecto del CV.** En `llm.py`, `CV_MODEL` sigue valiendo `claude-haiku-4-5`
+  por defecto. Producción usa Sonnet porque el entorno lo fija; si esa variable se pierde,
+  el CV pasa a Haiku sin ningún error. Un cambio aparte, con tests, moverá el valor por
+  defecto.
 
 ## Rutas
 

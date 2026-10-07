@@ -8,7 +8,7 @@ el código a secas.
 
 Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
 
-> ⚠️ **Render NO lee el `Procfile`.** Tiene su propio *Start Command* guardado en
+> **Render NO lee el `Procfile`.** Tiene su propio *Start Command* guardado en
 > el panel (Settings, Start Command), y ese es el que manda. El 28-ago-2026 el
 > renombrado a `server.py` tumbo un despliegue por esto: el Procfile decia
 > `server:app` y el panel seguia diciendo `cv_server_railway:app`.
@@ -42,7 +42,7 @@ los sobrescribe, y `/health` (campo `modelos`) muestra los activos.
 |---|---|---|
 | CV adaptado (`/generar-cv`) | `claude-sonnet-4-6` | `CV_MODEL` |
 | Carta (`/generar-carta`) | `claude-sonnet-4-6` | `CARTA_MODEL` |
-| Fallback del CV y la carta (`call_llm_calidad`) | `openai/gpt-oss-120b` (Groq) | `GROQ_MODEL` |
+| Fallback del CV y la carta (`call_llm_calidad` y `call_llm`) | Si Claude falla: Groq (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku. `modelo_usado` informa del modelo que la escribió de verdad | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
 | Ranking de ofertas (`real_jobs.rankear_con_groq`) | `openai/gpt-oss-120b` (Groq), con fallback heurístico determinista | `GROQ_MODEL` |
 | Texto general (`call_llm`) | Groq, luego Gemini, luego Claude Haiku 4.5 | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
 

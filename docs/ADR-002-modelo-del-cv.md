@@ -59,6 +59,13 @@ real: reglas + CV Master EN + una oferta de Remotive; 13.816 caracteres):
 
 **El sobrecoste real es $0,94 al mes. Menos de un euro. Once dolares al ano.**
 
+> **Actualización 2-oct-2026:** con el prompt actual (unos 9.600 tokens de entrada) un CV
+> con claude-sonnet-4-6 cuesta unos 0,05 USD y una carta unos 0,013 USD (medición del
+> 2-oct-2026). La tabla de arriba es la medición histórica del 27-jul con un prompt de
+> 3.532 tokens. Estimación mensual con el coste nuevo (CV más carta por oferta, unos 0,063
+> USD): 20 ofertas al mes son unos 1,3 USD y 60 ofertas al mes unos 3,8 USD (estimación
+> del 2-oct-2026).
+
 > Una estimacion previa de este ADR decia $0,019/CV con Haiku y ~1,50 EUR/mes de
 > sobrecoste. Estaba **inflada en un 70%**: sobreestimaba el prompt. Los numeros de
 > arriba salen de la API de conteo, no de un calculo a ojo.
@@ -98,7 +105,9 @@ API entre Haiku 4.5 y Sonnet 4.6 en este codigo.**
 
 - **A favor:** un modelo con capacidad sobrada para 68 directivas simultaneas; menos
   correcciones a mano; menos riesgo de invencion en el documento que ve el recruiter.
-- **Coste:** ~1,50 EUR/mes mas.
+- **Coste:** +$0,94/mes en la medición del 27-jul (40 CVs, prompt de 3.532 tokens). La
+  cifra de ~1,50 EUR de la primera estimación quedó descartada (ver arriba). Con el prompt
+  actual, ver la actualización del 2-oct-2026.
 - **Riesgo controlado:** es una variable de entorno. Si no mejora, se revierte al
   instante y el diagnostico pasa a ser del prompt, no del modelo.
 
@@ -115,12 +124,19 @@ API entre Haiku 4.5 y Sonnet 4.6 en este codigo.**
    - afirmaciones de alcance de rol no respaldadas por el Master ("designed backend
      services", "led X across distributed systems")
    - titular duplicado o con el nombre de la vacante dentro
-4. Comparar contra el crudo de Malwarebytes del 25-jul (`1uW3wHeuebl4GsSjWbqdeHKl2BhmqXnd8`),
+4. Comparar contra el CV crudo de referencia del 25-jul (el de Malwarebytes),
    que es el caso base con Haiku.
 
 ## Pendiente
 
-- [ ] Cambiar `CV_MODEL` en Render y regenerar un CV de control.
+- [x] Cambiar `CV_MODEL` en Render a `claude-sonnet-4-6`. Hecho; verificado el
+      7-oct-2026 con `GET /health`.
+- [ ] Comparación de control contra los cuatro fallos de Haiku (lista de arriba). Pendiente:
+      no hay evidencia en el repo de que se haya hecho.
+- [ ] **Deuda conocida: el valor por defecto de `CV_MODEL` en `llm.py` sigue siendo
+      `claude-haiku-4-5`.** Producción fija Sonnet por variable de entorno; si la variable
+      se pierde, el CV cae a Haiku sin ningún error. Un cambio aparte, con tests, moverá el
+      valor por defecto.
 - [ ] Si con Sonnet siguen apareciendo fallos, ENTONCES tocar el prompt.
 - [ ] **Ampliar el guardrail a afirmaciones de ROL.** Hoy detecta tecnologias
       (`tecnologias_no_respaldadas`) y cifras (`cifras_no_respaldadas`), ambas por
