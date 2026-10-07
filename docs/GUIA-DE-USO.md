@@ -5,7 +5,7 @@ adaptado y la carta de presentación.
 
 **Estado:** beta privada. Hace falta invitación.
 
-Si lo que buscas es el detalle técnico, está en el [README](../README.md).
+Si lo que buscas es el detalle técnico, está en el [README](../README.es.md).
 
 ---
 
