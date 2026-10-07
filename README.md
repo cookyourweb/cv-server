@@ -1,55 +1,59 @@
+[Español](README.es.md) · **English**
+
 # cv-server
 
 [![tests](https://github.com/cookyourweb/cv-server/actions/workflows/tests.yml/badge.svg)](https://github.com/cookyourweb/cv-server/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> Cómo se trabaja aquí (ciclo rojo-verde-commit, hook de pre-commit y reglas de
-> commit): [`CONTRIBUTING.md`](CONTRIBUTING.md). ¿Vienes a **usar** el servicio y no a
-> leer el código? La guía está en [`docs/GUIA-DE-USO.md`](docs/GUIA-DE-USO.md).
+> How work is done here (red-green-commit cycle, pre-commit hook and commit rules):
+> [`CONTRIBUTING.md`](CONTRIBUTING.md). Here to **use** the service rather than read the
+> code? The guide is in [`docs/GUIA-DE-USO.md`](docs/GUIA-DE-USO.md). The linked
+> documents in this repo are in Spanish.
 
-**Qué es.** Un servicio que genera el CV y la carta de presentación adaptados a cada
-oferta con LLMs, diseñado para no inventar experiencia. Flask en producción, migrándose a FastAPI de
-forma incremental.
+**What it is.** A service that uses LLMs to generate a CV and cover letter tailored to
+each job posting, designed not to invent experience. Flask in production, migrating to
+FastAPI incrementally.
 
-**Por qué importa.** Un CV con una frase inventada es indefendible en una entrevista, y
-un servicio abierto en internet no puede fiarse de quién dice ser quien lo llama.
+**Why it matters.** A CV with one invented sentence cannot be defended in an interview,
+and a service exposed to the internet cannot trust callers to be who they say they are.
 
-**Dos problemas difíciles resueltos aquí:**
+**Two hard problems solved here:**
 
-| Problema | Solución | Dónde leerlo |
+| Problem | Solution | Where to read about it |
 |---|---|---|
-| Detectar cuándo el LLM inventa | Seis detectores deterministas contra el CV Master: cinco sobre el CV (cuatro se devuelven en la respuesta y uno solo se registra en el log) y tres sobre la carta. Avisan, no bloquean. El titular no se acepta tal cual lo escribe el modelo: se reconstruye de forma determinista desde el `PERFIL BASE` (`construir_titular`) | [El problema interesante](#el-problema-interesante) |
-| Que solo entre quien está invitada | Token de Google verificado (OIDC) para personas, clave de máquina para n8n | [Acceso por invitación](#acceso-por-invitación) |
+| Detecting when the LLM invents | Six deterministic detectors checked against the CV Master: five on the CV (four are returned in the response and one is only written to the log) and three on the cover letter. They warn, they do not block. The headline is not accepted as the model writes it: it is rebuilt deterministically from the `PERFIL BASE` (base profile) (`construir_titular`) | [The interesting problem](#the-interesting-problem) |
+| Letting in only invited users | Verified Google token (OIDC) for people, a machine key for n8n | [Invitation-only access](#invitation-only-access) |
 
 ```
-Notion (ofertas + perfil) ─┐
-                           ├── /generar-cv ── LLM ── guardrails ── Google Drive
-CV Master (Google Docs) ───┘
+Notion (postings + profile) ─┐
+                             ├── /generar-cv ── LLM ── guardrails ── Google Drive
+CV Master (Google Docs) ─────┘
 ```
 
-**Modelos.** En producción, el CV y la carta los escribe `claude-sonnet-4-6`. Si Claude
-falla, cae a Groq (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku
-(`call_llm_calidad` y `call_llm` en `llm.py`). Cada respuesta informa en `modelo_usado`
-del modelo que la escribió de verdad. El modelo lo fijan las variables de entorno
-`CV_MODEL` y `CARTA_MODEL`, no el código; `GET /health` muestra los que están activos.
+**Models.** In production, the CV and the cover letter are written by `claude-sonnet-4-6`.
+If Claude fails, it falls back to Groq (`openai/gpt-oss-120b`), then Gemini, then Claude
+Haiku (`call_llm_calidad` and `call_llm` in `llm.py`). Every response reports in
+`modelo_usado` (model used) the model that actually wrote it. The model is set by the
+`CV_MODEL` and `CARTA_MODEL` environment variables, not by the code; `GET /health` shows
+the active ones.
 
 ---
 
-## El problema interesante
+## The interesting problem
 
-Adaptar un CV con un LLM es fácil. **Que no mienta, no.**
+Tailoring a CV with an LLM is easy. **Keeping it from lying is not.**
 
-Un modelo al que le pides "adapta este CV a esta oferta" tiende a acercar el candidato
-al puesto: añade una tecnología que la oferta pide, redondea una cifra, sube el alcance
-de un rol. Cada una de esas frases es indefendible en una entrevista.
+A model asked to "tailor this CV to this posting" tends to pull the candidate toward the
+role: it adds a technology the posting asks for, rounds a number up, widens the scope of a
+role. Every one of those sentences is indefensible in an interview.
 
-La respuesta de este servicio no es solo el CV: son **seis detectores deterministas**
-que comparan el texto generado contra el CV Master. Desde el 28-ago-2026 tres de ellos
-se aplican también a la **carta**, que hasta entonces salía sin ninguno. Avisan, no
-bloquean.
+This service's answer is not just the CV: it is **six deterministic detectors** that
+compare the generated text against the CV Master. Since 28 Aug 2026, three of them also
+run on the **cover letter**, which until then went out with none. They warn, they do not
+block.
 
-Respuesta real de `POST /generar-cv` (los campos de guardrails que devuelve hoy; el
-resto de campos, como `link` o `consumo`, se omiten):
+Actual response from `POST /generar-cv` (the guardrail fields it returns today; the
+other fields, such as `link` or `consumo`, are omitted):
 
 ```json
 {
@@ -63,196 +67,195 @@ resto de campos, como `link` o `consumo`, se omiten):
 }
 ```
 
-| Guardrail | Dónde aplica | Qué detecta | Caso real que lo motivó |
+| Guardrail | Where it applies | What it detects | Real case that prompted it |
 |---|---|---|---|
-| `cifras_no_respaldadas` | CV (devuelto) y carta | Números que no están en el CV Master | Cifras de usuarios redondeadas hacia arriba |
-| `tecnologias_no_respaldadas` | CV (devuelto) y carta | Tecnologías del catálogo que la oferta pide y el Master no respalda | *"experiencia en arquitecturas PHP/Symfony"* en un perfil sin PHP |
-| `skills_no_respaldadas` | CV (solo registrado en el log, hoy no se devuelve) | Cada skill declarada, verificada una a una y sin catálogo | *"React 19 · Tailwind (v4) · Radix UI · Mantine"*: el stack de la oferta, copiado entero |
-| `titular_fuera_de_contrato` | CV (devuelto) | Titulares que inventan identidad o suben seniority | El titular copiando el título de la vacante |
-| `experiencia_mal_atribuida` | Solo carta (devuelto en `avisos`) | Años de experiencia pegados a la tecnología equivocada | El Master dice *"Vue.js, 8 años"* y la carta escribió *"más de ocho años con React y TypeScript"* |
-| `descripcion_oferta` | Entrada del CV (devuelto) | **Entrada** insuficiente para adaptar nada | Ofertas de LinkedIn con 172 caracteres: el titular reformulado |
+| `cifras_no_respaldadas` | CV (returned) and cover letter | Numbers that are not in the CV Master | User counts rounded up |
+| `tecnologias_no_respaldadas` | CV (returned) and cover letter | Catalog technologies the posting asks for and the Master does not back | *"experiencia en arquitecturas PHP/Symfony"* (experience with PHP/Symfony architectures) in a profile with no PHP |
+| `skills_no_respaldadas` | CV (only written to the log, not returned today) | Every declared skill, checked one by one, with no catalog | *"React 19 · Tailwind (v4) · Radix UI · Mantine"*: the posting's stack, copied wholesale |
+| `titular_fuera_de_contrato` | CV (returned) | Headlines that invent an identity or inflate seniority | The headline copying the job title |
+| `experiencia_mal_atribuida` | Cover letter only (returned in `avisos`) | Years of experience attached to the wrong technology | The Master says *"Vue.js, 8 años"* and the letter wrote *"más de ocho años con React y TypeScript"* (more than eight years with React and TypeScript) |
+| `descripcion_oferta` | CV input (returned) | **Input** too thin to tailor anything | 172-character LinkedIn postings: the headline, reworded |
 
-El de la descripción es el que más cuesta ver: los otros miran la salida, y **un CV
-genérico no inventa nada, simplemente no dice nada**. Sin mirar la entrada, `ok: true`
-oculta que no había material.
+The description check is the hardest to see: the others look at the output, and **a
+generic CV invents nothing, it simply says nothing**. Without looking at the input,
+`ok: true` hides the fact that there was no material.
 
-`experiencia_mal_atribuida` cubre un hueco distinto de todos los demás: los otros
-comprueban si algo **existe** en el Master, este comprueba **a quién pertenece**. React
-existe, el 8 existe, y la frase que los junta es falsa.
+`experiencia_mal_atribuida` covers a gap none of the others do: they check whether
+something **exists** in the Master, this one checks **what it belongs to**. React exists,
+the 8 exists, and the sentence that joins them is false.
 
-### La carta también pasa los guardrails
+### The cover letter goes through the guardrails too
 
-Hasta el 28-ago-2026 los detectores se aplicaban solo a `contenido_cv`. La carta es lo
-PRIMERO que lee un humano, el CV lo abren después, y salía sin verificar. Ahora
-`/generar-carta` devuelve `avisos` con lo que encuentre.
+Until 28 Aug 2026 the detectors only ran on `contenido_cv`. The cover letter is the FIRST
+thing a human reads, the CV gets opened afterwards, and it went out unchecked. Now
+`/generar-carta` returns `avisos` (warnings) with whatever it finds.
 
-Se aplican tres: `experiencia_mal_atribuida`, `tecnologias_no_respaldadas` y
-`cifras_no_respaldadas`. `skills_no_respaldadas` queda fuera **a propósito**: lee líneas
-de skills separadas por puntos, y una carta es prosa. Aplicarlo ahí daría solo ruido.
+Three of them apply: `experiencia_mal_atribuida`, `tecnologias_no_respaldadas` and
+`cifras_no_respaldadas`. `skills_no_respaldadas` is left out **on purpose**: it reads
+skill lines separated by dots, and a cover letter is prose. Running it there would only
+produce noise.
 
-Y avisan, no abortan: un aviso puede ser una reformulación legítima, y abortar dejaría a
-la usuaria sin carta.
+And they warn, they do not abort: a warning may be a legitimate rewording, and aborting
+would leave the user without a cover letter.
 
-### El quinto guardrail nació del fallo del segundo
+### The fifth guardrail came out of the second one's failure
 
-`tecnologias_no_respaldadas` funciona con un catálogo de 173 variantes dadas de alta a
-mano. Ninguna de las cuatro que se colaron estaba en él, así que fue **ciego** a las
-cuatro.
+`tecnologias_no_respaldadas` works from a catalog of 173 variants entered by hand. None
+of the four that slipped through were in it, so it was **blind** to all four.
 
-No fue un descuido de la lista. Lo que un modelo copia son las tecnologías **nuevas** de
-cada oferta, que por definición no están en un catálogo escrito antes de leerla: una
-lista blanca no puede cubrir un mundo abierto.
+This was not an oversight in the list. What a model copies are each posting's **new**
+technologies, which by definition are not in a catalog written before reading it: an
+allowlist cannot cover an open world.
 
-`skills_no_respaldadas` (hoy solo se registra en el log, no se devuelve en la respuesta)
-invierte el sentido. La sección de skills de un CV es una lista
-de afirmaciones separadas por puntos, así que cada una se contrasta contra el Master
-venga la tecnología de donde venga, sin catálogo de por medio. El mundo cerrado pasa al
-lado correcto: el de lo que el CV afirma. Verifica también lo que va dentro de los
-paréntesis, donde se esconden herramientas enteras (`Vue 2 and 3 (Composition API,
-Pinia)`), y trata las versiones como afirmaciones: si el Master dice "Tailwind" sin
-versión, `Tailwind (v4)` se marca.
+`skills_no_respaldadas` (today only written to the log, not returned in the response)
+flips the direction. The skills section of a CV is a list of dot-separated claims, so
+each one is checked against the Master wherever the technology comes from, with no
+catalog in between. The closed world moves to the right side: what the CV claims. It also
+checks what is inside parentheses, where whole tools hide (`Vue 2 and 3 (Composition API,
+Pinia)`), and treats versions as claims: if the Master says "Tailwind" with no version,
+`Tailwind (v4)` gets flagged.
 
-### Lo que los guardrails NO detectan
+### What the guardrails do NOT detect
 
-La inflación del **alcance del rol**: `coordinated data contracts` pasa a `own the data
-contracts`, `Integrated APIs` pasa a `Designed and integrated APIs`. No son tecnologías
-ni cifras, así que la comparación contra el Master no las ve. Es semántico y sigue abierto.
+Inflation of **role scope**: `coordinated data contracts` becomes `own the data
+contracts`, `Integrated APIs` becomes `Designed and integrated APIs`. These are not
+technologies or numbers, so the comparison against the Master does not see them. It is
+semantic and still open.
 
-Y una limitación de fondo de todos ellos: un guardrail solo puede ser tan bueno como su
-fuente de verdad. Si el CV Master está incompleto, marca como no respaldado algo que sí
-es real. Los falsos positivos no son un fallo del detector, son agujeros del Master.
+And one underlying limitation shared by all of them: a guardrail can only be as good as
+its source of truth. If the CV Master is incomplete, it flags as unbacked something that
+is real. False positives are not a detector bug, they are gaps in the Master.
 
-### Riesgo conocido: inyección de instrucciones
+### Known risk: prompt injection
 
-La descripción de la oferta es texto de terceros y **no está aislada en el prompt**: se
-inserta tal cual junto a las instrucciones (`PROMPT_CV` y `PROMPT_CARTA` en `server.py`).
-Una oferta maliciosa podría intentar darle órdenes al modelo.
+The posting description is third-party text and **is not isolated in the prompt**: it is
+inserted as is next to the instructions (`PROMPT_CV` and `PROMPT_CARTA` in `server.py`).
+A malicious posting could try to give the model orders.
 
-Lo que limita el daño, sin eliminarlo:
+What limits the damage, without eliminating it:
 
-- Los detectores comparan contra el CV Master, no contra la oferta. Una tecnología o cifra
-  que la oferta le dicte al modelo y que el Master no respalde se marca.
-- El titular no se acepta como lo escribe el modelo: se reconstruye desde el `PERFIL BASE`
-  (si el Master lo tiene; sin él se usa el del modelo).
+- The detectors compare against the CV Master, not against the posting. A technology or
+  number that the posting dictates to the model and the Master does not back gets flagged.
+- The headline is not accepted as the model writes it: it is rebuilt from the `PERFIL BASE`
+  (if the Master has one; without it, the model's headline is used).
 
-No hay hoy un delimitador ni un filtro de instrucciones sobre la oferta.
-
----
-
-## IA en cifras
-
-| Qué | Dato | Dónde leerlo |
-|---|---|---|
-| Coste por petición | CV unos 0,05 USD y carta unos 0,013 USD con `claude-sonnet-4-6` (medición del 2-oct-2026, prompt de unos 9.600 tokens de entrada) | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
-| Por qué este modelo | Coste medido con `count_tokens` y fallos reales de Haiku | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
-| Cadena de respaldo | Claude, luego Groq, luego Gemini, luego Claude Haiku; `modelo_usado` dice cuál escribió | [`llm.py`](llm.py) |
-| Evaluación | `evaluacion.py` es pura (no llama a ningún modelo) y sus tests corren en la suite como red contra regresiones. Generar de verdad contra el LLM se lanza a mano | [`evaluacion.py`](evaluacion.py), [`tests/test_evaluacion.py`](tests/test_evaluacion.py) |
-| Modos de fallo conocidos | Descripción de oferta demasiado corta (CV genérico, avisado en `descripcion_oferta`); inflación del alcance del rol, no detectada; respuesta escrita por un modelo de respaldo | [Lo que los guardrails NO detectan](#lo-que-los-guardrails-no-detectan) |
-| Inyección de instrucciones | Riesgo conocido, mitigado solo en parte | [Riesgo conocido](#riesgo-conocido-inyección-de-instrucciones) |
-| Claves fuera de los logs | La clave de Gemini va en cabecera, no en la URL, y los errores de los proveedores se registran por tipo y código HTTP, no con su mensaje; lo vigila un test | [`tests/test_claves_fuera_de_los_registros.py`](tests/test_claves_fuera_de_los_registros.py) |
+There is currently no delimiter or instruction filter on the posting.
 
 ---
 
-## Decisiones de arquitectura
+## AI in numbers
 
-Documentadas como ADRs en [`docs/`](docs/):
-
-- **[ADR-001](docs/ADR-001-migracion-fastapi.md)**. Migración incremental a FastAPI.
-  Coexistencia en vez de big-bang: se extrae el núcleo (`generar_cv_core`) y las rutas
-  Flask y FastAPI son wrappers finos sobre el mismo core. Errores como excepción tipada
-  (`CVError`), contratos Pydantic, y Flask como red de seguridad hasta que FastAPI cubra
-  el endpoint en verde.
-- **[ADR-002](docs/ADR-002-modelo-del-cv.md)**. Qué modelo escribe el CV, con coste
-  medido vía `count_tokens`, no estimado. Incluye un hallazgo que invirtió la decisión:
-  un modelo más nuevo y con precio por token más bajo salía **igual de caro**, porque su
-  tokenizador cuenta un 50% más de tokens para el mismo texto.
-- **[ADR-003](docs/ADR-003-usuario-multicuenta.md)**. Un usuario con varias cuentas de
-  correo. Por qué duplicar el registro es un parche que se degrada en silencio, y por qué
-  la verificación final tiene que ser exacta (el filtro `contains` de Notion es de
-  subcadena: `vero@gmail.com` casa con `notvero@gmail.com`).
-- **[ADR-004](docs/ADR-004-backend-llm.md)**. LiteLLM se escribe y se deja apagado
-  (`LLM_BACKEND`). Se midió: +146 MB de disco, +5,96 s de arranque y 207 MB de RAM frente
-  a 9 MB.
-
-> **La autenticación está en el ADR-003 del repo `buscartrabajo`**
-> (`docs/adr/ADR-003-autenticacion.md`), que no es el ADR-003 de arriba.
-
-### Deuda conocida
-
-`server.py` tiene unas 1.340 líneas y sigue siendo un módulo demasiado grande. No está
-sin mirar: el ADR-001 describe cómo se está deshaciendo, con `api.py` llevándose un
-endpoint cada vez y Flask cubriendo hasta que el nuevo está en verde. Se documenta aquí
-porque es lo primero que se ve al abrir el repo.
-
-Otras dos deudas conocidas:
-
-- **Datos personales en los logs.** Los registros de `/generar-cv` y `/generar-carta`
-  incluyen el email de la usuaria, la empresa y el puesto (por ejemplo, en los avisos de
-  guardrails).
-- **Modelo por defecto del CV.** En `llm.py`, `CV_MODEL` sigue valiendo `claude-haiku-4-5`
-  por defecto. Producción usa Sonnet porque el entorno lo fija; si esa variable se pierde,
-  el CV pasa a Haiku sin ningún error. Un cambio aparte, con tests, moverá el valor por
-  defecto.
-
-## Rutas
-
-| Ruta | Acceso | Para qué |
+| What | Figure | Where to read about it |
 |---|---|---|
-| `GET /` | Pública | Página de invitación (`templates/inicio.html`) |
-| `GET /health` | Pública | Estado, modelos activos y rama/commit desplegados |
-| `GET /yo` | Token de Google (`Authorization: Bearer`) | Quién es la usuaria |
-| `POST /registro` | Clave de máquina | Alta de usuaria |
-| `POST /generar-cv` | Clave de máquina | CV adaptado a una oferta |
-| `POST /generar-carta` | Clave de máquina | Carta adaptada a una oferta |
-| `GET /usuarios` | Clave de máquina | Listado de usuarias |
-| `POST /crear-oferta` | Clave de máquina | Alta de una oferta |
-| `POST /buscar-ofertas-reales` | Clave de máquina | Búsqueda y ranking de ofertas |
+| Cost per request | CV about 0.05 USD and cover letter about 0.013 USD with `claude-sonnet-4-6` (measured 2 Oct 2026, prompt of about 9,600 input tokens) | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
+| Why this model | Cost measured with `count_tokens` and real Haiku failures | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
+| Fallback chain | Claude, then Groq, then Gemini, then Claude Haiku; `modelo_usado` says which one wrote it | [`llm.py`](llm.py) |
+| Evaluation | `evaluacion.py` is pure (it calls no model) and its tests run in the suite as a regression net. Real generation against the LLM is run by hand | [`evaluacion.py`](evaluacion.py), [`tests/test_evaluacion.py`](tests/test_evaluacion.py) |
+| Known failure modes | Posting description too short (generic CV, flagged in `descripcion_oferta`); role scope inflation, not detected; response written by a fallback model | [What the guardrails do NOT detect](#what-the-guardrails-do-not-detect) |
+| Prompt injection | Known risk, only partly mitigated | [Known risk](#known-risk-prompt-injection) |
+| Keys kept out of logs | The Gemini key goes in a header, not in the URL, and provider errors are logged by type and HTTP code, not with their message; a test guards this | [`tests/test_claves_fuera_de_los_registros.py`](tests/test_claves_fuera_de_los_registros.py) |
 
-La clave de máquina viaja en la cabecera `X-Clave-Maquina` y vale lo que diga la variable
-`CLAVE_MAQUINA`. Sin ella configurada, esas rutas no abren nunca (falla cerrado). El
-inventario de rutas lo protege `tests/test_rutas_de_maquina.py`.
+---
 
-## Acceso por invitación
+## Architecture decisions
 
-Dos puertas distintas, según quién llame:
+Documented as ADRs in [`docs/`](docs/):
 
-| Quién | Cómo entra |
+- **[ADR-001](docs/ADR-001-migracion-fastapi.md)**. Incremental migration to FastAPI.
+  Coexistence instead of a big bang: the core is extracted (`generar_cv_core`) and the
+  Flask and FastAPI routes are thin wrappers over the same core. Errors as a typed
+  exception (`CVError`), Pydantic contracts, and Flask as a safety net until FastAPI
+  covers the endpoint in green.
+- **[ADR-002](docs/ADR-002-modelo-del-cv.md)**. Which model writes the CV, with cost
+  measured via `count_tokens`, not estimated. Includes a finding that reversed the
+  decision: a newer model with a lower per-token price came out **just as expensive**,
+  because its tokenizer counts 50% more tokens for the same text.
+- **[ADR-003](docs/ADR-003-usuario-multicuenta.md)**. One user with several email
+  accounts. Why duplicating the record is a patch that degrades silently, and why the
+  final check has to be exact (Notion's `contains` filter is a substring match:
+  `vero@gmail.com` matches `notvero@gmail.com`).
+- **[ADR-004](docs/ADR-004-backend-llm.md)**. LiteLLM is written and left switched off
+  (`LLM_BACKEND`). It was measured: +146 MB of disk, +5.96 s of startup and 207 MB of RAM
+  versus 9 MB.
+
+> **Authentication is covered in ADR-003 of the `buscartrabajo` repo**
+> (`docs/adr/ADR-003-autenticacion.md`), which is not the ADR-003 above.
+
+### Known debt
+
+`server.py` is about 1,340 lines and is still too large a module. It has not been
+ignored: ADR-001 describes how it is being taken apart, with `api.py` taking over one
+endpoint at a time and Flask covering until the new one is green. It is documented here
+because it is the first thing you see when you open the repo.
+
+Two other known debts:
+
+- **Personal data in the logs.** The `/generar-cv` and `/generar-carta` logs include the
+  user's email, the company and the role (for example, in the guardrail warnings).
+- **Default CV model.** In `llm.py`, `CV_MODEL` still defaults to `claude-haiku-4-5`.
+  Production uses Sonnet because the environment sets it; if that variable is lost, the
+  CV silently switches to Haiku with no error. A separate change, with tests, will move
+  the default.
+
+## Routes
+
+| Route | Access | Purpose |
+|---|---|---|
+| `GET /` | Public | Invitation page (`templates/inicio.html`) |
+| `GET /health` | Public | Status, active models and deployed branch/commit |
+| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is |
+| `POST /registro` | Machine key | User sign-up |
+| `POST /generar-cv` | Machine key | CV tailored to a posting |
+| `POST /generar-carta` | Machine key | Cover letter tailored to a posting |
+| `GET /usuarios` | Machine key | User list |
+| `POST /crear-oferta` | Machine key | Create a posting |
+| `POST /buscar-ofertas-reales` | Machine key | Posting search and ranking |
+
+The machine key travels in the `X-Clave-Maquina` header and must match the `CLAVE_MAQUINA`
+variable. If it is not configured, those routes never open (fail closed). The route
+inventory is guarded by `tests/test_rutas_de_maquina.py`.
+
+## Invitation-only access
+
+Two separate doors, depending on who is calling:
+
+| Who | How they get in |
 |---|---|
-| Una persona (el panel) | Token de identidad de Google en `GET /yo` |
-| Una máquina (n8n) | Cabecera `X-Clave-Maquina` |
+| A person (the panel) | Google identity token on `GET /yo` |
+| A machine (n8n) | `X-Clave-Maquina` header |
 
-**Cómo funciona `/yo`.** El panel manda el token de Google en `Authorization: Bearer`.
-`autenticacion.py` lo valida: algoritmo RS256 (fijo, el token no elige el verificador),
-firma contra las claves públicas de Google (JWKS en caché 3600 s; un `kid` desconocido
-provoca una descarga nueva, como mucho cada 300 s), emisor en `OIDC_EMISORES`, audiencia
-igual a `OIDC_AUDIENCIA`, caducidad con 60 s de margen y `email_verified` verdadero.
+**How `/yo` works.** The panel sends the Google token in `Authorization: Bearer`.
+`autenticacion.py` validates it: RS256 algorithm (fixed, so the token does not choose the
+verifier), signature against Google's public keys (JWKS cached for 3600 s; an unknown
+`kid` triggers a fresh download, at most once every 300 s), issuer in `OIDC_EMISORES`,
+audience equal to `OIDC_AUDIENCIA`, expiry with 60 s of leeway, and `email_verified` true.
 
-| Código | Significado |
+| Code | Meaning |
 |---|---|
 | 200 | `{sub, email, nombre}` |
-| 401 | Falta el token o no es válido |
-| 403 | Token válido, pero el email no está invitado |
-| 503 | Falta configuración o no se alcanzan las claves públicas |
+| 401 | Token missing or invalid |
+| 403 | Valid token, but the email is not invited |
+| 503 | Missing configuration or the public keys cannot be reached |
 
-**Invitadas.** La lista es la variable `INVITADAS` (emails separados por comas, vacía =
-nadie entra). Es provisional hasta que haya base de datos de usuarias.
+**Invited users.** The list is the `INVITADAS` variable (comma-separated emails, empty =
+nobody gets in). It is temporary until there is a user database.
 
-**CORS.** Solo `/yo` y `/health` lo admiten, con coincidencia exacta de origen contra
-`CORS_ORIGENES`. Vacío = ningún origen.
+**CORS.** Only `/yo` and `/health` allow it, with exact origin matching against
+`CORS_ORIGENES`. Empty = no origins.
 
-**El client id de Google es público a propósito.** Aparece en el panel y no protege nada
-por sí mismo: lo que protege es la comprobación de la audiencia, que rechaza tokens
-emitidos para otra aplicación.
+**The Google client ID is public on purpose.** It appears in the panel and protects
+nothing by itself: what protects is the audience check, which rejects tokens issued for
+another application.
 
-**Arranque en local** (con las variables `OIDC_*` e `INVITADAS` de [`.env.example`](.env.example)
-exportadas en la shell, no cargadas desde un fichero):
+**Running locally** (with the `OIDC_*` and `INVITADAS` variables from [`.env.example`](.env.example)
+exported in the shell, not loaded from a file):
 
 ```bash
 export CORS_ORIGENES=http://localhost:4200
 .venv/bin/gunicorn server:app --bind 127.0.0.1:5000
 ```
 
-La decisión de diseño completa está en el ADR-003 del repo `buscartrabajo`.
+The full design decision is in ADR-003 of the `buscartrabajo` repo.
 
 ## Tests
 
@@ -260,10 +263,10 @@ La decisión de diseño completa está en el ADR-003 del repo `buscartrabajo`.
 pytest -q     # 375 tests
 ```
 
-Los tests se escriben primero. Cada uno documenta en su docstring **el fallo real que lo motivó**,
-con fecha, no un caso hipotético.
+Tests are written first. Each one documents in its docstring **the real failure that
+prompted it**, with a date, not a hypothetical case.
 
 ## Stack
 
-`Python` · `Flask` y `FastAPI` · `Pydantic` · `Claude API` · `Notion API` ·
+`Python` · `Flask` and `FastAPI` · `Pydantic` · `Claude API` · `Notion API` ·
 `Google Drive API` · `python-docx` · `pytest` · `Render`
