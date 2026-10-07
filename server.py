@@ -326,9 +326,6 @@ from docx_render import (  # noqa: F401
     generar_docx_con_cabecera,
     sanear_tipografia,
 )
-# El formulario de alta vive en `templates/alta.html`. Estaba aqui dentro como
-# 237 lineas de HTML, CSS y JavaScript en una cadena de Python, en el mismo
-# fichero que los prompts y la logica de Notion.
 
 
 
@@ -338,11 +335,10 @@ from docx_render import (  # noqa: F401
 
 @app.route("/")
 def index():
-    # Sin cache. El HTML lleva dentro el JavaScript del formulario, asi que una
-    # pagina cacheada es LOGICA cacheada: el 28-ago-2026 se desplego el arreglo
-    # del mensaje de "Buscar ahora" y el navegador siguio ejecutando la version
-    # anterior. Son 8 KB: no hay nada que ahorrar cacheandolo.
-    respuesta = make_response(render_template("alta.html"))
+    # Portada: pagina estatica de invitacion (beta privada), sin formulario ni
+    # llamadas al servidor. Se mantiene sin cache para que un cambio de texto se
+    # vea en cuanto se despliega.
+    respuesta = make_response(render_template("inicio.html"))
     respuesta.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return respuesta
 
@@ -399,29 +395,6 @@ def requiere_clave_maquina(vista):
         return vista(*args, **kwargs)
     protegida.exige_clave_maquina = True  # lo comprueba tests/test_rutas_de_maquina.py
     return protegida
-
-
-@app.route("/check-email", methods=["POST"])
-def check_email():
-    """Comprueba si un email ya existe en Notion. Devuelve {existe, nombre}."""
-    datos = request.get_json(force=True)
-    email = (datos.get("email") or "").strip().lower()
-    if not email:
-        return jsonify({"existe": False, "error": "email requerido"}), 400
-
-    try:
-        usuario = buscar_usuario_por_email(email)
-    except Exception as e:
-        logger.error("Error check-email: %s", e)
-        return jsonify({"existe": False, "error": str(e)}), 500
-
-    if usuario and usuario.get("activo"):
-        return jsonify({
-            "existe": True,
-            "nombre": usuario.get("nombre", ""),
-            "email":  email,
-        })
-    return jsonify({"existe": False, "email": email})
 
 
 def payload_buscar_para_user(usuario: dict) -> dict:
@@ -524,37 +497,8 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
     return Resultado(True, hay_novedades=True)
 
 
-@app.route("/accion-existente", methods=["POST"])
-def accion_existente():
-    """Usuario existente pulsa 'Buscar ahora' o 'Mañana 9am'."""
-    datos = request.get_json(force=True)
-    email = (datos.get("email") or "").strip().lower()
-    accion = datos.get("accion", "")
-
-    if not email:
-        return jsonify({"ok": False, "error": "email requerido"}), 400
-
-    resultado = Resultado(False, hay_novedades=False)
-    if accion == "ahora":
-        # El perfil hace falta ENTERO: mandando solo email y nombre, n8n buscaba
-        # ofertas sin rol, sin stack y sin salario, o sea para nadie.
-        try:
-            usuario = buscar_usuario_por_email(email)
-        except Exception as e:
-            logger.error("No se pudo leer el usuario %s en Notion: %s", email, e)
-            usuario = None
-        resultado = disparar_busqueda(usuario)
-
-    return jsonify({
-        "ok": True,
-        "accion": accion,
-        "email": email,
-        "busqueda_disparada": resultado.disparada,
-        "hay_novedades": resultado.hay_novedades,
-    })
-
-
 @app.route("/registro", methods=["POST"])
+@requiere_clave_maquina
 def registro():
     """Registra usuario nuevo en Notion y dispara webhook n8n."""
     datos = request.get_json(force=True)
@@ -585,9 +529,9 @@ def registro():
     try:
         notion_page = crear_usuario_en_notion(datos)
         notion_id = notion_page.get("id", "")
-    except Exception as e:
-        logger.error("Notion error: %s", e)
-        return jsonify({"ok": False, "error": f"Error creando usuario en Notion: {e}"}), 500
+    except Exception:
+        logger.exception("Error creando usuario en Notion")
+        return jsonify({"ok": False, "error": "no se pudo completar el registro"}), 500
 
     # El alta ya está hecha en Notion. Esto lanza la primera búsqueda: iba al
     # webhook `nuevo-usuario`, que no existe, así que quien se registraba no
@@ -1340,6 +1284,57 @@ def crear_oferta():
         return jsonify({"ok": False, "error": str(e)}), 502
 
     return jsonify({"ok": True, "notion_page_id": page.get("id", ""), "idioma": idioma})
+
+
+# ══════════════════════════════════════════════
+# IDENTIDAD DE LA USUARIA (token de Google, ver autenticacion.py)
+# ══════════════════════════════════════════════
+from autenticacion import (  # noqa: E402
+    ClavesPublicas, ConfiguracionOIDC, ErrorDeAutenticacion, NoInvitada,
+    ProveedorNoDisponible, identificar,
+)
+
+# Construir esto no descarga nada ni exige variables: el import nunca falla.
+CONFIG_OIDC = ConfiguracionOIDC.desde_entorno()
+CLAVES = ClavesPublicas(CONFIG_OIDC.url_jwks)
+
+
+def origenes_desde_entorno(entorno=None) -> list:
+    """Lista exacta de origenes con CORS (CORS_ORIGENES, separados por comas)."""
+    e = os.environ if entorno is None else entorno
+    return [o.strip() for o in (e.get("CORS_ORIGENES") or "").split(",") if o.strip()]
+
+
+ORIGENES_PERMITIDOS = origenes_desde_entorno()
+RUTAS_CON_CORS = {"/yo", "/health"}
+
+
+@app.after_request
+def cabeceras_cors(respuesta):
+    """CORS solo en RUTAS_CON_CORS y solo para un origen que este EXACTAMENTE en la
+    lista. Nunca '*' ni credenciales: el token viaja en Authorization, no en cookies."""
+    origen = request.headers.get("Origin")
+    if request.path in RUTAS_CON_CORS and origen and origen in ORIGENES_PERMITIDOS:
+        respuesta.headers["Access-Control-Allow-Origin"] = origen
+        respuesta.headers["Vary"] = "Origin"
+        if request.method == "OPTIONS":
+            respuesta.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+            respuesta.headers["Access-Control-Allow-Headers"] = "Authorization"
+    return respuesta
+
+
+@app.route("/yo", methods=["GET"])
+def yo():
+    """Quien es la usuaria que llama, segun su token de Google."""
+    try:
+        quien = identificar(request.headers.get("Authorization"), CONFIG_OIDC, CLAVES)
+    except ErrorDeAutenticacion:
+        return jsonify({"ok": False, "error": "no autenticada"}), 401
+    except NoInvitada:
+        return jsonify({"ok": False, "error": "acceso no permitido"}), 403
+    except ProveedorNoDisponible:
+        return jsonify({"ok": False, "error": "servicio no disponible"}), 503
+    return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre})
 
 
 # ══════════════════════════════════════════════

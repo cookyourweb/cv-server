@@ -6,9 +6,11 @@ cuerpo de la peticion) y lo pagaba la clave de Claude de la duena (unos 0,05 USD
 por CV). /buscar-ofertas-reales gastaba Groq y /crear-oferta escribia en Notion,
 y no las llama nadie.
 
-Las cuatro exigen la cabecera X-Clave-Maquina (ADR-003). Las tres del formulario
-de alta siguen abiertas: las llama el navegador, y una clave en el navegador no
-protege nada. Se cerraran con la identidad de las personas (OIDC).
+Las cinco exigen la cabecera X-Clave-Maquina (ADR-003). El 7-oct-2026 se cerro
+el formulario de alta: /check-email y /accion-existente se borraron (permitian
+enumerar emails y disparar busquedas ajenas) y /registro paso a exigir la clave,
+y ya no devuelve el texto de la excepcion de Notion. Una clave en el navegador no
+protege nada, asi que el alta de personas vendra con su identidad (OIDC).
 
 El test del inventario es el que importa a largo plazo: una ruta nueva no puede
 nacer abierta sin que alguien lo decida en la lista PUBLICAS.
@@ -18,8 +20,10 @@ import pytest
 import server as srv
 
 CLAVE = "clave-de-prueba-larga-y-aleatoria"
-RUTAS_DE_MAQUINA = ["/generar-cv", "/generar-carta", "/crear-oferta", "/buscar-ofertas-reales"]
-PUBLICAS = {"/", "/health", "/check-email", "/registro", "/accion-existente", "/static/<path:filename>"}
+RUTAS_DE_MAQUINA = ["/generar-cv", "/generar-carta", "/crear-oferta", "/buscar-ofertas-reales", "/registro"]
+PUBLICAS = {"/", "/health", "/static/<path:filename>"}
+# /yo no usa la clave de maquina: se protege con el token de Google de la usuaria.
+PUBLICAS.add("/yo")
 DATOS = {"email": "a@b.com", "empresa": "ACME", "puesto": "Frontend", "descripcion": "React"}
 
 
@@ -38,9 +42,15 @@ def llamadas(monkeypatch):
     monkeypatch.setattr(srv, "generar_cv_core", apunta("generar_cv_core", {"ok": True}))
     monkeypatch.setattr(srv, "call_llm", apunta("call_llm", srv.RespuestaLLM("x", "m")))
     monkeypatch.setattr(srv, "call_llm_calidad", apunta("call_llm_calidad", srv.RespuestaLLM("x", "m")))
-    for nombre in ("buscar_ofertas_reales", "crear_oferta_en_notion", "buscar_usuario_por_email"):
-        if hasattr(srv, nombre):
-            monkeypatch.setattr(srv, nombre, apunta(nombre, None))
+    for nombre, valor in (
+        ("buscar_ofertas_reales", None),
+        ("crear_oferta_en_notion", None),
+        ("buscar_usuario_por_email", None),
+        ("crear_usuario_en_notion", {"id": "pagina-falsa"}),
+        ("disparar_busqueda", srv.Resultado(False, hay_novedades=False)),
+    ):
+        monkeypatch.setattr(srv, nombre, apunta(nombre, valor))
+    monkeypatch.setattr(srv.requests, "post", apunta("requests.post", None))
     return registro
 
 
@@ -83,10 +93,32 @@ def test_con_la_clave_buena_pasa_el_decorador(cliente, ruta):
     assert r.status_code != 401
 
 
-@pytest.mark.parametrize("ruta", ["/check-email", "/registro", "/accion-existente"])
-def test_rutas_del_formulario_siguen_abiertas(cliente, ruta):
-    # Las llama el navegador: si se cierran, el formulario de alta deja de funcionar.
-    assert cliente.post(ruta, json={"email": "a@b.com"}).status_code != 401
+@pytest.mark.parametrize("ruta", ["/check-email", "/accion-existente"])
+def test_rutas_retiradas_no_existen(cliente, ruta):
+    # Cualquiera podia preguntar si un email existia y disparar busquedas ajenas.
+    # Se borran, no se protegen: nadie legitimo las llama ya.
+    assert cliente.post(ruta, json={"email": "a@b.com"}).status_code == 404
+    assert cliente.get(ruta).status_code == 404
+
+
+def test_registro_no_devuelve_la_excepcion(monkeypatch, cliente):
+    # El texto de una excepcion de Notion puede traer ids, rutas o tokens.
+    def revienta(*a, **k):
+        raise Exception("ntn_detalle_interno")
+    monkeypatch.setattr(srv, "crear_usuario_en_notion", revienta)
+    r = cliente.post("/registro", json={"email": "ana@example.com"},
+                     headers={"X-Clave-Maquina": CLAVE})
+    assert r.status_code == 500
+    assert "ntn_detalle_interno" not in r.get_data(as_text=True)
+
+
+def test_registro_con_clave_crea_y_dispara(cliente, llamadas):
+    r = cliente.post("/registro", json={"email": "ana@example.com", "nombre": "Ana"},
+                     headers={"X-Clave-Maquina": CLAVE})
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+    assert "crear_usuario_en_notion" in llamadas
+    assert "disparar_busqueda" in llamadas
 
 
 def test_inventario_de_rutas():

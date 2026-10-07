@@ -39,33 +39,33 @@ oferta no entra hasta que el Master está terminado.
 
 Nueve pasos, en este orden estricto:
 
-1. **Identidad profesional** — antes que nada, quién eres. *¿A qué te dedicas realmente? ¿Qué
+1. **Identidad profesional**: antes que nada, quién eres. *¿A qué te dedicas realmente? ¿Qué
    problemas sabes resolver? ¿Qué puestos puedes defender en una entrevista? ¿Qué puestos NO
    quieres que aparezcan nunca?* La identidad es lo único que no cambia entre ofertas.
-2. **Objetivo profesional** — *¿Qué tipos de oferta quieres poder atacar con este Master?*
+2. **Objetivo profesional**: *¿Qué tipos de oferta quieres poder atacar con este Master?*
    (Backend, Frontend Tech Lead, AI Engineer, Engineering Manager, Solutions Architect,
    GenAI Adoption...). No para ponerlo en el CV: para saber qué variaciones debe soportar el
-   sistema. → alimenta `Tipos de oferta compatibles`.
-3. **CV actual** — ahora sí. No para mejorarlo, para **extraer hechos**: empresas, proyectos,
+   sistema. Alimenta `Tipos de oferta compatibles`.
+3. **CV actual**: ahora sí. No para mejorarlo, para **extraer hechos**: empresas, proyectos,
    tecnologías, responsabilidades, logros, formación.
-4. **Lo que falta** — donde casi todos los CV fallan. *¿Qué haces de verdad que no aparece en
+4. **Lo que falta**: donde casi todos los CV fallan. *¿Qué haces de verdad que no aparece en
    el CV?* Mentorizar, entrevistar, documentar, experimentar, automatizar, formar equipos,
    definir procesos, comparar herramientas, hacer arquitectura. Ocurre, pero nadie lo escribe.
-5. **Límites** — *¿Qué NO quieres que el sistema invente nunca?* No inventar liderazgo,
+5. **Límites**: *¿Qué NO quieres que el sistema invente nunca?* No inventar liderazgo,
    métricas, equipos, tecnologías, cloud, IA. **Aquí nacen los guardrails de ese usuario.**
-6. **Identidad estructurada** — se construye el `PERFIL BASE`: Identidad profesional,
+6. **Identidad estructurada**: se construye el `PERFIL BASE` con Identidad profesional,
    Identidades permitidas, Orden del titular, Variante permitida, Nunca permitido, Tipos de
    oferta compatibles, Áreas de contribución, Posicionamiento, Especialización, Tecnologías
    principales. Este bloque apenas cambiará nunca.
-7. **Experiencia** — los bullets NO se escriben pensando en una oferta, se escriben pensando
+7. **Experiencia**: los bullets NO se escriben pensando en una oferta, se escriben pensando
    *¿qué ocurrió de verdad?* Cada experiencia responde: qué construiste, diseñaste, lideraste,
    automatizaste, aprendiste; qué tecnologías, qué decisiones, qué enseñaste, qué documentaste.
    Todavía sin pensar en ATS.
-8. **Inventario de palabras clave** — solo cuando el Master está terminado. Un inventario
+8. **Inventario de palabras clave**: solo cuando el Master está terminado. Un inventario
    grande (AI Engineering, LLMs, OpenAI, Claude, React, Node, Developer Productivity, AI
    Adoption, Architecture, Technical Leadership...). No para meterlas todas: para que el
    adaptador pueda **elegir** según la oferta.
-9. **Reglas del sistema** — al final del todo: no inventar experiencia, no cambiar seniority,
+9. **Reglas del sistema**: al final del todo. No inventar experiencia, no cambiar seniority,
    no crear identidades nuevas, no alterar el orden del titular, adaptar el énfasis y no los
    hechos, priorizar la experiencia relevante, reutilizar solo información existente en el
    Master.
@@ -106,18 +106,32 @@ generando los CV de Verónica. Una pregunta sin fallo detrás no entra.
 
 ## Se engancha al alta que YA existe
 
-No es un formulario nuevo. El registro actual (`/registro`, formulario multistep servido en
-`/`) ya crea el usuario en Notion con estos campos:
+No es un alta nueva. El registro actual lo hace la administradora con `POST /registro`, que
+desde el 7-oct-2026 exige la clave de máquina. El formulario público que se servía en `/`
+se eliminó: hoy `/` es una página de invitación. El alta crea el usuario en Notion con
+estos campos:
+
+```bash
+curl -X POST "$BASE/registro" \
+  -H "Content-Type: application/json" \
+  -H "X-Clave-Maquina: $CLAVE_MAQUINA" \
+  -d '{"nombre": "...", "email": "persona@example.com", "perfil": "...",
+       "rol_objetivo": "...", "ciudad": "...", "stack": ["..."],
+       "modalidad": ["..."], "salario_min": 0, "linkedin": "...",
+       "cv_master_url": "..."}'
+```
+
+Solo `email` es obligatorio para la ruta; el resto rellena el perfil en Notion.
 
 | Campo en Notion | Qué es | Para la entrevista |
 |---|---|---|
-| `Email` · `Name` · `Ciudad` | Identificación | — |
+| `Email` · `Name` · `Ciudad` | Identificación | n/a |
 | `LinkedIn` | URL del perfil | **Fuente de EXTRAER** |
 | `CV Master URL` · `cv_master_file_id` | El Master en Drive | **Fuente de EXTRAER** |
 | `Perfil` | Texto libre | Solapa con `Resumen profesional` |
 | `Rol objetivo` | Texto libre | Solapa con `Roles objetivo` |
 | `Stack` | Multi-select | Solapa con `Tecnologías principales` |
-| `Salario min` · `Modalidad` · `Activo` | Filtros de búsqueda | — |
+| `Salario min` · `Modalidad` · `Activo` | Filtros de búsqueda | n/a |
 
 **Las dos fuentes que necesita la entrevista ya se piden.** Y tres campos ya cubren parte del
 contrato: no se vuelven a preguntar, se **confirman**.
@@ -158,11 +172,11 @@ escribe el bloque y dónde se guarda.
 
 ---
 
-## FASE 0 — EXTRAER (sin preguntar nada)
+## FASE 0: EXTRAER (sin preguntar nada)
 
 Del CV y del perfil de LinkedIn se saca automáticamente:
 
-- Titular actual de LinkedIn → candidato a `Identidad profesional`
+- Titular actual de LinkedIn: candidato a `Identidad profesional`
 - Puestos, empresas y fechas
 - Tecnologías mencionadas, y **en qué puesto aparece cada una**
 - Formación e idiomas
@@ -172,26 +186,26 @@ Esto no se pregunta nunca. Ya está escrito.
 
 ---
 
-## FASE 1 — CONFIRMAR la identidad (un clic por pregunta)
+## FASE 1: CONFIRMAR la identidad (un clic por pregunta)
 
 Se propone lo extraído y el usuario valida. Construye el contrato.
 
-**1.1 · Tu titular** — *"Tu LinkedIn dice X. ¿Ese es el titular con el que quieres que se
+**1.1 · Tu titular**: *"Tu LinkedIn dice X. ¿Ese es el titular con el que quieres que se
 generen todos tus CV?"*
-→ `Identidad profesional`
+Va a: `Identidad profesional`
 
-**1.2 · Tus identidades** — *"He detectado estas: A, B, C. ¿Sobran o falta alguna?"*
+**1.2 · Tus identidades**: *"He detectado estas: A, B, C. ¿Sobran o falta alguna?"*
 Máximo 4. Es un repertorio **cerrado**: ninguna otra podrá usarse nunca.
-→ `Identidades permitidas`
+Va a: `Identidades permitidas`
 *Previene*: identidades inventadas por oferta (*AI Engineering Leader*, *GenAI Adoption Lead*).
 
-**1.3 · El orden** — *"¿En qué orden van? La primera es con la que te van a identificar."*
-→ `Orden del titular`
+**1.3 · El orden**: *"¿En qué orden van? La primera es con la que te van a identificar."*
+Va a: `Orden del titular`
 *Previene*: que el CV se reordene según la oferta y parezca otra persona en cada envío.
 
-**1.4 · La excepción** — *"¿Hay empresas concretas para las que invertirías ese orden?
+**1.4 · La excepción**: *"¿Hay empresas concretas para las que invertirías ese orden?
 Nómbralas. Si dudas, deja esto vacío."*
-→ `Variante permitida`
+Va a: `Variante permitida`
 
 > **Esta es la pregunta más delicada de todo el alta.** El 24-jul-2026 la condición de
 > Verónica decía *"empresas cuyo producto principal sea la IA (OpenAI, Anthropic,
@@ -204,50 +218,50 @@ Nómbralas. Si dudas, deja esto vacío."*
 > que repreguntar pidiendo nombres. Y si no sabe cuáles, se deja vacío: **sin variante
 > declarada, no hay excepción posible.** Vacío es más seguro que ambiguo.
 
-**1.5 · Seniority** — *"¿Cuántos años declaras?"*
+**1.5 · Seniority**: *"¿Cuántos años declaras?"*
 *Previene*: inflar el número según lo que valore la oferta.
 
-**1.6 · Lo que no eres** — *"¿Con qué rol te confunden y no quieres que te confundan?"*
-→ bloque `POSICIONAMIENTO`
+**1.6 · Lo que no eres**: *"¿Con qué rol te confunden y no quieres que te confundan?"*
+Va a: bloque `POSICIONAMIENTO`
 Verónica: *"No soy Data Scientist. No soy investigadora de IA."* Es una frontera, y el prompt
 la respeta aunque la oferta pida lo contrario.
 
 ---
 
-## FASE 2 — La EVIDENCIA (lo que impide inventar)
+## FASE 2: La EVIDENCIA (lo que impide inventar)
 
 Aquí no vale confirmar: hay que preguntar. Es lo que separa un CV defendible de uno bonito.
 
-**2.1 · Qué hiciste tú** — por cada puesto relevante: *"¿Qué hiciste con tus manos, no tu
+**2.1 · Qué hiciste tú**: por cada puesto relevante, *"¿Qué hiciste con tus manos, no tu
 equipo?"*
 *Previene*: atribuirse el trabajo del equipo.
 
-**2.2 · Tecnologías por puesto** — *"De estas que aparecen en tu CV, ¿cuáles usaste **en este
+**2.2 · Tecnologías por puesto**: *"De estas que aparecen en tu CV, ¿cuáles usaste **en este
 puesto concreto**?"*
 *Previene*: el fallo de GraphQL. En el CV de Revolut el modelo escribió *"implemented
 GraphQL and webhook patterns"* en el puesto de Bitcode, cuando el Master solo las tiene en
 habilidades sin ligarlas a ningún puesto. La tecnología era real; **la atribución, inventada**.
 
-**2.3 · Cifras** — *"¿Qué cifras puedes defender con un dato real que tengas a mano?"*
+**2.3 · Cifras**: *"¿Qué cifras puedes defender con un dato real que tengas a mano?"*
 Si no hay dato, no hay cifra. Un CV sin cifras es defendible; con una cifra inventada, no.
 
-**2.4 · Lo que conoces pero no usaste** — *"¿Qué tecnologías has tocado pero no usarías como
+**2.4 · Lo que conoces pero no usaste**: *"¿Qué tecnologías has tocado pero no usarías como
 argumento en una entrevista?"*
 Van a una **lista negra explícita** del usuario. Complementa al detector, que solo sabe
 comparar contra el Master.
 
 ---
 
-## FASE 3 — La FRONTERA (lo único que ningún guardrail cubre)
+## FASE 3: La FRONTERA (lo único que ningún guardrail cubre)
 
 Las dos preguntas más importantes del alta, y las que nadie hace.
 
-**3.1 · Aspiración** — *"¿Qué quieres hacer que todavía no has hecho?"*
-→ va a `Roles objetivo`, **jamás a Experiencia**. El prompt trata el `PERFIL BASE` como guía
+**3.1 · Aspiración**: *"¿Qué quieres hacer que todavía no has hecho?"*
+Va a `Roles objetivo`, **jamás a Experiencia**. El prompt trata el `PERFIL BASE` como guía
 de identidad y **nunca como evidencia**, así que declararlo ahí no puede inflar el cuerpo del
 CV. La aspiración queda dicha sin afirmar nada.
 
-**3.2 · La prueba de la entrevista** — *"¿Hay algo en tu CV actual que no podrías defender en
+**3.2 · La prueba de la entrevista**: *"¿Hay algo en tu CV actual que no podrías defender en
 veinte minutos de entrevista?"*
 
 > **Por qué existe esta pregunta.** Todos los guardrails del sistema comparan **el CV
@@ -258,15 +272,15 @@ veinte minutos de entrevista?"*
 > Ella no había impartido todavía ningún curso a empresas. Ningún detector podía verlo, y de
 > ahí había salido ya una carta a N-iX afirmándolo. Lo paró ella, no el sistema.
 >
-> **La regla de evidencia protege la frontera oferta → CV. No protege la frontera
-> realidad → Master. Esa solo la sostiene la persona.** Con un usuario desconocido, esta
+> **La regla de evidencia protege la frontera oferta a CV. No protege la frontera
+> realidad a Master. Esa solo la sostiene la persona.** Con un usuario desconocido, esta
 > pregunta es lo único que hay. Conviene repetirla cada vez que edite su Master.
 
 ---
 
-## FASE 4 — Arquetipos
+## FASE 4: Arquetipos
 
-**4.1** — *"¿A qué tipo de puesto apuntas?"* Se le enseñan los arquetipos que el prompt sabe
+**4.1**: *"¿A qué tipo de puesto apuntas?"* Se le enseñan los arquetipos que el prompt sabe
 distinguir (ver `PROMPT-ADAPTACION-CV.md`) y elige uno o varios.
 
 **Limitación conocida**: los arquetipos están **escritos en el prompt** y son del sector

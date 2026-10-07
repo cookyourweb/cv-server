@@ -4,14 +4,24 @@ Fuente de verdad legible del prompt que adapta el CV del usuario a cada oferta.
 El prompt REAL vive como f-string en `server.py`; este documento explica su
 estructura y el PORQUÉ de cada regla, para que nadie las rompa al editar el código.
 
-- **Prompt del CV**: `server.py`, endpoint `/generar-cv`, líneas ~1231-1305.
-- **Prompt de la carta**: `/generar-carta`, líneas ~1423-1442.
-- **Bloque de formato** (ES/EN): líneas ~1170-1229 (`bloque_formato`).
-- **Modelos**: CV con Claude Haiku 4.5 (`CV_MODEL`), carta con Claude Sonnet 4.6
-  (`CARTA_MODEL`). Groq queda de fallback dentro de `call_llm_calidad`.
+- **Prompt del CV**: constante `PROMPT_CV` en `server.py`, usada por `generar_cv_core`.
+  Dentro de ella, la sección `HEADLINE RULES` fija el titular.
+- **Prompt de la carta**: constante `PROMPT_CARTA` en `server.py`, usada por `generar_carta`.
+- **Bloque de formato** (ES/EN): `PROMPT_ESTRUCTURA_ES` y `PROMPT_ESTRUCTURA_EN`, que
+  `generar_cv_core` elige según el idioma de la oferta y pasa a `PROMPT_CV` como
+  `bloque_formato`.
+- **Modelos**: CV y carta con `claude-sonnet-4-6` en producción. Los fija el entorno
+  (`CV_MODEL`, `CARTA_MODEL`), no el código: el valor por defecto de `CV_MODEL` en
+  `llm.py` sigue siendo Haiku 4.5 (ver ADR-002). Si Claude falla, cae a Groq
+  (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku (`call_llm_calidad` y
+  `call_llm` en `llm.py`). Cada respuesta informa en `modelo_usado` del modelo que la
+  escribió de verdad. `/health` muestra los modelos activos.
 
-> Regla de oro del proyecto: **el CV NUNCA inventa**. Todo sale del CV master del usuario.
-> El prompt solo cambia ORDEN, ÉNFASIS y TITULAR, nunca el contenido real.
+> Regla de oro del proyecto: **el CV no debe inventar**. Todo sale del CV master del usuario.
+> El prompt solo cambia ORDEN, ÉNFASIS y TITULAR, no el contenido real. Es una petición al
+> modelo, no una garantía: los detectores avisan de cifras y tecnologías no respaldadas, pero
+> la inflación del alcance del rol (`coordinated` pasa a `owned`) no se detecta
+> automáticamente.
 
 ## Modelo mental: IDENTIDAD vs POSICIONAMIENTO
 
@@ -42,7 +52,7 @@ la oferta, se usa el que sí esté respaldado aunque encaje peor.
 > evidencia sobre tecnologías. Declararlo además obligaría a mantener una lista que el
 > sistema no necesita.
 
-## REGLA MAESTRA — proyección, no identidad nueva
+## REGLA MAESTRA: proyección, no identidad nueva
 
 > **La adaptación debe producir una PROYECCIÓN distinta de la MISMA trayectoria
 > profesional, nunca una nueva identidad profesional.**
@@ -60,12 +70,12 @@ cierta.**
 
 ---
 
-## Prompt del CV — estructura en 3 pasos
+## Prompt del CV: estructura en 3 pasos
 
 El rol que se le da al modelo: *"senior tech recruiter que revisa 200+ CVs al día"*.
 El CV entero se genera en el idioma de la oferta (títulos de sección y contenido).
 
-### PASO 1 — Análisis interno (SOLO mental, no se escribe)
+### PASO 1: Análisis interno (SOLO mental, no se escribe)
 El modelo piensa, sin volcarlo al output: qué skills del master encajan, qué keywords de
 la oferta deben aparecer, qué logros demuestran el fit. **No inventar** experiencia,
 métricas ni logros. La respuesta DEBE empezar exactamente por la línea `HEADLINE: ...`;
@@ -74,7 +84,7 @@ prohibido escribir análisis o encabezados antes de esa línea.
 *Por qué*: sin este paso el modelo tiende a volcar su razonamiento al documento final. El
 fix del 1-jul (`1c3702a`) descarta explícitamente el bloque "ANÁLISIS INTERNO" del CV.
 
-### PASO 2 — CV adaptado (output principal)
+### PASO 2: CV adaptado (output principal)
 Reglas estrictas:
 1. **No inventar nunca**: solo experiencia real del master. Nada de tecnologías no usadas,
    liderazgo no ejercido ni métricas exageradas. El CV debe ser 100% defendible en
@@ -177,7 +187,7 @@ tocar el prompt cada vez que Verónica se reposicionaba, y de hecho quedó desfa
 22 de julio los dos Masters pasaron a *AI Engineer*. Por eso el repertorio se movió al
 Master.
 
-### RESUMEN — estabilidad 70-80% (24-jul-2026)
+### RESUMEN: estabilidad 70-80% (24-jul-2026)
 El resumen **no se reescribe desde cero** en cada oferta. Aproximadamente tres cuartas
 partes describen la misma trayectoria con las mismas ideas y casi las mismas palabras: de
 dónde viene, cómo ha evolucionado, qué la define hoy. Solo la parte final, o los ejemplos
@@ -186,7 +196,7 @@ concretos que se eligen, se ajustan al arquetipo.
 Así el titular, el resumen y el perfil público cuentan la misma historia, y esa coherencia
 se sostiene también en la entrevista.
 
-### PERFIL — anclaje a la oferta (obligatorio)
+### PERFIL: anclaje a la oferta (obligatorio)
 El resumen debe RESONAR con la oferta: identifica 2-3 requisitos o keywords concretas de la
 descripción que la candidata YA haya trabajado de verdad, e intégralos en el perfil
 redactados como experiencia real y demostrable ("con experiencia en X aplicada a Y").
@@ -209,8 +219,8 @@ ella**: ocupa una línea, no aporta evidencia y se nota que está copiado.
 
 Cómo se hace bien:
 - La keyword entra **dentro de un hecho suyo**, no como adjetivo suelto. La oferta pide
-  Core Web Vitals → "optimización de rendimiento web (Core Web Vitals)" dentro de la
-  lista de lo que ha hecho. No → "orientada a la optimización del rendimiento".
+  Core Web Vitals: "optimización de rendimiento web (Core Web Vitals)" dentro de la
+  lista de lo que ha hecho. No: "orientada a la optimización del rendimiento".
 - Las condiciones de trabajo del anuncio (tamaño de equipo, burocracia, cultura,
   metodología, tráfico del producto) **NO se reflejan en el perfil**. Son del puesto, no
   de la candidata.
@@ -224,7 +234,7 @@ Cómo se hace bien:
   El liderazgo aparece como contexto breve, nunca como venta principal.
 - Solo si el puesto pide lead/manager/etc., se destaca ownership y coordinación técnica.
 
-*Por qué*: fix del 1-jul (`0da513c`) — el titular mantiene la seniority real (Tech Lead de
+*Por qué*: fix del 1-jul (`0da513c`): el titular mantiene la seniority real (Tech Lead de
 facto del frontend) sin bajar al nivel de la oferta, pero el cuerpo se ajusta al nivel real
 del puesto para seguir siendo defendible.
 
@@ -338,7 +348,7 @@ título de la oferta. Si la oferta se titula *Applied AI Engineer* y el `PERFIL 
 *AI Engineer*, el titular usa *AI Engineer*. Caso real: Revolut, el titular salió *Applied
 AI Engineer* copiando el "Applied" del anuncio.
 
-### PASO 3 — Revisión anti-IA
+### PASO 3: Revisión anti-IA
 Elimina todo rastro de texto de IA antes de entregar: cero guiones largos y dobles guiones,
 cero frases tipo "responsable de..."/"orientada a...", cero adjetivos vacíos ("dinámico",
 "proactivo", "apasionado"), cero "passionate about"/"excited to", cero pasivas innecesarias.
@@ -414,7 +424,7 @@ Rol: *experto en cartas de presentación*. Máximo **250 palabras**, en el idiom
 
 ## Al editar el prompt: no rompas esto
 
-- La primera línea del CV DEBE ser `HEADLINE: ...` — el render la usa como titular de la
+- La primera línea del CV DEBE ser `HEADLINE: ...`: el render la usa como titular de la
   cabecera. Si el modelo escribe algo antes, se rompe la cabecera.
 - Nombre/email/teléfono NO van en el prompt: se añaden programáticamente en el DOCX.
 - Nada de markdown en el output (`**texto**`, `##`, ```` ``` ````).

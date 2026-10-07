@@ -56,7 +56,7 @@ import os, resource, time
 def mb(): return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024*1024)
 base, t = mb(), time.time()
 import litellm
-print(f'{time.time()-t:.2f}s   {base:.0f} MB -> {mb():.0f} MB')
+print(f'{time.time()-t:.2f}s   {base:.0f} MB a {mb():.0f} MB')
 "
 ```
 

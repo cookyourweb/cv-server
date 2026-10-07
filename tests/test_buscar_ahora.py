@@ -9,9 +9,10 @@ Eran DOS fallos, no uno:
 
 1. Se llamaba a un webhook inexistente.
 2. El fallo era MUDO. El `except` escribia un warning con el comentario
-   "no critico" y `/accion-existente` devolvia `{"ok": true}` igual. La persona
-   pulsa "Buscar ahora", no pasa absolutamente nada, y la aplicacion le dice
-   que si. Un endpoint que miente sobre lo que ha hecho es peor que uno que falla.
+   "no critico" y se respondia que todo habia ido bien igual. Quien pedia la
+   busqueda no veia nada y le decian que si. Un codigo que miente sobre lo que
+   ha hecho es peor que uno que falla. Hoy `disparar_busqueda` devuelve un
+   resultado explicito (`disparada`, `hay_novedades`) y estos tests lo fijan.
 
 El contrato del payload NO es invento: sale del nodo `Code — Normalizar users
 (schedule)` del propio workflow, que es como entra el disparo de las 9:00.
@@ -105,59 +106,6 @@ def test_disparar_devuelve_false_sin_usuario():
     assert srv.disparar_busqueda(None).disparada is False
 
 
-# ── El endpoint no puede decir que si cuando es que no ────────────────────
-
-def _accion(monkeypatch, status, usuario=USUARIO_NOTION):
-    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
-    monkeypatch.setattr(srv, "buscar_usuario_por_email", lambda e: usuario)
-    monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaFalsa(status))
-    with srv.app.test_client() as c:
-        return c.post("/accion-existente",
-                      json={"email": "veronica@cookyourwebai.es", "accion": "ahora"}).get_json()
-
-
-def test_accion_existente_confirma_la_busqueda_cuando_se_dispara(monkeypatch):
-    assert _accion(monkeypatch, 200)["busqueda_disparada"] is True
-
-
-def test_accion_existente_no_miente_cuando_el_webhook_falla(monkeypatch):
-    r = _accion(monkeypatch, 404)
-    assert r["busqueda_disparada"] is False
-
-
-def test_accion_existente_no_miente_si_el_usuario_no_esta(monkeypatch):
-    assert _accion(monkeypatch, 200, usuario=None)["busqueda_disparada"] is False
-
-
-def test_programar_manana_no_dispara_busqueda(monkeypatch):
-    monkeypatch.setattr(srv, "buscar_usuario_por_email", lambda e: USUARIO_NOTION)
-    with srv.app.test_client() as c:
-        r = c.post("/accion-existente",
-                   json={"email": "veronica@cookyourwebai.es", "accion": "manana"}).get_json()
-    assert r["busqueda_disparada"] is False
-    assert r["ok"] is True
-
-
-# ── La pantalla tampoco puede cantar exito sin mirar la respuesta ─────────
-
-def _pagina():
-    with srv.app.test_client() as c:
-        return c.get("/").get_data(as_text=True)
-
-
-def test_la_pantalla_no_tira_la_respuesta_del_servidor():
-    # `accionExistente` hacia `await resp.json();` sin guardar nada y pintaba
-    # "Buscando ahora mismo" igual. Arreglar el backend no servia de nada:
-    # el mensaje no dependia de lo que contestara.
-    # La comprobacion es que TODA lectura de la respuesta se asigne a algo.
-    pagina = _pagina()
-    assert pagina.count("await resp.json();") == pagina.count("= await resp.json();")
-
-
-def test_la_pantalla_mira_si_la_busqueda_se_disparo():
-    assert "busqueda_disparada" in _pagina()
-
-
 # ── El timeout: n8n no contesta hasta terminar el workflow entero ─────────
 
 def test_espera_lo_suficiente_para_que_n8n_termine(monkeypatch):
@@ -188,7 +136,7 @@ def test_espera_lo_suficiente_para_que_n8n_termine(monkeypatch):
     )
 
 
-def test_el_formulario_no_se_cachea():
+def test_la_portada_no_se_cachea():
     """El navegador servia el HTML viejo despues de desplegar el arreglo.
 
     Caso real del 28-ago-2026: el codigo desplegado leia `busqueda_disparada`
@@ -199,60 +147,6 @@ def test_el_formulario_no_se_cachea():
     with srv.app.test_client() as c:
         cabecera = c.get("/").headers.get("Cache-Control", "")
     assert "no-store" in cabecera, f"Cache-Control='{cabecera}'"
-
-
-# ── La espera se ve: 11 segundos de pantalla muerta no valen ──────────────
-# OJO: la primera version de estos tests buscaba "disabled" y "Buscando" en toda
-# la pagina, y PASABA estando el fallo presente, porque esas cadenas ya existian
-# en otras pantallas. Un test que pasa a la primera con el codigo mal no prueba
-# nada: hay que atarlo a la funcion concreta.
-
-
-def _accion_existente():
-    """El cuerpo de `accionExistente`, que es la funcion que tarda 11 segundos."""
-    with srv.app.test_client() as c:
-        pagina = c.get("/").get_data(as_text=True)
-    ini = pagina.index("async function accionExistente")
-    fin = pagina.index("function ", ini + 30)
-    return pagina[ini:fin]
-
-
-def test_los_botones_se_deshabilitan_mientras_se_espera():
-    """Sin esto se puede pulsar dos veces y lanzar dos busquedas.
-
-    `/accion-existente` tarda lo que tarde n8n en recorrer sus 15 nodos: medido
-    entre 5,3 y 10,7 segundos. Durante ese rato la pantalla no hacia nada, asi
-    que parecia colgada.
-    """
-    cuerpo = _accion_existente()
-    assert "disabled = true" in cuerpo, "los botones siguen pulsables durante la espera"
-
-
-def test_se_avisa_de_que_esta_buscando():
-    assert "Buscando" in _accion_existente(), "no se avisa de que la busqueda esta en marcha"
-
-
-def test_los_botones_se_reactivan_pase_lo_que_pase():
-    # Dejar la pantalla bloqueada tras un error es peor que no bloquearla.
-    assert "finally" in _accion_existente(), "sin `finally` un error deja los botones muertos"
-
-
-def test_el_selector_apunta_a_la_pantalla_que_existe():
-    """El primer intento uso `#s2a`, que NO existe: la pantalla es `#sExistente`.
-
-    Los tests miran el texto del HTML, no ejecutan el JavaScript, asi que un
-    selector equivocado los pasa igual. `querySelectorAll` de algo inexistente
-    devuelve una lista vacia y no lanza: falla en silencio.
-    """
-    pagina = _html_completo()
-    for selector in ("#sExistente", "#sEmail", "#s1", "#s2", "#sListo"):
-        assert f'id="{selector[1:]}"' in pagina, f"{selector} no existe en la pagina"
-    assert "#s2a" not in pagina, "selector `#s2a`: esa pantalla no existe"
-
-
-def _html_completo():
-    with srv.app.test_client() as c:
-        return c.get("/").get_data(as_text=True)
 
 
 # ── n8n devuelve 500 cuando el workflow no produce ofertas nuevas ─────────
@@ -280,7 +174,9 @@ def test_no_hay_ofertas_nuevas_NO_es_un_fallo(monkeypatch):
     """
     monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
     monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaSinItems())
-    assert srv.disparar_busqueda(USUARIO_NOTION).disparada is True
+    resultado = srv.disparar_busqueda(USUARIO_NOTION)
+    assert resultado.disparada is True
+    assert resultado.hay_novedades is False  # la ruta que lo cubria ya no existe
 
 
 def test_un_500_de_verdad_sigue_siendo_un_fallo(monkeypatch):
@@ -298,29 +194,6 @@ def test_un_404_sigue_siendo_un_fallo(monkeypatch):
     monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-ahora")
     monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaFalsa(404))
     assert srv.disparar_busqueda(USUARIO_NOTION).disparada is False
-
-
-def test_se_distingue_buscada_de_hay_ofertas_nuevas(monkeypatch):
-    """"Recibiras las ofertas" seria mentira si el dedup no dejo ninguna nueva.
-
-    Son dos cosas distintas y la pantalla tiene que poder decir cual: la busqueda
-    se hizo (`busqueda_disparada`) y ademas encontro algo (`hay_novedades`).
-    """
-    monkeypatch.setattr(srv, "WEBHOOK_BUSCAR_AHORA", "https://n8n.test/webhook/buscar-para-user")
-    monkeypatch.setattr(srv, "buscar_usuario_por_email", lambda e: USUARIO_NOTION)
-    monkeypatch.setattr(srv.requests, "post", lambda *a, **k: RespuestaSinItems())
-    with srv.app.test_client() as c:
-        r = c.post("/accion-existente",
-                   json={"email": "veronica@cookyourwebai.es", "accion": "ahora"}).get_json()
-    assert r["busqueda_disparada"] is True
-    assert r["hay_novedades"] is False
-
-
-def test_la_pantalla_tiene_TRES_estados():
-    """Se lanzo y hay novedades, se lanzo y no hay, y no se pudo lanzar."""
-    cuerpo = _accion_existente()
-    assert "hay_novedades" in cuerpo, "la pantalla no distingue si encontro algo"
-    assert "no hay ofertas nuevas" in cuerpo
 
 
 # ── El webhook va autenticado ─────────────────────────────────────────────

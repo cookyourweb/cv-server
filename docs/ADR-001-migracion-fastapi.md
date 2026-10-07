@@ -57,7 +57,7 @@
 
 ## Estado de implementación
 
-- **Slice 1 (en curso):** `/generar-cv` → `generar_cv_core` + `api.py` (FastAPI/Pydantic) + tests.
+- **Slice 1 (en curso):** `/generar-cv` pasa a `generar_cv_core` + `api.py` (FastAPI/Pydantic) + tests.
 - **Siguientes:** `/generar-carta`, `/usuarios`, `/crear-oferta`, etc., mismo patrón.
 
 ## Ejemplo de la API (para entenderla rápido)
@@ -70,7 +70,7 @@ Servir FastAPI en local: `uvicorn api:app --reload` (docs interactivas en `/docs
 curl -X POST http://localhost:8000/generar-cv \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "hello.cookyourweb@gmail.com",
+    "email": "principal@example.com",
     "empresa": "Hostaway",
     "puesto": "Senior Frontend Engineer",
     "descripcion": "React, TypeScript, design systems, testing",
@@ -86,14 +86,14 @@ curl -X POST http://localhost:8000/generar-cv \
   "link": "https://drive.google.com/file/d/1a-Bnd.../view",
   "modelo_usado": "llama-3.3-70b-versatile",
   "archivo": "cv-veronica-serna-perez-senior-frontend-engineer-2026.docx",
-  "email": "hello.cookyourweb@gmail.com",
+  "email": "principal@example.com",
   "cv_master_usado": true,
   "idioma": "en",
   "cv_master_url": "https://docs.google.com/document/d/1XzZm1.../edit"
 }
 ```
 
-**Falta un campo requerido** (ej. sin `empresa`) → **422 automático**, sin que corra nada del
+**Falta un campo requerido** (ej. sin `empresa`): **422 automático**, sin que corra nada del
 core. Ese es el guardrail de Pydantic en acción:
 
 ```json

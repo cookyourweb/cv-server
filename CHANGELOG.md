@@ -1,14 +1,15 @@
-# CHANGELOG técnico — cv-server
+# CHANGELOG técnico: cv-server
 
 Doc técnico interno del `cv-server` (repo `github.com/cookyourweb/cv-server`, rama `main`).
-El `README.md` es la guía de USUARIO (registro y uso diario). Este archivo es el rastro
+La guía de USUARIO (registro y uso diario) es `docs/GUIA-DE-USO.md`; el `README.md` presenta
+el proyecto. Este archivo es el rastro
 de POR QUÉ el código hace lo que hace: decisiones, fixes y trampas que no se ven leyendo
 el código a secas.
 
 Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
 
-> ⚠️ **Render NO lee el `Procfile`.** Tiene su propio *Start Command* guardado en
-> el panel (Settings → Start Command), y ese es el que manda. El 28-ago-2026 el
+> **Render NO lee el `Procfile`.** Tiene su propio *Start Command* guardado en
+> el panel (Settings, Start Command), y ese es el que manda. El 28-ago-2026 el
 > renombrado a `server.py` tumbo un despliegue por esto: el Procfile decia
 > `server:app` y el panel seguia diciendo `cv_server_railway:app`.
 > Si cambias el modulo o los flags de arranque, **hay que cambiarlo en los dos
@@ -17,32 +18,41 @@ Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
 >     gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120
 Archivo principal: `server.py`. Ranking de ofertas: `real_jobs.py`.
 
-**28-ago-2026 — el fichero principal se partio en seis y se renombro.** Era
+**28-ago-2026. El fichero principal se partio en seis y se renombro.** Era
 `cv_server_railway.py` con 2.640 lineas; ahora es `server.py` con 1.165 y los
 endpoints. Lo demas vive en `guardrails.py`, `notion.py`, `drive.py`,
-`docx_render.py`, `llm.py` y `templates/alta.html`. El nombre viejo decia
+`docx_render.py`, `llm.py` y `templates/alta.html` (borrada el 7-oct). El nombre viejo decia
 *Railway* y el servicio corre en **Render** desde hace meses.
 
 **Decisiones de arquitectura:** ver `docs/ADR-*`.
-- [`docs/ADR-001-migracion-fastapi.md`](docs/ADR-001-migracion-fastapi.md) - migración incremental Flask → FastAPI + Pydantic (core puro + wrapper HTTP, coexistencia, TDD).
+- [`docs/ADR-001-migracion-fastapi.md`](docs/ADR-001-migracion-fastapi.md): migración incremental de Flask a FastAPI + Pydantic (core puro + wrapper HTTP, coexistencia, TDD).
+- [`docs/ADR-002-modelo-del-cv.md`](docs/ADR-002-modelo-del-cv.md): qué modelo escribe el CV.
+- [`docs/ADR-003-usuario-multicuenta.md`](docs/ADR-003-usuario-multicuenta.md): un usuario con varios emails.
+- [`docs/ADR-004-backend-llm.md`](docs/ADR-004-backend-llm.md): LiteLLM escrito y apagado.
+- La autenticación (inicio de sesión, invitación, clave de máquina) está en el ADR-003 del repo `buscartrabajo` (`docs/adr/ADR-003-autenticacion.md`), que no es el ADR-003 de este repo.
 
 ---
 
-## Modelos LLM (estado actual)
+## Modelos LLM (estado actual, 7-oct-2026)
 
-Cadena declarada en la cabecera de `server.py` (v2.3-groq):
+Lo que usa producción. Los valores por defecto del código están en `llm.py`; el entorno
+los sobrescribe, y `/health` (campo `modelos`) muestra los activos.
 
-- **Ranking de ofertas** (`real_jobs.rankear_con_groq`): Groq `llama-3.3-70b-versatile`
-  como primario, con fallback heurístico determinista (`_ranking_fallback`) si no hay
-  `GROQ_API_KEY` o la llamada falla. Nunca deja sin resultado.
-- **CV adaptado** (`/generar-cv`): Claude Haiku 4.5 (`CV_MODEL`), barato y obediente al
-  prompt de adaptación. Va a empresas.
-- **Carta de presentación** (`/generar-carta`): Claude Sonnet 4.6 (`CARTA_MODEL`), mejor
-  prosa. Va a empresas.
-- **Fallbacks generales**: Gemini y Claude quedan como red del texto general.
+| Tarea | Modelo | Variable |
+|---|---|---|
+| CV adaptado (`/generar-cv`) | `claude-sonnet-4-6` | `CV_MODEL` |
+| Carta (`/generar-carta`) | `claude-sonnet-4-6` | `CARTA_MODEL` |
+| Fallback del CV y la carta (`call_llm_calidad` y `call_llm`) | Si Claude falla: Groq (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku. `modelo_usado` informa del modelo que la escribió de verdad | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
+| Ranking de ofertas (`real_jobs.rankear_con_groq`) | `openai/gpt-oss-120b` (Groq), con fallback heurístico determinista | `GROQ_MODEL` |
+| Texto general (`call_llm`) | Groq, luego Gemini, luego Claude Haiku 4.5 | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
 
-Todos los modelos se pueden sobreescribir por variable de entorno (`GROQ_MODEL`,
-`CV_MODEL`, `CARTA_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL`).
+Notas:
+
+- El valor por defecto de `CV_MODEL` en el código sigue siendo `claude-haiku-4-5`. Producción
+  usa Sonnet porque el entorno lo fija así (ADR-002).
+- `llama-3.3-70b-versatile`, que rankeaba ofertas hasta agosto, está **retirado**: Groq lo
+  dio de baja el 16-ago-2026 y el ranking usa ahora `openai/gpt-oss-120b`.
+- Hasta el ADR-002 (27-jul-2026) el CV lo escribía Claude Haiku 4.5.
 
 **El prompt que adapta el CV y la carta está documentado en
 [`docs/PROMPT-ADAPTACION-CV.md`](./docs/PROMPT-ADAPTACION-CV.md)**: estructura en 3 pasos,
@@ -51,13 +61,83 @@ tocar el f-string del prompt en `server.py`.
 
 ---
 
+## Octubre 2026
+
+### 7-oct · Inicio de sesión con Google para invitadas
+
+**Qué cambió**
+
+- Nueva ruta `GET /yo`: recibe un token de identidad de Google (`Authorization: Bearer`)
+  y devuelve `{sub, email, nombre}` si la persona está invitada.
+- Nuevo módulo `autenticacion.py` que valida el token: solo RS256, firma contra las
+  claves públicas de Google (JWKS en caché 3600 s; un `kid` desconocido provoca una
+  descarga nueva, como mucho cada 300 s), emisor y audiencia esperados, caducidad con
+  60 s de margen y `email_verified` verdadero.
+- Lista de invitadas por email (`INVITADAS`), provisional hasta tener base de datos.
+- CORS exacto solo en `/yo` y `/health` (`CORS_ORIGENES`).
+
+**Por qué**
+
+El panel necesita saber quién es la usuaria sin fiarse de un email que llega en el cuerpo
+de la petición, que es justo el agujero que se cerró ese mismo día (entrada siguiente). El
+usuario sale del token y de ningún otro sitio. La decisión completa está en el ADR-003 del
+repo `buscartrabajo` (`docs/adr/ADR-003-autenticacion.md`).
+
+**Respuestas de `/yo`**
+
+| Código | Cuándo |
+|---|---|
+| 200 | Token válido y persona invitada |
+| 401 | Falta el token o no es válido |
+| 403 | Token válido, pero la persona no está invitada |
+| 503 | Falta configuración (`OIDC_*`) o no se alcanzan las claves públicas |
+
+**Qué lo protege**
+
+| Test | Garantía |
+|---|---|
+| `tests/test_autenticacion.py` | Validación del token: algoritmo, firma, emisor, audiencia, caducidad, email verificado y caché de claves |
+| `tests/test_ruta_yo.py` | Contrato de `/yo`: 200, 401, 403, 503 y CORS |
+
+---
+
+### 7-oct · Cierre de las rutas del formulario de alta
+
+**Qué cambió**
+
+- Borradas `/check-email` y `/accion-existente`.
+- `POST /registro` exige la clave de máquina (`X-Clave-Maquina`) y ante un fallo
+  devuelve un error genérico (500), sin la excepción.
+- `GET /` sirve una página de invitación (`templates/inicio.html`) con `no-store`.
+- Borrada `templates/alta.html`: ninguna ruta la sirve ya.
+
+**Por qué**
+
+Las tres rutas se fiaban de un email que llegaba en el cuerpo de la petición, sin
+comprobar quién lo mandaba. Eso permitía:
+
+- Enumerar cuentas: preguntar si un email existía.
+- Lanzar búsquedas en nombre de otras personas.
+- Darse de alta sin invitación.
+
+Es el punto 4 del ADR-003 de autenticación, que vive en el repo `buscartrabajo` (`docs/adr/ADR-003-autenticacion.md`): el usuario sale del token y de ningún otro sitio.
+
+**Qué lo protege**
+
+| Test | Garantía |
+|---|---|
+| `tests/test_rutas_de_maquina.py` (inventario y `test_rutas_retiradas_no_existen`) | Toda ruta de máquina exige la clave y las rutas retiradas no existen |
+| `tests/test_pagina_de_inicio.py` | La portada no tiene formulario, no llama a rutas retiradas ni enlaza a `/usuarios`. `test_buscar_ahora.py::test_la_portada_no_se_cachea` cubre `no-store` |
+
+---
+
 ## Julio 2026
 
-### 20-jul — Saneador tipográfico: cero guiones largos ni flechas en CV y carta
+### 20-jul: Saneador tipográfico. Cero guiones largos ni flechas en CV y carta
 Commit `f0ba838`. Nueva función pura `sanear_tipografia(texto, idioma)` en
-`server.py:549`.
+`server.py`.
 
-- **Qué hace**: elimina guiones largos y medios (`—`, `–`) y flechas (`→`) del texto
+- **Qué hace**: elimina guiones largos, guiones medios y flechas del texto
   final. Las flechas se traducen a la palabra de transición del idioma ("a" en ES,
   "to" en EN); los guiones a guion normal. Es rastro tipográfico de IA y NO puede
   salir a una empresa.
@@ -69,14 +149,14 @@ Commit `f0ba838`. Nueva función pura `sanear_tipografia(texto, idioma)` en
   parsear, perdés las negritas y la estructura.
 - **Tests**: `test_sanear_tipografia.py` y `test_render_sin_guiones.py`.
 
-### 03-jul — Titulares: identidad real + especialización, y años de experiencia ajustables
+### 03-jul: Titulares: identidad real + especialización, y años de experiencia ajustables
 Commits `9136979`, `d70a5c6`.
 
 - Sistema de titulares que combina identidad real (Full-Stack e IA delante cuando
   aplica) con resumen adaptado por oferta.
 - Años de experiencia: base **10+**, ajustable por oferta. NO clavar 15+.
 
-### 01-jul — Refinado de reglas de CV y seniority del titular
+### 01-jul: Refinado de reglas de CV y seniority del titular
 Commits `1c3702a`, `e95cf17`, `5c9d4e5`, `0da513c`.
 
 - Descartar el bloque "ANÁLISIS INTERNO" del CV (no debe salir al documento final).
@@ -92,27 +172,27 @@ Commits `1c3702a`, `e95cf17`, `5c9d4e5`, `0da513c`.
 Estos fixes fueron de configuración en Render o Brevo, no de código. Por eso no dejan
 rastro en el historial y por eso se documentan aquí: si alguien clona el repo, no los ve.
 
-### 17-jul — 500 en /generar-cv: token de Google caducado en Render
+### 17-jul: 500 en /generar-cv: token de Google caducado en Render
 - **Síntoma**: `/generar-cv` y `/generar-carta` devolvían 500 y rompían la cadena de
   aprobación de ofertas en n8n (al Aprobar no llegaba carta/CV/email).
 - **Causa raíz** (confirmada con huellas de token): Render tenía el
-  `GOOGLE_REFRESH_TOKEN` VIEJO/caducado (terminaba en `VrpunA`). El `.env` local ya
-  tenía el bueno (terminaba en `AxAB_4`).
+  `GOOGLE_REFRESH_TOKEN` VIEJO/caducado. El `.env` local ya tenía el bueno (se distinguían
+  por los últimos caracteres del token).
 - **Fix**: actualizar `GOOGLE_REFRESH_TOKEN` en las variables de entorno de Render con
   el valor bueno. Tras redeploy, 200 OK.
 - **Nota**: el proyecto de Google Cloud con las credenciales OAuth es
-  `sylvan-surf-138623` (OJO: hay dos proyectos llamados "My Project" en la cuenta, no
+  `<id-del-proyecto>` (OJO: hay dos proyectos llamados "My Project" en la cuenta, no
   fiarse del nombre). Utilidades para regenerar el token: `regenera_token.py`,
   `get_refresh_token.py`, `diagnostico_drive.py`.
 
-### 18-jul — El email de aprobación va por Brevo, no por Gmail
+### 18-jul: El email de aprobación va por Brevo, no por Gmail
 - El mail que se manda al aprobar una oferta sale por **Brevo** (SMTP API), no por Gmail.
-- Sender verificado: `veronica@cookyourwebai.es`. La credencial de Brevo en n8n debe
+- Sender verificado: `remitente@example.com`. La credencial de Brevo en n8n debe
   usar la API key viva y ese sender exacto; un mismatch de sender o key hace que Brevo
   no entregue aunque la petición parezca correcta.
 - Prueba directa a `api.brevo.com/v3/smtp/email` con ese sender devuelve 201 y entrega.
 
 ---
 
-**Última actualización:** 20 julio 2026
+**Última actualización:** 7 octubre 2026
 **Fuente de verdad operativa del flujo completo:** `../buscartrabajo/README.md`

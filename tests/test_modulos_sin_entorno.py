@@ -22,7 +22,7 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 
-MODULOS = ["guardrails", "docx_render", "llm", "notion", "drive", "real_jobs"]
+MODULOS = ["guardrails", "docx_render", "llm", "notion", "drive", "real_jobs", "autenticacion"]
 
 
 def _importar_sin_entorno(modulos):
