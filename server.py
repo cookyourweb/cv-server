@@ -338,11 +338,10 @@ from docx_render import (  # noqa: F401
 
 @app.route("/")
 def index():
-    # Sin cache. El HTML lleva dentro el JavaScript del formulario, asi que una
-    # pagina cacheada es LOGICA cacheada: el 28-ago-2026 se desplego el arreglo
-    # del mensaje de "Buscar ahora" y el navegador siguio ejecutando la version
-    # anterior. Son 8 KB: no hay nada que ahorrar cacheandolo.
-    respuesta = make_response(render_template("alta.html"))
+    # Portada: pagina estatica de invitacion (beta privada), sin formulario ni
+    # llamadas al servidor. Se mantiene sin cache para que un cambio de texto se
+    # vea en cuanto se despliega.
+    respuesta = make_response(render_template("inicio.html"))
     respuesta.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return respuesta
 
