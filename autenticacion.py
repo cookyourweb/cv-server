@@ -68,6 +68,7 @@ class ConfiguracionOIDC:
 ALGORITMOS = ("RS256",)  # lista cerrada: el alg del token nunca elige el verificador
 MARGEN_RELOJ = 60  # segundos de tolerancia en exp e iat
 REFRESCO_MINIMO = 300  # segundos entre descargas provocadas por un kid desconocido
+REINTENTO_EN_FRIO = 30  # segundos sin volver a descargar si no hay cache y la descarga fallo
 
 
 def _descargar_jwks(url: str) -> dict:
@@ -105,7 +106,14 @@ class ClavesPublicas:
         self._ultimo_intento = self._reloj()
         try:
             claves = self._descargar(self._url)["keys"]
-            nuevas = {k["kid"]: _pem_de_jwk(k) for k in claves if k.get("kty") == "RSA"}
+            nuevas = {}
+            for clave in claves:
+                if clave.get("kty") != "RSA":
+                    continue
+                try:
+                    nuevas[clave["kid"]] = _pem_de_jwk(clave)
+                except Exception:
+                    continue  # una clave rota no tumba a las demas
         except Exception as error:
             if not self._pems:
                 raise ProveedorNoDisponible("no se pudieron obtener las claves publicas") from error
@@ -124,6 +132,10 @@ class ClavesPublicas:
         with self._cerrojo:
             ahora = self._reloj()
             if self._cargadas_en is None:
+                # En frio no hay cache que servir: tras un fallo se espera antes de reintentar,
+                # para que cada peticion no bloquee al unico worker durante la descarga.
+                if self._ultimo_intento is not None and ahora - self._ultimo_intento < REINTENTO_EN_FRIO:
+                    raise ProveedorNoDisponible("claves publicas no disponibles, reintento en espera")
                 self._refrescar()
             elif ahora - self._cargadas_en >= self._ttl and self._puede_reintentar(ahora):
                 self._refrescar()

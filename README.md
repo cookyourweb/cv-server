@@ -260,7 +260,7 @@ The full design decision is in ADR-003 of the `buscartrabajo` repo.
 ## Tests
 
 ```bash
-pytest -q     # 375 tests
+pytest -q     # 381 tests
 ```
 
 Tests are written first. Each one documents in its docstring **the real failure that

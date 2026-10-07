@@ -21,6 +21,8 @@ from autenticacion import (
     Identidad,
     NoInvitada,
     ProveedorNoDisponible,
+    REFRESCO_MINIMO,
+    REINTENTO_EN_FRIO,
     identificar,
     verificar_token,
 )
@@ -196,6 +198,50 @@ def test_con_cache_valida_y_descarga_caida_sirve_la_cache(par_a):
 def test_una_respuesta_sin_claves_validas_es_proveedor_no_disponible():
     with pytest.raises(ProveedorNoDisponible):
         ClavesPublicas("u", Descargador({"basura": 1}), reloj=Reloj()).pem_de("k1")
+
+
+@pytest.mark.parametrize("respuesta", [
+    {"keys": []},
+    {"keys": [{"kty": "EC", "kid": "k1", "x": "a", "y": "b"}]},
+])
+def test_un_jwks_bien_formado_pero_sin_claves_rsa_es_proveedor_no_disponible(respuesta):
+    # Llega a la rama "no hay ninguna RSA", no al except de un JSON roto.
+    with pytest.raises(ProveedorNoDisponible, match="ninguna clave RSA"):
+        ClavesPublicas("u", Descargador(respuesta), reloj=Reloj()).pem_de("k1")
+
+
+def test_sin_cache_una_descarga_caida_no_se_repite_en_cada_peticion():
+    # Con un solo worker sincrono, cada descarga fallida bloquea el servidor hasta 5 s.
+    # En frio y con el proveedor caido, las peticiones seguidas fallan sin volver a descargar.
+    reloj, d = Reloj(), Descargador(OSError("sin red"))
+    claves = ClavesPublicas("u", d, reloj=reloj)
+    for _ in range(3):
+        with pytest.raises(ProveedorNoDisponible):
+            claves.pem_de("k1")
+        reloj.ahora += 1
+    assert len(d.llamadas) == 1
+
+
+def test_sin_cache_pasada_la_espera_se_vuelve_a_intentar(par_a):
+    reloj = Reloj()
+    d = Descargador(OSError("sin red"), _jwks(k1=par_a[0]))
+    claves = ClavesPublicas("u", d, reloj=reloj)
+    with pytest.raises(ProveedorNoDisponible):
+        claves.pem_de("k1")
+    reloj.ahora += REINTENTO_EN_FRIO
+    assert claves.pem_de("k1") is not None
+    assert len(d.llamadas) == 2
+
+
+def test_la_espera_en_frio_es_mas_corta_que_el_refresco_por_kid():
+    # Recuperarse de una caida no puede tardar lo mismo que el limite anti abuso.
+    assert 0 < REINTENTO_EN_FRIO < REFRESCO_MINIMO
+
+
+def test_una_clave_mal_formada_no_descarta_las_demas(par_a):
+    jwks = _jwks(k1=par_a[0])
+    jwks["keys"].insert(0, {"kty": "RSA", "n": "AQAB", "e": "AQAB"})  # sin kid
+    assert ClavesPublicas("u", Descargador(jwks), reloj=Reloj()).pem_de("k1") is not None
 
 
 def test_con_hilos_concurrentes_se_descarga_una_sola_vez(par_a):
