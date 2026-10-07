@@ -1355,6 +1355,30 @@ CONFIG_OIDC = ConfiguracionOIDC.desde_entorno()
 CLAVES = ClavesPublicas(CONFIG_OIDC.url_jwks)
 
 
+def origenes_desde_entorno(entorno=None) -> list:
+    """Lista exacta de origenes con CORS (CORS_ORIGENES, separados por comas)."""
+    e = os.environ if entorno is None else entorno
+    return [o.strip() for o in (e.get("CORS_ORIGENES") or "").split(",") if o.strip()]
+
+
+ORIGENES_PERMITIDOS = origenes_desde_entorno()
+RUTAS_CON_CORS = {"/yo", "/health"}
+
+
+@app.after_request
+def cabeceras_cors(respuesta):
+    """CORS solo en RUTAS_CON_CORS y solo para un origen que este EXACTAMENTE en la
+    lista. Nunca '*' ni credenciales: el token viaja en Authorization, no en cookies."""
+    origen = request.headers.get("Origin")
+    if request.path in RUTAS_CON_CORS and origen and origen in ORIGENES_PERMITIDOS:
+        respuesta.headers["Access-Control-Allow-Origin"] = origen
+        respuesta.headers["Vary"] = "Origin"
+        if request.method == "OPTIONS":
+            respuesta.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+            respuesta.headers["Access-Control-Allow-Headers"] = "Authorization"
+    return respuesta
+
+
 @app.route("/yo", methods=["GET"])
 def yo():
     """Quien es la usuaria que llama, segun su token de Google."""
