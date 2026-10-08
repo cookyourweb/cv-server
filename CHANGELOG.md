@@ -96,7 +96,7 @@ repo `buscartrabajo` (`docs/adr/ADR-003-autenticacion.md`).
 
 | Test | Garantía |
 |---|---|
-| `tests/test_autenticacion.py` | Validación del token: algoritmo, firma, emisor, audiencia, caducidad, email verificado y caché de claves |
+| `tests/test_autenticacion.py` | Validación del token: algoritmo, firma, emisor, audiencia, caducidad, email verificado y caché de claves. Sin caché y con Google caído, una descarga fallida no se repite durante 30 s (`REINTENTO_EN_FRIO`), para no bloquear al único worker; una clave mal formada no descarta las demás |
 | `tests/test_ruta_yo.py` | Contrato de `/yo`: 200, 401, 403, 503 y CORS |
 
 ---

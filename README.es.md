@@ -259,7 +259,7 @@ La decisión de diseño completa está en el ADR-003 del repo `buscartrabajo`.
 ## Tests
 
 ```bash
-pytest -q     # 375 tests
+pytest -q     # 381 tests
 ```
 
 Los tests se escriben primero. Cada uno documenta en su docstring **el fallo real que lo motivó**,
