@@ -3,7 +3,7 @@
 # cv-server
 
 [![tests](https://github.com/cookyourweb/cv-server/actions/workflows/tests.yml/badge.svg)](https://github.com/cookyourweb/cv-server/actions/workflows/tests.yml)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 
 > How work is done here (red-green-commit cycle, pre-commit hook and commit rules):
 > [`CONTRIBUTING.md`](CONTRIBUTING.md). Here to **use** the service rather than read the
@@ -270,3 +270,9 @@ prompted it**, with a date, not a hypothetical case.
 
 `Python` · `Flask` and `FastAPI` · `Pydantic` · `Claude API` · `Notion API` ·
 `Google Drive API` · `python-docx` · `pytest` · `Render`
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE). You can read, study and use this code for personal, learning or other noncommercial purposes. Commercial use, such as selling it, offering it as a service or using it in a for-profit company, needs permission: get in touch through [cookyourwebai.es](https://cookyourwebai.es).
+
+Code published before 8 Oct 2026 was released under the MIT license, and those earlier versions remain under MIT.
