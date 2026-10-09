@@ -14,6 +14,7 @@ solo `os` y `re`, asi que se puede leer y probar aislado.
 """
 import os
 import re
+import unicodedata
 
 _NUM_RE = re.compile(r"\d[\d.,]*")
 
@@ -584,6 +585,54 @@ def evaluar_descripcion_oferta(descripcion: str, minimo: int = None) -> dict:
     return {"suficiente": True, "chars": len(descripcion or ""), "aviso": ""}
 
 
+# ── Guardrail de inflacion: afirmaciones de exclusividad, liderazgo o alcance ─
+# Un CV puede inflar sin inventar una cifra ni una tecnologia: "el unico
+# responsable", "referente", "lidere", "solucion completa". Se detecta por
+# CONCEPTO bilingue: se marca un concepto si la salida usa alguna variante y el
+# master no usa NINGUNA (asi "lidere" en el master respalda "liderado").
+#
+# Falsos positivos: las palabras sueltas "only", "full" y "reference" son
+# demasiado comunes en ingles ("only use", "full-stack", "reference letter"),
+# asi que solo cuentan en frases que afirman algo ("the only", "full ownership",
+# "reference for"). Para ampliar: anadir variantes (regex) a un concepto o un
+# concepto nuevo; el resto del codigo no cambia.
+
+_INFLACION = {
+    "unico": (r"unico", r"unica", r"unique", r"sole", r"the only", r"only one"),
+    "referente": (r"referente", r"go-to", r"the reference", r"reference (?:for|in|point)"),
+    "liderado": (r"lidere", r"liderado", r"liderada", r"led", r"spearheaded"),
+    "completa": (r"completa", r"completo", r"end-to-end", r"full (?:ownership|responsibility)"),
+}
+
+
+def _plano(texto: str) -> str:
+    """Minusculas y sin acentos, para comparar sin que importen ni uno ni otro."""
+    base = unicodedata.normalize("NFKD", texto or "")
+    return "".join(c for c in base if not unicodedata.combining(c)).lower()
+
+
+_INFLACION_PATRONES = {
+    concepto: re.compile(
+        r"(?<![a-z0-9])(?:" + "|".join(variantes) + r")(?![a-z0-9])")
+    for concepto, variantes in _INFLACION.items()
+}
+
+
+def detectar_inflacion(texto: str, master_texto: str) -> list:
+    """Conceptos de inflacion presentes en el texto y ausentes del master.
+
+    Sin texto o sin master no se alerta: no hay con que contrastar."""
+    if not texto or not master_texto:
+        return []
+    salida, ref = _plano(texto), _plano(master_texto)
+    hallazgos = []
+    for concepto, patron in _INFLACION_PATRONES.items():
+        m = patron.search(salida)
+        if m and not patron.search(ref):
+            hallazgos.append(f"{concepto}: '{m.group(0)}'")
+    return hallazgos
+
+
 # ══════════════════════════════════════════════
 # REGISTRO DE GUARDRAILS
 # ══════════════════════════════════════════════
@@ -660,6 +709,7 @@ GUARDRAILS = [
     # ese hueco se conserva aqui a proposito: cambiar comportamiento dentro de un
     # refactor es como se rompen las cosas en silencio. Anotado para decidirlo.
     _Detector("experiencia_mal_atribuida", frozenset({CARTA}), detectar_experiencia_mal_atribuida),
+    _Detector("inflacion", frozenset({CV, CARTA}), detectar_inflacion),
 ]
 
 
