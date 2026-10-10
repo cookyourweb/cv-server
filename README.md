@@ -257,6 +257,32 @@ export CORS_ORIGENES=http://localhost:4200
 
 The full design decision is in ADR-003 of the `buscartrabajo` repo.
 
+## Database
+
+User accounts, profiles and encrypted CV masters live in Neon (serverless Postgres, AWS
+Frankfurt). Job postings and applications stay in Notion. The service talks to the
+database through SQLAlchemy Core and psycopg 3; the engine is created lazily, so the
+server starts and `/health` answers even while the database is asleep.
+
+The schema is versioned with Alembic (`migraciones/versions/`). Connection strings come
+from the environment only (`DATABASE_URL` for the service, `DATABASE_URL_PRUEBAS` for
+the tests), never from `alembic.ini`:
+
+```bash
+export DATABASE_URL=...           # a development branch, never production
+.venv/bin/alembic upgrade head    # apply every migration
+.venv/bin/alembic downgrade base  # remove them all (development only)
+```
+
+Database tests are marked `bd` and are skipped when `DATABASE_URL_PRUEBAS` is unset, so
+the suite stays green on any machine. To run them against a disposable PostgreSQL 13+
+(they migrate it to head and roll back every row they insert):
+
+```bash
+export DATABASE_URL_PRUEBAS=...
+.venv/bin/python -m pytest -q -m bd
+```
+
 ## Tests
 
 ```bash

@@ -63,6 +63,30 @@ tocar el f-string del prompt en `server.py`.
 
 ## Octubre 2026
 
+### 10-oct · Neon Postgres foundation for sign-up with CV
+
+**What changed**
+
+- New `base_de_datos.py`: SQLAlchemy Core engine on psycopg 3 (`pool_size=2`,
+  `pool_pre_ping`, `pool_recycle=300`) plus a `transaccion()` context manager. The
+  engine is built on first use from `DATABASE_URL`; importing the module neither reads
+  the environment nor connects, so cold starts and `/health` never depend on the database.
+- Alembic setup (`alembic.ini`, `migraciones/env.py`) that reads `DATABASE_URL` from the
+  environment only, and migration `0001_alta` with users, emails, invitations, profile,
+  encrypted CV masters, the extraction ledger, consents and runtime settings
+  (`extraccion_activa` seeded to true). Fully reversible.
+- Tests marked `bd` run against a real PostgreSQL and are skipped without
+  `DATABASE_URL_PRUEBAS`.
+
+**Why it is shaped this way**
+
+- The extraction ledger keeps the one-attempt rule with a partial unique index,
+  `WHERE usuario_id IS NOT NULL AND estado <> 'fallida'`: a provider failure does not
+  consume the user's single attempt, and rows orphaned by an account deletion
+  (`ON DELETE SET NULL`, no personal data) stay in the ledger so the monthly cap still
+  counts them.
+- Deleting a user cascades to emails, profile, CV masters and consents in one statement.
+
 ### 7-oct · Inicio de sesión con Google para invitadas
 
 **Qué cambió**
