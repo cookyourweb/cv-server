@@ -32,7 +32,7 @@ def test_titulo_con_senal_neta_manda_sobre_la_descripcion():
     # Idioma de Notion, que manda sobre esta deteccion.
     desc_muy_es = DESC_ES + (" Desarrollador con conocimientos de gestion, liderazgo, "
                              "programador de aplicaciones, requisitos imprescindibles.")
-    assert srv.idioma_de_oferta("Senior Frontend Engineer", desc_muy_es, "Indra") == "en"
+    assert srv.idioma_de_oferta("Senior Frontend Engineer", desc_muy_es, "Acme") == "en"
 
 
 def test_sin_puesto_cae_a_la_descripcion():
