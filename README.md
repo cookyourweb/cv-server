@@ -7,7 +7,7 @@
 
 > How work is done here (red-green-commit cycle, pre-commit hook and commit rules):
 > [`CONTRIBUTING.md`](CONTRIBUTING.md). Here to **use** the service rather than read the
-> code? The guide is in [`docs/GUIA-DE-USO.md`](docs/GUIA-DE-USO.md). The linked
+> code? The guide is in [`docs/USAGE-GUIDE.md`](docs/USAGE-GUIDE.md). The linked
 > documents in this repo are in Spanish.
 
 **What it is.** A service that uses LLMs to generate a CV and cover letter tailored to
@@ -147,8 +147,8 @@ There is currently no delimiter or instruction filter on the posting.
 
 | What | Figure | Where to read about it |
 |---|---|---|
-| Cost per request | CV about 0.05 USD and cover letter about 0.013 USD with `claude-sonnet-4-6` (measured 2 Oct 2026, prompt of about 9,600 input tokens) | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
-| Why this model | Cost measured with `count_tokens` and real Haiku failures | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
+| Cost per request | CV about 0.05 USD and cover letter about 0.013 USD with `claude-sonnet-4-6` (measured 2 Oct 2026, prompt of about 9,600 input tokens) | [ADR-002](docs/ADR-002-cv-model.md) |
+| Why this model | Cost measured with `count_tokens` and real Haiku failures | [ADR-002](docs/ADR-002-cv-model.md) |
 | Fallback chain | Claude, then Groq, then Gemini, then Claude Haiku; `modelo_usado` says which one wrote it | [`llm.py`](llm.py) |
 | Evaluation | `evaluacion.py` is pure (it calls no model) and its tests run in the suite as a regression net. Real generation against the LLM is run by hand | [`evaluacion.py`](evaluacion.py), [`tests/test_evaluacion.py`](tests/test_evaluacion.py) |
 | Known failure modes | Posting description too short (generic CV, flagged in `descripcion_oferta`); role scope inflation, not detected; response written by a fallback model | [What the guardrails do NOT detect](#what-the-guardrails-do-not-detect) |
@@ -161,25 +161,25 @@ There is currently no delimiter or instruction filter on the posting.
 
 Documented as ADRs in [`docs/`](docs/):
 
-- **[ADR-001](docs/ADR-001-migracion-fastapi.md)**. Incremental migration to FastAPI.
+- **[ADR-001](docs/ADR-001-fastapi-migration.md)**. Incremental migration to FastAPI.
   Coexistence instead of a big bang: the core is extracted (`generar_cv_core`) and the
   Flask and FastAPI routes are thin wrappers over the same core. Errors as a typed
   exception (`CVError`), Pydantic contracts, and Flask as a safety net until FastAPI
   covers the endpoint in green.
-- **[ADR-002](docs/ADR-002-modelo-del-cv.md)**. Which model writes the CV, with cost
+- **[ADR-002](docs/ADR-002-cv-model.md)**. Which model writes the CV, with cost
   measured via `count_tokens`, not estimated. Includes a finding that reversed the
   decision: a newer model with a lower per-token price came out **just as expensive**,
   because its tokenizer counts 50% more tokens for the same text.
-- **[ADR-003](docs/ADR-003-usuario-multicuenta.md)**. One user with several email
+- **[ADR-003](docs/ADR-003-multi-account-user.md)**. One user with several email
   accounts. Why duplicating the record is a patch that degrades silently, and why the
   final check has to be exact (Notion's `contains` filter is a substring match:
   `vero@gmail.com` matches `notvero@gmail.com`).
-- **[ADR-004](docs/ADR-004-backend-llm.md)**. LiteLLM is written and left switched off
+- **[ADR-004](docs/ADR-004-llm-backend.md)**. LiteLLM is written and left switched off
   (`LLM_BACKEND`). It was measured: +146 MB of disk, +5.96 s of startup and 207 MB of RAM
   versus 9 MB.
 
 > **Authentication is covered in ADR-003 of the `buscartrabajo` repo**
-> (`docs/adr/ADR-003-autenticacion.md`), which is not the ADR-003 above.
+> (`docs/adr/ADR-003-authentication.md`), which is not the ADR-003 above.
 
 ### Known debt
 

@@ -117,7 +117,7 @@ API entre Haiku 4.5 y Sonnet 4.6 en este codigo.**
 2. Aprobar en Notion **una** oferta con descripcion completa (Tecnoempleo o Remotive,
    no LinkedIn ni Indeed: esas traen 172-245 caracteres y no hay material que adaptar).
 3. Descargar el CV generado y pasarlo por el checklist del
-   `buscartrabajo/docs/09-RUNBOOK-OFERTA-CONTACTO-DIRECTO`, mas estos cuatro casos
+   `buscartrabajo/docs/runbooks/09-RUNBOOK-DIRECT-CONTACT-OFFER-2026-07-23.md`, mas estos cuatro casos
    concretos, que son los que fallaron con Haiku:
    - cuantificadores vagos no respaldados ("millions of", "thousands of")
    - coletillas de beneficio sin metrica ("improving X", "reducing Y")
@@ -147,5 +147,5 @@ API entre Haiku 4.5 y Sonnet 4.6 en este codigo.**
 
 ---
 
-**Relacionado:** `ADR-001-migracion-fastapi.md` (seccion "Nota de coste"),
-`CHANGELOG.md`, `buscartrabajo/docs/09-RUNBOOK-OFERTA-CONTACTO-DIRECTO`.
+**Relacionado:** `ADR-001-fastapi-migration.md` (seccion "Nota de coste"),
+`CHANGELOG.md`, `buscartrabajo/docs/runbooks/09-RUNBOOK-DIRECT-CONTACT-OFFER-2026-07-23.md`.

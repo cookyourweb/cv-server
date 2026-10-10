@@ -1,7 +1,7 @@
 # CHANGELOG técnico: cv-server
 
 Doc técnico interno del `cv-server` (repo `github.com/cookyourweb/cv-server`, rama `main`).
-La guía de USUARIO (registro y uso diario) es `docs/GUIA-DE-USO.md`; el `README.md` presenta
+La guía de USUARIO (registro y uso diario) es `docs/USAGE-GUIDE.md`; el `README.md` presenta
 el proyecto. Este archivo es el rastro
 de POR QUÉ el código hace lo que hace: decisiones, fixes y trampas que no se ven leyendo
 el código a secas.
@@ -25,11 +25,11 @@ endpoints. Lo demas vive en `guardrails.py`, `notion.py`, `drive.py`,
 *Railway* y el servicio corre en **Render** desde hace meses.
 
 **Decisiones de arquitectura:** ver `docs/ADR-*`.
-- [`docs/ADR-001-migracion-fastapi.md`](docs/ADR-001-migracion-fastapi.md): migración incremental de Flask a FastAPI + Pydantic (core puro + wrapper HTTP, coexistencia, TDD).
-- [`docs/ADR-002-modelo-del-cv.md`](docs/ADR-002-modelo-del-cv.md): qué modelo escribe el CV.
-- [`docs/ADR-003-usuario-multicuenta.md`](docs/ADR-003-usuario-multicuenta.md): un usuario con varios emails.
-- [`docs/ADR-004-backend-llm.md`](docs/ADR-004-backend-llm.md): LiteLLM escrito y apagado.
-- La autenticación (inicio de sesión, invitación, clave de máquina) está en el ADR-003 del repo `buscartrabajo` (`docs/adr/ADR-003-autenticacion.md`), que no es el ADR-003 de este repo.
+- [`docs/ADR-001-fastapi-migration.md`](docs/ADR-001-fastapi-migration.md): migración incremental de Flask a FastAPI + Pydantic (core puro + wrapper HTTP, coexistencia, TDD).
+- [`docs/ADR-002-cv-model.md`](docs/ADR-002-cv-model.md): qué modelo escribe el CV.
+- [`docs/ADR-003-multi-account-user.md`](docs/ADR-003-multi-account-user.md): un usuario con varios emails.
+- [`docs/ADR-004-llm-backend.md`](docs/ADR-004-llm-backend.md): LiteLLM escrito y apagado.
+- La autenticación (inicio de sesión, invitación, clave de máquina) está en el ADR-003 del repo `buscartrabajo` (`docs/adr/ADR-003-authentication.md`), que no es el ADR-003 de este repo.
 
 ---
 
@@ -55,7 +55,7 @@ Notas:
 - Hasta el ADR-002 (27-jul-2026) el CV lo escribía Claude Haiku 4.5.
 
 **El prompt que adapta el CV y la carta está documentado en
-[`docs/PROMPT-ADAPTACION-CV.md`](./docs/PROMPT-ADAPTACION-CV.md)**: estructura en 3 pasos,
+[`docs/CV-ADAPTATION-PROMPT.md`](./docs/CV-ADAPTATION-PROMPT.md)**: estructura en 3 pasos,
 HEADLINE RULES, posicionamiento por tipo de oferta y las reglas anti-IA. Léelo antes de
 tocar el f-string del prompt en `server.py`.
 
@@ -105,7 +105,7 @@ tocar el f-string del prompt en `server.py`.
 El panel necesita saber quién es la usuaria sin fiarse de un email que llega en el cuerpo
 de la petición, que es justo el agujero que se cerró ese mismo día (entrada siguiente). El
 usuario sale del token y de ningún otro sitio. La decisión completa está en el ADR-003 del
-repo `buscartrabajo` (`docs/adr/ADR-003-autenticacion.md`).
+repo `buscartrabajo` (`docs/adr/ADR-003-authentication.md`).
 
 **Respuestas de `/yo`**
 
@@ -144,7 +144,7 @@ comprobar quién lo mandaba. Eso permitía:
 - Lanzar búsquedas en nombre de otras personas.
 - Darse de alta sin invitación.
 
-Es el punto 4 del ADR-003 de autenticación, que vive en el repo `buscartrabajo` (`docs/adr/ADR-003-autenticacion.md`): el usuario sale del token y de ningún otro sitio.
+Es el punto 4 del ADR-003 de autenticación, que vive en el repo `buscartrabajo` (`docs/adr/ADR-003-authentication.md`): el usuario sale del token y de ningún otro sitio.
 
 **Qué lo protege**
 

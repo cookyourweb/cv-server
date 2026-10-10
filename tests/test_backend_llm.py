@@ -4,7 +4,7 @@ Historia de por que existe esto:
 - 29-ago-2026: se evaluo LiteLLM para sustituir la cascada escrita a mano.
   Medido en el venv: **+146 MB de disco, +5,96 s de `import` y 207 MB de RAM**
   frente a los 9 MB del proceso pelado. Para un servidor web pequeño no
-  compensa hoy (ver `docs/ADR-004-backend-llm.md`).
+  compensa hoy (ver `docs/ADR-004-llm-backend.md`).
 - Decision: el adaptador se escribe, se prueba y se documenta AHORA, y se
   enciende el dia que el plan de alojamiento lo aguante. Cambiar de backend
   tiene que ser una variable de entorno, no un refactor.

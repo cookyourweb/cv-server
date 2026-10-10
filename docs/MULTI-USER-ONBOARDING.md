@@ -80,7 +80,7 @@ El resto de este documento detalla CÓMO ejecutar esos pasos: qué se lee en vez
 las preguntas ancladas en fallos reales, y dónde vive el contrato.
 
 - **Qué produce la entrevista**: el bloque `PERFIL BASE` (paso 6) + el Master de hechos
-  (paso 7). Ver `PROMPT-ADAPTACION-CV.md`, sección *El PERFIL BASE es un CONTRATO de datos*.
+  (paso 7). Ver `CV-ADAPTATION-PROMPT.md`, sección *El PERFIL BASE es un CONTRATO de datos*.
 - **Por qué hace falta el PERFIL BASE**: sin ese bloque el prompt cae al fallback ("deriva las
   identidades de la experiencia") y **derivar obliga a interpretar**. De interpretar salió
   *AI Engineering Leader* en el CV de N-iX. La entrevista existe para que el modelo no tenga
@@ -281,7 +281,7 @@ veinte minutos de entrevista?"*
 ## FASE 4: Arquetipos
 
 **4.1**: *"¿A qué tipo de puesto apuntas?"* Se le enseñan los arquetipos que el prompt sabe
-distinguir (ver `PROMPT-ADAPTACION-CV.md`) y elige uno o varios.
+distinguir (ver `CV-ADAPTATION-PROMPT.md`) y elige uno o varios.
 
 **Limitación conocida**: los arquetipos están **escritos en el prompt** y son del sector
 tecnológico. Un perfil de diseño, ventas o administración no encaja en ninguno. Para abrir el
@@ -326,5 +326,5 @@ EVOLUCIÓN PROFESIONAL         (extraído de fechas y puestos)
 
 ---
 
-**Ver también**: `PROMPT-ADAPTACION-CV.md` (las reglas que esta entrevista alimenta),
+**Ver también**: `CV-ADAPTATION-PROMPT.md` (las reglas que esta entrevista alimenta),
 `../tests/test_proyeccion_arquetipos.py` (los invariantes del prompt).

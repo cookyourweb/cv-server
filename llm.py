@@ -12,7 +12,7 @@ DOS backends para la primera, elegidos con `LLM_BACKEND`:
 - `litellm`: la libreria estandar del sector. Escrita y probada, APAGADA por
   defecto. Cuesta +146 MB de disco, +5,96 s de arranque y 207 MB de RAM frente a
   los 9 MB del proceso pelado. Se enciende el dia que el alojamiento lo aguante,
-  sin tocar una linea. El porque esta medido en `docs/ADR-004-backend-llm.md`.
+  sin tocar una linea. El porque esta medido en `docs/ADR-004-llm-backend.md`.
 
 Los modelos se retiran sin avisar y la cadena de fallback casi nunca se ejercita,
 asi que puede llevar meses muerta sin que nadie lo note. Por eso los defaults de

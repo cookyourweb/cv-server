@@ -120,5 +120,5 @@ Ambas son puras y testeables sin tocar Notion (15 tests en
 
 ---
 
-**Relacionado:** `ADR-002-modelo-del-cv.md`, `ONBOARDING-MULTIUSUARIO.md`,
+**Relacionado:** `ADR-002-cv-model.md`, `MULTI-USER-ONBOARDING.md`,
 `test_usuario_multicuenta.py`.

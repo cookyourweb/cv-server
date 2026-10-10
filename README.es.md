@@ -7,7 +7,7 @@
 
 > Cómo se trabaja aquí (ciclo rojo-verde-commit, hook de pre-commit y reglas de
 > commit): [`CONTRIBUTING.md`](CONTRIBUTING.md). ¿Vienes a **usar** el servicio y no a
-> leer el código? La guía está en [`docs/GUIA-DE-USO.md`](docs/GUIA-DE-USO.md).
+> leer el código? La guía está en [`docs/USAGE-GUIDE.md`](docs/USAGE-GUIDE.md).
 
 **Qué es.** Un servicio que genera el CV y la carta de presentación adaptados a cada
 oferta con LLMs, diseñado para no inventar experiencia. Flask en producción, migrándose a FastAPI de
@@ -145,8 +145,8 @@ No hay hoy un delimitador ni un filtro de instrucciones sobre la oferta.
 
 | Qué | Dato | Dónde leerlo |
 |---|---|---|
-| Coste por petición | CV unos 0,05 USD y carta unos 0,013 USD con `claude-sonnet-4-6` (medición del 2-oct-2026, prompt de unos 9.600 tokens de entrada) | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
-| Por qué este modelo | Coste medido con `count_tokens` y fallos reales de Haiku | [ADR-002](docs/ADR-002-modelo-del-cv.md) |
+| Coste por petición | CV unos 0,05 USD y carta unos 0,013 USD con `claude-sonnet-4-6` (medición del 2-oct-2026, prompt de unos 9.600 tokens de entrada) | [ADR-002](docs/ADR-002-cv-model.md) |
+| Por qué este modelo | Coste medido con `count_tokens` y fallos reales de Haiku | [ADR-002](docs/ADR-002-cv-model.md) |
 | Cadena de respaldo | Claude, luego Groq, luego Gemini, luego Claude Haiku; `modelo_usado` dice cuál escribió | [`llm.py`](llm.py) |
 | Evaluación | `evaluacion.py` es pura (no llama a ningún modelo) y sus tests corren en la suite como red contra regresiones. Generar de verdad contra el LLM se lanza a mano | [`evaluacion.py`](evaluacion.py), [`tests/test_evaluacion.py`](tests/test_evaluacion.py) |
 | Modos de fallo conocidos | Descripción de oferta demasiado corta (CV genérico, avisado en `descripcion_oferta`); inflación del alcance del rol, no detectada; respuesta escrita por un modelo de respaldo | [Lo que los guardrails NO detectan](#lo-que-los-guardrails-no-detectan) |
@@ -159,25 +159,25 @@ No hay hoy un delimitador ni un filtro de instrucciones sobre la oferta.
 
 Documentadas como ADRs en [`docs/`](docs/):
 
-- **[ADR-001](docs/ADR-001-migracion-fastapi.md)**. Migración incremental a FastAPI.
+- **[ADR-001](docs/ADR-001-fastapi-migration.md)**. Migración incremental a FastAPI.
   Coexistencia en vez de big-bang: se extrae el núcleo (`generar_cv_core`) y las rutas
   Flask y FastAPI son wrappers finos sobre el mismo core. Errores como excepción tipada
   (`CVError`), contratos Pydantic, y Flask como red de seguridad hasta que FastAPI cubra
   el endpoint en verde.
-- **[ADR-002](docs/ADR-002-modelo-del-cv.md)**. Qué modelo escribe el CV, con coste
+- **[ADR-002](docs/ADR-002-cv-model.md)**. Qué modelo escribe el CV, con coste
   medido vía `count_tokens`, no estimado. Incluye un hallazgo que invirtió la decisión:
   un modelo más nuevo y con precio por token más bajo salía **igual de caro**, porque su
   tokenizador cuenta un 50% más de tokens para el mismo texto.
-- **[ADR-003](docs/ADR-003-usuario-multicuenta.md)**. Un usuario con varias cuentas de
+- **[ADR-003](docs/ADR-003-multi-account-user.md)**. Un usuario con varias cuentas de
   correo. Por qué duplicar el registro es un parche que se degrada en silencio, y por qué
   la verificación final tiene que ser exacta (el filtro `contains` de Notion es de
   subcadena: `vero@gmail.com` casa con `notvero@gmail.com`).
-- **[ADR-004](docs/ADR-004-backend-llm.md)**. LiteLLM se escribe y se deja apagado
+- **[ADR-004](docs/ADR-004-llm-backend.md)**. LiteLLM se escribe y se deja apagado
   (`LLM_BACKEND`). Se midió: +146 MB de disco, +5,96 s de arranque y 207 MB de RAM frente
   a 9 MB.
 
 > **La autenticación está en el ADR-003 del repo `buscartrabajo`**
-> (`docs/adr/ADR-003-autenticacion.md`), que no es el ADR-003 de arriba.
+> (`docs/adr/ADR-003-authentication.md`), que no es el ADR-003 de arriba.
 
 ### Deuda conocida
 
