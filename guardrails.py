@@ -159,6 +159,9 @@ def _tecnologias_en(texto: str) -> set:
     return encontradas
 
 
+tecnologias_en = _tecnologias_en
+
+
 def detectar_tecnologias_no_respaldadas(cv_texto: str, master_texto: str) -> list:
     """Tecnologias que el CV generado atribuye a la candidata y NO estan en su Master.
 
@@ -609,6 +612,11 @@ def _plano(texto: str) -> str:
     """Minusculas y sin acentos, para comparar sin que importen ni uno ni otro."""
     base = unicodedata.normalize("NFKD", texto or "")
     return "".join(c for c in base if not unicodedata.combining(c)).lower()
+
+
+# Public names for other modules (match.py). The private names stay as the
+# canonical definitions: the single-definition canary test counts them.
+plano = _plano
 
 
 _INFLACION_PATRONES = {

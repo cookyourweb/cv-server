@@ -23,8 +23,10 @@ import guardrails
 COBERTURA_MINIMA = 0.6
 MAX_HUECOS_TECNOLOGICOS = 2
 LARGO_EVIDENCIA = 160
+# Offer and master text come from untrusted sources: cap them before any regex.
+MAX_TEXTO = 20_000
 
-_ANIOS = re.compile(r"(\d{1,2})\s*\+?\s*(?:years?|anos)\b[^.\n]{0,40}?(?:experience|experiencia)")
+_ANIOS = re.compile(r"(\d{1,2}) ?\+? ?(?:years?|anos)\b[^.\n]{0,40}?(?:experience|experiencia)")
 
 _MODALIDADES = {
     "remoto": re.compile(r"\b(?:remote|remoto|teletrabajo)\b"),
@@ -42,8 +44,8 @@ _IDIOMAS = {
 _NOMBRES_IDIOMA = "|".join(n for v in _IDIOMAS.values() for n in v if len(n) > 2)
 _NIVEL = r"fluent|native|advanced|proficient|business level|fluido|nativo|avanzado|c1|c2"
 _IDIOMA_EXIGIDO = (
-    re.compile(rf"\b(?:{_NIVEL})\s+(?:in\s+|en\s+)?({_NOMBRES_IDIOMA})\b"),
-    re.compile(rf"\b({_NOMBRES_IDIOMA})\s*\(?\s*(?:{_NIVEL})\b"),
+    re.compile(rf"\b(?:{_NIVEL}) (?:(?:in|en) )?({_NOMBRES_IDIOMA})\b"),
+    re.compile(rf"\b({_NOMBRES_IDIOMA}) ?\(? ?(?:{_NIVEL})\b"),
 )
 
 # Soft skills: reported as not evaluable, never as covered or missing.
@@ -77,7 +79,7 @@ class Encaje:
 
 def _evidencia(master: str, tecnologia: str) -> str:
     for linea in master.splitlines():
-        if tecnologia in guardrails._tecnologias_en(linea):
+        if tecnologia in guardrails.tecnologias_en(linea):
             return linea.strip()[:LARGO_EVIDENCIA]
     return ""
 
@@ -85,7 +87,7 @@ def _evidencia(master: str, tecnologia: str) -> str:
 def _codigos_idioma(nombres) -> set:
     codigos = set()
     for n in nombres or []:
-        n = guardrails._plano(str(n)).strip()
+        n = guardrails.plano(str(n)).strip()
         for codigo, variantes in _IDIOMAS.items():
             if n in variantes:
                 codigos.add(codigo)
@@ -132,13 +134,19 @@ def _idiomas(e: Encaje, plano: str, perfil: dict) -> None:
 
 def evaluar(oferta_texto, perfil, master_texto) -> Encaje:
     """Compare an offer with the candidate. Never raises on empty or None."""
-    oferta, master = oferta_texto or "", master_texto or ""
+    # Collapse whitespace runs and cap the length BEFORE any regex: this keeps
+    # the patterns below linear on hostile input (ReDoS). The patterns assume
+    # single spaces, which is why the normalisation must come first.
+    # Newlines are kept (as single ones): _ANIOS stops at a line break.
+    oferta = re.sub(r"[^\S\n]+", " ", (oferta_texto or "")[:MAX_TEXTO * 4])
+    oferta = re.sub(r" ?\n[ \n]*", "\n", oferta)[:MAX_TEXTO]
+    master = (master_texto or "")[:MAX_TEXTO]
     perfil = perfil if isinstance(perfil, dict) else {}
     e = Encaje()
-    plano = guardrails._plano(oferta)
+    plano = guardrails.plano(oferta)
 
-    pedidas = sorted(guardrails._tecnologias_en(oferta))
-    respaldadas = guardrails._tecnologias_en(master)
+    pedidas = sorted(guardrails.tecnologias_en(oferta))
+    respaldadas = guardrails.tecnologias_en(master)
     for tec in pedidas:
         if tec in respaldadas:
             e.cubiertos.append({"requisito": tec, "evidencia": _evidencia(master, tec)})

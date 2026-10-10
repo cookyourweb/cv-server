@@ -142,3 +142,32 @@ def test_REQ_6_3_match_never_reaches_the_generators():
             if "match" in nombres:
                 importadores.add(f.name)
     assert importadores <= {"real_jobs.py"}, importadores
+
+
+def test_redos_whitespace_runs_in_the_offer_stay_fast():
+    import time
+    casos = [
+        "5" + " " * 50_000 + "years",
+        "5 years" + " " * 50_000 + "x",
+        "fluent" + " " * 50_000 + "english",
+        "english" + " " * 50_000 + "(" + " " * 50_000 + "x",
+    ]
+    for oferta in casos:
+        inicio = time.perf_counter()
+        match.evaluar(oferta, {"anios_experiencia": 3}, MASTER)
+        assert time.perf_counter() - inicio < 0.5
+
+
+def test_oversized_inputs_are_capped_before_matching():
+    # A requirement beyond the cap is ignored; one inside it is still found.
+    oferta = "Angular " + "x " * 30_000 + "Rust"
+    e = match.evaluar(oferta, {}, MASTER)
+    assert "Angular" in _tipos(e.cubiertos)
+    assert "Rust" not in _tipos(e.huecos)
+
+
+def test_match_uses_public_guardrails_helpers():
+    import guardrails
+    assert guardrails.tecnologias_en("Angular") == {"Angular"}
+    assert guardrails.plano("Ñandú") == guardrails._plano("Ñandú")
+    assert "guardrails._" not in (RAIZ / "match.py").read_text(encoding="utf-8")
