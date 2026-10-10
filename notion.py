@@ -220,7 +220,7 @@ def guardar_link_cv_en_notion(empresa: str, puesto: str, link_drive: str,
     llama aqui tiene timeout de 120s: con Sonnet la generacion se pasa de ahi,
     n8n aborta, y este servidor termina y sube el DOCX a Drive igualmente. El
     resultado es un CV huerfano — existe en Drive, y ni la ficha ni Veronica se
-    enteran. Paso tres veces el mismo dia (Cactus, Alan, Trivelta).
+    enteran. Paso tres veces el mismo dia (tres empresas distintas).
 
     El enlace se escribe donde se sube el fichero para que la invariante sea
     cierta por construccion: si el CV existe, el enlace existe. Lo que haga n8n

@@ -129,7 +129,7 @@ for _t in ("WordPress", "Drupal", "Shopify", "Strapi", "Contentful", "Magento", 
 for _t in ("Claude Code", "Cursor", "LangChain", "TensorFlow", "PyTorch",
            "Hugging Face", "Ollama", "Pandas", "NumPy", "Git", "Jira", "Figma"):
     _reg_tec(_t)
-# El nombre corto tambien cuenta: el CV de N-iX (24jul2026) colo "Copilot-class AI
+# El nombre corto tambien cuenta: el CV de la consultora de Europa del Este (24jul2026) colo "Copilot-class AI
 # systems" sin respaldo del Master y el guardrail no salto, porque solo estaba dado de
 # alta "GitHub Copilot" y el patron usa fronteras de palabra.
 _reg_tec("GitHub Copilot", "Copilot")
@@ -164,7 +164,7 @@ def detectar_tecnologias_no_respaldadas(cv_texto: str, master_texto: str) -> lis
 
     Regla de evidencia: una tecnologia entra en el CV solo si el Master la respalda.
     El prompt ya lo prohibe y el modelo lo hizo igual (PHP/Symfony en la oferta de
-    Tenth Revolution, 23jul2026), asi que se verifica la salida.
+    una agencia de reclutamiento, 23jul2026), asi que se verifica la salida.
 
     Sin master no se alerta: no hay fuente contra la que contrastar."""
     if not cv_texto or not master_texto:
@@ -174,7 +174,7 @@ def detectar_tecnologias_no_respaldadas(cv_texto: str, master_texto: str) -> lis
 
 # ── Guardrail de veracidad: skills declaradas sin respaldo ───────────────────
 # El detector de arriba solo ve lo que esta dado de alta en el catalogo, y lo que
-# el modelo copia es el stack NUEVO de cada oferta: en el CV de Koinly (11ago2026)
+# el modelo copia es el stack NUEVO de cada oferta: en el CV de una empresa de software fiscal cripto (11ago2026)
 # entraron enteros "React 19 · Tailwind (v4) · Radix UI · Mantine" y "TanStack
 # Query" sin que saltara nada, porque ninguno de los cuatro estaba en las 173
 # variantes. No es un descuido de la lista: una lista blanca no puede cubrir un
@@ -267,7 +267,7 @@ def detectar_skills_no_respaldadas(cv_texto: str, master_texto: str) -> list:
 
 # ── Guardrail del TITULAR: que no se salga del contrato del PERFIL BASE ──────────
 # El 24jul2026 se desplegaron las reglas del titular ancla y los DOS CV regenerados
-# (N-iX y Revolut) salieron con el orden de "Variante permitida", cuya condicion no
+# (la consultora de Europa del Este y la fintech de Londres) salieron con el orden de "Variante permitida", cuya condicion no
 # cumplia ninguna de las dos empresas. El modelo leyo el parentesis de la condicion
 # como ejemplos. Mismo patron que dejo pasar "Leader" en el guardrail de seniority.
 # Leccion medida: la regla en el prompt es DISCIPLINA; solo el detector es MECANISMO.

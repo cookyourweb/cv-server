@@ -2,9 +2,9 @@
 
 Caso real (27jul2026): de 15 ofertas pendientes en Notion, 9 traian entre 172 y 245
 caracteres de descripcion. No son ofertas: son el titular reformulado, y algunas con
-el metacomentario del scraper dentro. Ejemplo literal, de Personio:
+el metacomentario del scraper dentro. Ejemplo literal, de Acme Payroll:
 
-    "Senior Frontend Engineer en el dominio de Payroll (nominas) para Personio, con
+    "Senior Frontend Engineer en el dominio de Payroll (nominas) para Acme Payroll, con
      sede en Madrid o remoto desde Espana. Detalles limitados: oferta descubierta via
      LinkedIn, sin verificacion de estado por no tener acceso a Chrome/sesion de
      LinkedIn."
@@ -20,8 +20,8 @@ igual). Avisa, como `cifras_no_respaldadas` y `tecnologias_no_respaldadas`.
 """
 import server as srv
 
-# Descripcion real de Clipster (Remotive), recortada pero por encima del umbral.
-DESCRIPCION_BUENA = """About Clipster: Clipster is where brands and creators connect to
+# Descripcion real de Acme Creators (Remotive), recortada pero por encima del umbral.
+DESCRIPCION_BUENA = """About Acme Creators: Acme Creators is where brands and creators connect to
 turn views into profits. Clippers clip, remix, and post branded content on TikTok,
 YouTube, Instagram and X. We launched our platform in early 2025 and scaled to more
 than 100,000 creators. The role: we are looking for a Backend-Heavy Senior Engineer who
@@ -31,9 +31,9 @@ the React/Next.js frontend whenever it's the shortest path to delivering value. 
 mindset we hire for: intensity and grit, ambitious simplification, ownership and
 mission alignment, and AI readiness with modern tooling."""
 
-# Descripcion real de Personio (LinkedIn), literal.
+# Descripcion real de Acme Payroll (LinkedIn), literal.
 DESCRIPCION_POBRE = (
-    "Senior Frontend Engineer en el dominio de Payroll (nominas) para Personio, con "
+    "Senior Frontend Engineer en el dominio de Payroll (nominas) para Acme Payroll, con "
     "sede en Madrid o remoto desde Espana. Detalles limitados: oferta descubierta via "
     "LinkedIn, sin verificacion de estado por no tener acceso a Chrome/sesion de "
     "LinkedIn."

@@ -53,13 +53,13 @@ def test_el_prompt_se_rellena_sin_perder_las_reglas():
     texto = srv.PROMPT_CARTA.format(
         nombre="Veronica Serna Perez",
         contexto="CV master de prueba",
-        empresa="Mindera",
+        empresa="Acme Consulting",
         puesto="Senior AI Engineer",
         descripcion="Agentic AI",
         idioma_carta="ingles",
         instr_saludo='saludo formal generico ("Dear Hiring Team,")',
     )
-    assert "Mindera" in texto and "Veronica Serna Perez" in texto
+    assert "Acme Consulting" in texto and "Veronica Serna Perez" in texto
     assert "{" not in texto.replace("{{", "").replace("}}", ""), "quedan huecos sin rellenar"
     cifras = [int(n) for n in re.findall(r"(\d+)\s+palabras", texto)]
     assert max(cifras) <= 100

@@ -3,7 +3,7 @@
 Replica las CONDICIONES de rama del bucle de generar_docx_con_cabecera (deteccion
 sobre `linea` cruda, render sobre `sanear_tipografia(linea)`) usando la funcion
 REAL extraida del fichero, y lo alimenta con el texto del CV que salio MAL
-(Digital Talent Agency). Verifica:
+(una agencia de talento). Verifica:
   1. Ningun run renderizado contiene guion largo/medio ni flecha.
   2. Las lineas de empresa (con —) se siguen detectando -> conservan la negrita.
 """

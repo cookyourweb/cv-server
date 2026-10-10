@@ -1,7 +1,7 @@
 """TDD - el CV es una PROYECCION de la misma trayectoria, no una identidad nueva.
 
 Reglas formuladas por la usuaria el 24-jul-2026, despues de revisar el CV generado
-para N-iX ("Gen AI Adoption Lead (Engineering Productivity)"). El CV salio vendiendo
+para la consultora de Europa del Este ("lider de adopcion de IA en ingenieria"). El CV salio vendiendo
 Context Engineering, guardrails y JSON contracts a una oferta cuyo problema real era
 que 1.700 desarrolladores adoptaran IA en su trabajo diario.
 
@@ -163,12 +163,12 @@ def test_seniority_es_un_principio_no_una_lista_cerrada():
         "Los ejemplos de titulos prohibidos deben marcarse como lista ABIERTA; si no, el "
         "modelo la lee como exhaustiva y cuela cualquier termino que no aparezca."
     )
-    # El termino que se colo de verdad en el CV de N-iX.
+    # El termino que se colo de verdad en el CV de la consultora de Europa del Este.
     assert "Leader" in SRC, "'Leader' debe figurar entre los ejemplos: es el caso real que fallo."
 
 
 def test_ia_no_es_un_unico_arquetipo():
-    """Cinco arquetipos de IA. 'IA es IA' fue exactamente el fallo con N-iX."""
+    """Cinco arquetipos de IA. 'IA es IA' fue exactamente el fallo con la consultora de Europa del Este."""
     assert "ARQUETIPO" in SRC.upper(), "Falta el bloque de ARQUETIPO DE LA OFERTA en el prompt."
     arquetipos_ia = [
         "AI Engineer",
@@ -185,7 +185,7 @@ def test_ia_no_es_un_unico_arquetipo():
 
 
 def test_se_adapta_al_problema_de_la_empresa_no_al_producto_propio():
-    """La regla que resume el arreglo de N-iX."""
+    """La regla que resume el arreglo de la consultora de Europa del Este."""
     assert re.search(r"problema que (resuelve|tiene)", SRC, re.IGNORECASE), (
         "Falta la regla de adaptar al PROBLEMA que resuelve la empresa que contrata, "
         "no al producto que la candidata construyo."
@@ -197,11 +197,11 @@ def test_hechos_no_efectos():
     assert re.search(r"HECHOS,? NO EFECTOS", SRC, re.IGNORECASE), (
         "Falta la regla 'hechos, no efectos'."
     )
-    # Vocabulario de resultado no medido que se colo en el CV de N-iX.
+    # Vocabulario de resultado no medido que se colo en el CV de la consultora de Europa del Este.
     for termino in ("proven track record", "measurable"):
         assert termino in SRC.lower(), (
             f"El prompt deberia prohibir explicitamente {termino!r}: aparecio en el CV de "
-            "N-iX sin ningun dato en el Master que lo respaldase."
+            "la consultora de Europa del Este sin ningun dato en el Master que lo respaldase."
         )
 
 

@@ -1,6 +1,6 @@
 """TDD - verificar UNA A UNA las skills que el CV declara, sin catalogo.
 
-Caso real (11ago2026, oferta de Koinly): el CV generado colo en la linea de
+Caso real (11ago2026, oferta de una empresa de software fiscal cripto): el CV generado colo en la linea de
 skills "React 19 · Tailwind (v4) · Radix UI · Mantine" y "TanStack Query".
 Nada de eso esta en el Master: es el stack de la OFERTA.
 

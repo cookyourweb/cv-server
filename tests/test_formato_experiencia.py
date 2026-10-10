@@ -1,6 +1,6 @@
 """TDD - la EXPERIENCIA se lee como una trayectoria de PUESTOS, no de empresas.
 
-Caso real, 24jul2026. Verónica revisó los CV regenerados de N-iX y Revolut y detectó
+Caso real, 24jul2026. Verónica revisó los CV regenerados de la consultora de Europa del Este y la fintech de Londres y detectó
 que la experiencia no cuenta la historia: quiere leer "Tech Lead en Bitcode, Frontend en
 Mutualidad, antes diseñadora". El puesto es la narrativa de una carrera; la empresa es
 el contexto.

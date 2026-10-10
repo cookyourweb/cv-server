@@ -8,7 +8,7 @@ configuración correcta y devolver un texto peor.
 
 Los tres fallos de calidad de agosto de 2026 los cazó una persona leyendo:
 
-  1. Un resumen de 180 palabras (Social You). El prompt pedía dos párrafos.
+  1. Un resumen de 180 palabras (una agencia de marketing digital). El prompt pedía dos párrafos.
   2. La carta ignoró OCHO AÑOS de Azure cuando la oferta lo nombraba cinco
      veces, y escribió "Azure is the gap I am ready to close".
   3. Un CV con la empresa equivocada: "AppCast" no es un empleador, es la
@@ -208,7 +208,7 @@ def casos_guardados() -> list[Caso]:
             # 29-ago-2026. La oferta nombraba Azure cinco veces. La carta escribió
             # "Azure is the gap I am ready to close" con ocho años de Azure detrás.
             nombre="azure-fortaleza-omitida",
-            empresa="Nerdio",
+            empresa="Acme Cloud",
             oferta="Strong Azure experience required. Azure DevOps, Azure AD, App Services.",
             master=_MASTER_VERO,
             debe_aparecer=["Azure"],
@@ -216,18 +216,18 @@ def casos_guardados() -> list[Caso]:
         Caso(
             # 29-ago-2026. Cuatro ofertas archivadas como "AppCast", que es la
             # plataforma que distribuye el anuncio. Las empresas reales eran
-            # Lodgify, Plain Concepts, Accenture y Fortra.
+            # cuatro empleadores distintos.
             nombre="appcast-intermediario",
-            empresa="Lodgify",
+            empresa="Acme Rentals",
             oferta="Senior AI Engineer. Python, LLM.",
             master=_MASTER_VERO,
-            no_debe_aparecer=["AppCast", "E-Frontiers"],
+            no_debe_aparecer=["AppCast", "Acme Tech"],
         ),
         Caso(
-            # 29-ago-2026, Social You. 180 palabras en dos párrafos densos porque
+            # 29-ago-2026, agencia de marketing digital. 180 palabras en dos párrafos densos porque
             # el prompt pedía `2 full paragraphs (4-6 lines each)`.
-            nombre="resumen-social-you",
-            empresa="Social You",
+            nombre="resumen-agencia-marketing",
+            empresa="Acme Marketing",
             oferta="Senior GenAI Engineer. LLM en producción, evaluación.",
             master=_MASTER_VERO,
             max_palabras_resumen=80,

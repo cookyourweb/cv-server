@@ -1,7 +1,7 @@
 """TDD - detectar tecnologias que el CV generado atribuye a la candidata y que
 NO estan en su CV Master.
 
-Caso real (23jul2026): la oferta de Tenth Revolution pedia "entornos PHP/Symfony o
+Caso real (23jul2026): la oferta de una agencia de reclutamiento pedia "entornos PHP/Symfony o
 templating server-side (Twig, Blade)". Veronica NO tiene esa experiencia. El CV
 generado coló "experiencia en templating server-side (contexto de integracion con
 arquitecturas PHP/Symfony)": una formula ambigua que no es exactamente mentira pero
@@ -98,7 +98,7 @@ def test_palabra_normal_que_contiene_el_nombre_de_una_tecnologia_no_se_marca():
 
 
 # ── Alias de herramientas de IA: el catalogo registraba el nombre largo y solo ese ──
-# Caso real, 24jul2026, CV de N-iX: el CV colo "integrating Copilot-class AI systems".
+# Caso real, 24jul2026, CV de la consultora de Europa del Este: el CV colo "integrating Copilot-class AI systems".
 # "Copilot" NO estaba en el Master. El guardrail no salto porque el catalogo daba de
 # alta "GitHub Copilot" y el patron usa fronteras de palabra, asi que "Copilot" a secas
 # no matcheaba. No es un fallo de la IA: es un alias que faltaba.
