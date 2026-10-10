@@ -34,7 +34,7 @@ State when it was detected (28 Jul 2026):
 | `Perfil` | 3 lines (AI, RAG, agents) | "Senior frontend developer" |
 | `Stack` | React, TS, Vue, Node, Python, AI/ML… | only "React Typescript" |
 
-The PANEL Sistemas CV was generated against the second record. Consequences, all
+The CV of an IT services company was generated against the second record. Consequences, all
 in the document a recruiter sees:
 
 1. Header with `madrid` and `alias@example.com`.

@@ -167,7 +167,7 @@ identity as her public LinkedIn profile.
 #### The seniority guardrail is a PRINCIPLE, not a list
 
 The previous rule enumerated *Principal, Staff, Head, Director, Architect, Distinguished,
-Manager* and people *"Lead"*. The N-iX CV came out with **"AI Engineering Leader"** and nothing
+Manager* and people *"Lead"*. The Eastern European consultancy CV came out with **"AI Engineering Leader"** and nothing
 fired: *Leader* was not in the list.
 
 Now the rule states the principle (**do not raise the hierarchical level, the authority
@@ -249,7 +249,7 @@ of the position so that it stays defensible.
 
 > Rewritten on **24 July 2026**. Until that date this section listed five
 > categories and one of them was **"AI"**, just like that. That single bucket was exactly the
-> failure of the N-iX CV. Also, the list documented here had not existed in the code for a
+> failure of the Eastern European consultancy CV. Also, the list documented here had not existed in the code for a
 > long time: the real prompt only said "prioritize the skills the offer values", generic.
 > Now the block really exists and `test_proyeccion_arquetipos.py`
 > fails if someone collapses the AI archetypes again.
@@ -282,7 +282,7 @@ toward one archetype or another without inventing anything.
 **Archetype limit**: if the Master does not back the archetype of the offer, it is not
 forced. An archetype without evidence is an invitation to invent.
 
-*Real case, 24 July 2026, N-iX (Gen AI Adoption Lead, Engineering Productivity).*
+*Real case, 24 July 2026, the Eastern European consultancy (AI adoption lead role).*
 The offer asked for driving the adoption of Copilot, Claude and Cursor in engineering teams
 through workshops, pairing and productivity measurement. The CV came out selling Context
 Engineering, guardrails, JSON contracts and deterministic retrieval: an *AI Engineer* CV
@@ -300,7 +300,7 @@ Unmeasured result vocabulary is forbidden when the Master does not back it: *pro
 track record*, *measurable*, *impact*, *transformation*, *drove*, *boosted*,
 *accelerated*.
 
-*Why*: the N-iX CV claimed *"Proven track record translating emerging AI
+*Why*: the Eastern European consultancy CV claimed *"Proven track record translating emerging AI
 capabilities into measurable team productivity gains"* and *"measuring adoption impact"*.
 There is not a single productivity metric in the Master. A concrete fact without adjectives
 sells better than an effect declared without proof, and it is also defensible in an interview.
@@ -309,7 +309,7 @@ sells better than an effect declared without proof, and it is also defensible in
 A technology that the Master lists under SKILLS (`Habilidades`) but **does not attribute to a specific
 position** cannot appear as an achievement of that position. Under Skills it is legitimate.
 
-*Why*: the N-iX CV attributed *Jest, React Testing Library and CI/CD* to the Bitcode position.
+*Why*: the Eastern European consultancy CV attributed *Jest, React Testing Library and CI/CD* to the Bitcode position.
 The Master has them under *Architecture & Quality*, not tied to that position. The
 technology is real, the ATTRIBUTION is invented, and the technology detector does not see it
 because it only compares presence, not which position it is assigned to.
@@ -319,7 +319,7 @@ The evidence rule prevents inventing. This one prevents the opposite: leaving ou
 relevant. If the offer asks for or mentions an area and the Master has a specific technology in
 that area, that technology MUST appear under Skills and, if it fits, in a bullet.
 
-Real case, 23 July 2026, Revolut (Applied AI Engineer, Python, AI): the CV omitted
+Real case, 23 July 2026, a London fintech: the CV omitted
 **FastAPI** both times it was generated, even though it was in the Master and was exactly what
 the offer values. It was not chance: the prompt did not have the rule, only the one about not inventing. Now it does.
 
@@ -352,7 +352,7 @@ recruiter notices it and it costs credibility.
 ### The headline does not echo the posting
 The identity in the headline comes from the `PERFIL BASE` exactly as written, without qualifiers from the
 title of the offer. If the offer is titled *Applied AI Engineer* and the `PERFIL BASE` says
-*AI Engineer*, the headline uses *AI Engineer*. Real case: Revolut, the headline came out *Applied
+*AI Engineer*, the headline uses *AI Engineer*. Real case: a London fintech, the headline came out *Applied
 AI Engineer*, copying the "Applied" from the posting.
 
 ### `PASO 3`: Anti-AI review
@@ -387,7 +387,7 @@ Master uses one variant and the CV another, there is no false alarm.
 **Evidence rule (technologies):** a technology goes into the CV only if the Master
 backs it. It does not matter that the offer asks for it.
 
-Real case, 23 July 2026, Tenth Revolution offer: the offer asked for "PHP/Symfony
+Real case, 23 July 2026, recruitment agency offer: the offer asked for "PHP/Symfony
 environments or server-side templating (Twig, Blade)". Verónica does not have that experience. The
 generated CV came out with *"experience in server-side templating (integration context with
 PHP/Symfony architectures)"*. It is not exactly a lie, and in a recruiter's inbox it
@@ -399,7 +399,7 @@ adds a new technology, nothing needs to be touched: the detector compares agains
 not against an allowed list.
 
 **A missing alias is a hole in the guardrail.** Real case, 24 July 2026,
-N-iX: the CV let through *"integrating Copilot-class AI systems"* without backing from the Master and the
+the Eastern European consultancy: the CV let through *"integrating Copilot-class AI systems"* without backing from the Master and the
 detector said nothing. The catalog registered **"GitHub Copilot"** and the pattern uses
 word boundaries, so a bare **"Copilot" did not match**. It was not a failure
 of the model or of the rule: it was an alias that was missing. Fixed with

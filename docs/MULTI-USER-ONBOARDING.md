@@ -90,7 +90,7 @@ the questions anchored in real failures, and where the contract lives.
   (step 7). See `CV-ADAPTATION-PROMPT.md`, section *The PERFIL BASE is a data CONTRACT*.
 - **Why the PERFIL BASE is needed**: without that block the prompt falls back to the fallback ("derive the
   identities from the experience") and **deriving forces interpretation**. Interpretation produced
-  *AI Engineering Leader* in the N-iX CV. The interview exists so that the model does not
+  *AI Engineering Leader* in the Eastern European consultancy CV. The interview exists so that the model does not
   have to deduce anything.
 
 ---
@@ -216,7 +216,7 @@ Goes to: `Variante permitida`
 
 > **This is the most delicate question of the whole sign-up.** On 24 Jul 2026 Verónica's condition
 > said *"companies whose main product is AI (OpenAI, Anthropic,
-> Cohere...)"*, and the model applied the variant **to N-iX and to Revolut**, which are neither of
+> Cohere...)"*, and the model applied the variant **to the Eastern European consultancy and to the London fintech**, which are neither of
 > those. It read the parenthesis as examples, not as a closed list. It is the same pattern that
 > let *"Leader"* through the seniority guardrail.
 >
@@ -245,7 +245,7 @@ team?"*
 
 **2.2 · Technologies per position**: *"Of these that appear on your CV, which did you use **in this
 specific position**?"*
-*Prevents*: the GraphQL failure. In the Revolut CV the model wrote *"implemented
+*Prevents*: the GraphQL failure. In the London fintech CV the model wrote *"implemented
 GraphQL and webhook patterns"* in the Bitcode position, when the Master only has them under
 skills without tying them to any position. The technology was real; **the attribution was invented**.
 
@@ -276,7 +276,7 @@ twenty minutes of interview?"*
 > undetectable: the Master is the axiom.
 >
 > On 24 Jul 2026 both of Verónica's Masters claimed *"technical training for companies"*.
-> She had not yet taught any course to companies. No detector could see it, and a cover letter to N-iX
+> She had not yet taught any course to companies. No detector could see it, and a cover letter to the Eastern European consultancy
 > claiming it had already come out of that. She stopped it, not the system.
 >
 > **The evidence rule protects the offer-to-CV boundary. It does not protect the

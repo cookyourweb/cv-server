@@ -71,7 +71,7 @@ curl -X POST http://localhost:8000/generar-cv \
   -H "Content-Type: application/json" \
   -d '{
     "email": "principal@example.com",
-    "empresa": "Hostaway",
+    "empresa": "Acme Rentals",
     "puesto": "Senior Frontend Engineer",
     "descripcion": "React, TypeScript, design systems, testing",
     "idioma": "en"

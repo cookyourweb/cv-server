@@ -33,9 +33,9 @@ The rules that were broken **were already written in the prompt**. No rule is mi
 
 | Prompt rule | Where it is | How it was broken |
 |---|---|---|
-| Ban on vague quantifiers ("millions of", "thousands of") | `PROMPT_CV`, rule 4bis (PROHIBICIÓN DE CIFRAS, the figures ban) | Malwarebytes CV: *"platform handling **millions of transactions**"* |
-| Write the ACTION, never the attributed effect | `PROMPT_CV`, style block (Escribe la ACCIÓN) | Revolut: *"reducing manual effort and error rates"*. Malwarebytes: *"improving operational efficiency"* |
-| EVIDENCE RULE (only what the Master backs) | `PROMPT_CV`, rule 1 (REGLA DE EVIDENCIA) | Malwarebytes: *"I have **designed backend services**"*. The Master only says *"Integrated REST APIs and coordinated data contracts **with** the backend team"* |
+| Ban on vague quantifiers ("millions of", "thousands of") | `PROMPT_CV`, rule 4bis (PROHIBICIÓN DE CIFRAS, the figures ban) | US cybersecurity vendor CV: *"platform handling **millions of transactions**"* |
+| Write the ACTION, never the attributed effect | `PROMPT_CV`, style block (Escribe la ACCIÓN) | London fintech CV: *"reducing manual effort and error rates"*. US cybersecurity vendor CV: *"improving operational efficiency"* |
+| EVIDENCE RULE (only what the Master backs) | `PROMPT_CV`, rule 1 (REGLA DE EVIDENCIA) | US cybersecurity vendor CV: *"I have **designed backend services**"*. The Master only says *"Integrated REST APIs and coordinated data contracts **with** the backend team"* |
 | The headline is a real identity, not the job title | HEADLINE RULES | With the title `Senior Product Engineer (Fullstack)` the headline came out duplicated and with the job title inside; with `Applied AI Engineer` it came out perfect **in the same commit** |
 
 **The last case is the diagnosis:** same code, same commit in PROD, different results
@@ -123,7 +123,7 @@ between Haiku 4.5 and Sonnet 4.6 in this code.**
    - claims about role scope not backed by the Master ("designed backend
      services", "led X across distributed systems")
    - a duplicated headline or one with the job title inside
-4. Compare against the raw reference CV of 25 Jul (the Malwarebytes one),
+4. Compare against the raw reference CV of 25 Jul (US cybersecurity vendor one),
    which is the base case with Haiku.
 
 ## Pending

@@ -36,7 +36,7 @@ was contained in the correct form. Seeing it red first is what exposes that.
 
 In `tests/`, at the root of the repository. Not next to the code they test.
 
-It is the convention already used in the osapiens technical test, and here it was adopted
+It is the convention already used in the technical test of a German SaaS company, and here it was adopted
 on 28 Aug 2026 by moving 23 test files out of the root. The move exposed two
 tests that depended on being physically next to the source they read: a
 dependency nobody knew existed because they had never been moved.
