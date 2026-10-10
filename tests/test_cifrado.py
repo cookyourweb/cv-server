@@ -109,3 +109,48 @@ def test_errors_never_contain_the_content():
     with pytest.raises(cifrado.ErrorDeCifrado) as e:
         cifrado.descifrar(version, nonce, cifrado_, U2, "es")
     assert "CANARIO" not in str(e.value) and e.value.__cause__ is None
+
+
+def test_duplicate_key_versions_are_rejected(monkeypatch):
+    monkeypatch.setenv("CV_CLAVES", f"1:{_clave(1)},1:{_clave(2)}")
+    with pytest.raises(cifrado.ErrorDeCifrado, match="Invalid key configuration"):
+        cifrado.cifrar("secreto", U1, "es")
+
+
+@pytest.mark.parametrize("usuario", [None, "", "   ", 0, b"abc", 42])
+def test_invalid_user_id_fails_closed_on_encrypt_and_decrypt(usuario):
+    with pytest.raises(cifrado.ErrorDeCifrado, match="Invalid user identifier"):
+        cifrado.cifrar("secreto", usuario, "es")
+    version, nonce, cifrado_ = cifrado.cifrar("secreto", U1, "es")
+    with pytest.raises(cifrado.ErrorDeCifrado, match="Invalid user identifier"):
+        cifrado.descifrar(version, nonce, cifrado_, usuario, "es")
+
+
+def test_uuid_objects_are_accepted_as_user_id():
+    import uuid
+    uid = uuid.UUID(U1)
+    fila = cifrado.cifrar("secreto", uid, "es")
+    assert cifrado.descifrar(*fila, U1, "es") == "secreto"
+
+
+@pytest.mark.parametrize("claves,activa,mensaje", [
+    (None, "1", "No encryption keys configured"),
+    (f"1:{_clave(1)}", None, "No active key configured"),
+    (f"1:{_clave(1)}", "2", "The active key is not in the keyring"),
+])
+def test_error_messages_are_in_english(monkeypatch, claves, activa, mensaje):
+    for nombre, valor in (("CV_CLAVES", claves), ("CV_CLAVE_ACTIVA", activa)):
+        if valor is None:
+            monkeypatch.delenv(nombre, raising=False)
+        else:
+            monkeypatch.setenv(nombre, valor)
+    with pytest.raises(cifrado.ErrorDeCifrado, match=mensaje):
+        cifrado.cifrar("secreto", U1, "es")
+
+
+def test_decrypt_error_messages_are_in_english():
+    version, nonce, cifrado_ = cifrado.cifrar("secreto", U1, "es")
+    with pytest.raises(cifrado.ErrorDeCifrado, match="Unknown key version"):
+        cifrado.descifrar(9, nonce, cifrado_, U1, "es")
+    with pytest.raises(cifrado.ErrorDeCifrado, match="Decryption failed"):
+        cifrado.descifrar(version, nonce, cifrado_, U2, "es")

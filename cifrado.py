@@ -13,6 +13,7 @@ Messages are generic on purpose: they never carry content, ids or key material.
 import base64
 import binascii
 import os
+import uuid
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -32,13 +33,15 @@ def _llavero() -> dict:
         version, sep, valor = par.partition(":")
         try:
             clave = base64.b64decode(valor, validate=True)
-            llavero[int(version)] = clave
+            numero = int(version)
         except (ValueError, binascii.Error):
-            raise ErrorDeCifrado("Configuracion de claves invalida") from None
-        if not sep or len(clave) != LARGO_CLAVE:
-            raise ErrorDeCifrado("Configuracion de claves invalida")
+            raise ErrorDeCifrado("Invalid key configuration") from None
+        # A repeated version would silently shadow another key: refuse it.
+        if not sep or len(clave) != LARGO_CLAVE or numero in llavero:
+            raise ErrorDeCifrado("Invalid key configuration")
+        llavero[numero] = clave
     if not llavero:
-        raise ErrorDeCifrado("Sin claves de cifrado configuradas")
+        raise ErrorDeCifrado("No encryption keys configured")
     return llavero
 
 
@@ -46,13 +49,18 @@ def _version_activa(llavero: dict) -> int:
     try:
         activa = int(os.environ.get("CV_CLAVE_ACTIVA", ""))
     except ValueError:
-        raise ErrorDeCifrado("Sin clave activa configurada") from None
+        raise ErrorDeCifrado("No active key configured") from None
     if activa not in llavero:
-        raise ErrorDeCifrado("La clave activa no esta en el llavero")
+        raise ErrorDeCifrado("The active key is not in the keyring")
     return activa
 
 
 def _aad(usuario_id, idioma) -> bytes:
+    # Fail closed: an empty or mistyped owner would bind data to a meaningless AAD.
+    if isinstance(usuario_id, uuid.UUID):
+        usuario_id = str(usuario_id)
+    if not isinstance(usuario_id, str) or not usuario_id.strip():
+        raise ErrorDeCifrado("Invalid user identifier")
     return f"cv_master:{usuario_id}:{idioma}".encode("utf-8")
 
 
@@ -70,14 +78,14 @@ def descifrar(clave_version: int, nonce: bytes, cifrado: bytes, usuario_id, idio
     """Decrypt with the key version stored in the row."""
     llavero = _llavero()
     if clave_version not in llavero:
-        raise ErrorDeCifrado("Version de clave desconocida")
+        raise ErrorDeCifrado("Unknown key version")
     if len(nonce) != LARGO_NONCE:
-        raise ErrorDeCifrado("No se pudo descifrar")
+        raise ErrorDeCifrado("Decryption failed")
     try:
         plano = AESGCM(llavero[clave_version]).decrypt(
             bytes(nonce), bytes(cifrado), _aad(usuario_id, idioma))
     except InvalidTag:
-        raise ErrorDeCifrado("No se pudo descifrar") from None
+        raise ErrorDeCifrado("Decryption failed") from None
     return plano.decode("utf-8")
 
 
