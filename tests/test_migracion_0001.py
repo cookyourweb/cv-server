@@ -67,6 +67,7 @@ def _rechaza(c, sql, **params):
             c.execute(text(sql), params)
 
 
+@pytest.mark.bd_destructiva
 def test_upgrade_downgrade_upgrade_is_clean(motor, url_de_pruebas):
     try:
         _alembic(command.downgrade, "base", url_de_pruebas)

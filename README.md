@@ -283,6 +283,16 @@ export DATABASE_URL_PRUEBAS=...
 .venv/bin/python -m pytest -q -m bd
 ```
 
+One test runs `alembic downgrade base` (it drops every table and then restores them).
+It is marked `bd_destructiva` and is skipped unless you opt in explicitly in the command
+environment, never in `.env`:
+
+```bash
+ALLOW_DESTRUCTIVE_DB_TESTS=1 .venv/bin/python -m pytest -q -m bd
+```
+
+Only do this against a disposable database.
+
 ## Tests
 
 ```bash

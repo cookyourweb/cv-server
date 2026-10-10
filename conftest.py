@@ -27,15 +27,27 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "bd: needs a real PostgreSQL (DATABASE_URL_PRUEBAS); skipped when it is unset"
     )
+    config.addinivalue_line(
+        "markers",
+        "bd_destructiva: drops schema objects (alembic downgrade base); "
+        "skipped unless ALLOW_DESTRUCTIVE_DB_TESTS=1 is set in the environment",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
-    if _url_de_pruebas():
-        return
-    omitir = pytest.mark.skip(reason="DATABASE_URL_PRUEBAS is not set")
-    for item in items:
-        if "bd" in item.keywords:
-            item.add_marker(omitir)
+    if not _url_de_pruebas():
+        omitir = pytest.mark.skip(reason="DATABASE_URL_PRUEBAS is not set")
+        for item in items:
+            if "bd" in item.keywords:
+                item.add_marker(omitir)
+    if os.getenv("ALLOW_DESTRUCTIVE_DB_TESTS") != "1":
+        omitir = pytest.mark.skip(
+            reason="destructive DB test: set ALLOW_DESTRUCTIVE_DB_TESTS=1 (and point "
+            "DATABASE_URL_PRUEBAS at a disposable database) to run it"
+        )
+        for item in items:
+            if "bd_destructiva" in item.keywords:
+                item.add_marker(omitir)
 
 
 @pytest.fixture(scope="session")
