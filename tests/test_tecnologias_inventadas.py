@@ -80,7 +80,7 @@ def test_texto_sin_tecnologias_no_marca_nada():
         "Responsable del rediseño de la experiencia de usuario", MASTER) == []
 
 
-def test_regresion_la_frase_exacta_del_cv_de_tenth_revolution():
+def test_regresion_la_frase_exacta_del_cv_de_la_agencia_de_seleccion():
     """La frase que hubo que borrar a mano el 23jul2026.
 
     Es la prueba de que el guardrail pilla la formula ambigua, no solo el
