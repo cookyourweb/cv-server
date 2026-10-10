@@ -1,67 +1,67 @@
-# CHANGELOG técnico: cv-server
+# Technical CHANGELOG: cv-server
 
-Doc técnico interno del `cv-server` (repo `github.com/cookyourweb/cv-server`, rama `main`).
-La guía de USUARIO (registro y uso diario) es `docs/USAGE-GUIDE.md`; el `README.md` presenta
-el proyecto. Este archivo es el rastro
-de POR QUÉ el código hace lo que hace: decisiones, fixes y trampas que no se ven leyendo
-el código a secas.
+Internal technical doc for `cv-server` (repo `github.com/cookyourweb/cv-server`, branch `main`).
+The USER guide (sign-up and daily use) is `docs/USAGE-GUIDE.md`; the `README.md` presents
+the project. This file is the trail
+of WHY the code does what it does: decisions, fixes and traps that cannot be seen by reading
+the code alone.
 
-Servicio en producción: `https://cv-server-ggd8.onrender.com` (Render).
+Service in production: `https://cv-server-ggd8.onrender.com` (Render).
 
-> **Render NO lee el `Procfile`.** Tiene su propio *Start Command* guardado en
-> el panel (Settings, Start Command), y ese es el que manda. El 28-ago-2026 el
-> renombrado a `server.py` tumbo un despliegue por esto: el Procfile decia
-> `server:app` y el panel seguia diciendo `cv_server_railway:app`.
-> Si cambias el modulo o los flags de arranque, **hay que cambiarlo en los dos
-> sitios**. El comando bueno, con el timeout que necesita la generacion de CV:
+> **Render does NOT read the `Procfile`.** It has its own *Start Command* stored in
+> the dashboard (Settings, Start Command), and that is the one that rules. On 28 Aug 2026 the
+> rename to `server.py` took down a deploy because of this: the Procfile said
+> `server:app` and the dashboard still said `cv_server_railway:app`.
+> If you change the module or the start flags, **it has to be changed in both
+> places**. The good command, with the timeout that CV generation needs:
 >
 >     gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120
-Archivo principal: `server.py`. Ranking de ofertas: `real_jobs.py`.
+Main file: `server.py`. Offer ranking: `real_jobs.py`.
 
-**28-ago-2026. El fichero principal se partio en seis y se renombro.** Era
-`cv_server_railway.py` con 2.640 lineas; ahora es `server.py` con 1.165 y los
-endpoints. Lo demas vive en `guardrails.py`, `notion.py`, `drive.py`,
-`docx_render.py`, `llm.py` y `templates/alta.html` (borrada el 7-oct). El nombre viejo decia
-*Railway* y el servicio corre en **Render** desde hace meses.
+**28 Aug 2026. The main file was split into six and renamed.** It was
+`cv_server_railway.py` with 2,640 lines; now it is `server.py` with 1,165 and the
+endpoints. The rest lives in `guardrails.py`, `notion.py`, `drive.py`,
+`docx_render.py`, `llm.py` and `templates/alta.html` (deleted on 7 Oct). The old name said
+*Railway* and the service has been running on **Render** for months.
 
-**Decisiones de arquitectura:** ver `docs/ADR-*`.
-- [`docs/ADR-001-fastapi-migration.md`](docs/ADR-001-fastapi-migration.md): migración incremental de Flask a FastAPI + Pydantic (core puro + wrapper HTTP, coexistencia, TDD).
-- [`docs/ADR-002-cv-model.md`](docs/ADR-002-cv-model.md): qué modelo escribe el CV.
-- [`docs/ADR-003-multi-account-user.md`](docs/ADR-003-multi-account-user.md): un usuario con varios emails.
-- [`docs/ADR-004-llm-backend.md`](docs/ADR-004-llm-backend.md): LiteLLM escrito y apagado.
-- La autenticación (inicio de sesión, invitación, clave de máquina) está en el ADR-003 del repo `buscartrabajo` (`docs/adr/ADR-003-authentication.md`), que no es el ADR-003 de este repo.
+**Architecture decisions:** see `docs/ADR-*`.
+- [`docs/ADR-001-fastapi-migration.md`](docs/ADR-001-fastapi-migration.md): incremental migration from Flask to FastAPI + Pydantic (pure core + HTTP wrapper, coexistence, TDD).
+- [`docs/ADR-002-cv-model.md`](docs/ADR-002-cv-model.md): which model writes the CV.
+- [`docs/ADR-003-multi-account-user.md`](docs/ADR-003-multi-account-user.md): one user with several emails.
+- [`docs/ADR-004-llm-backend.md`](docs/ADR-004-llm-backend.md): LiteLLM written and switched off.
+- Authentication (sign-in, invitation, machine key) is in ADR-003 of the `buscartrabajo` repo (`docs/adr/ADR-003-authentication.md`), which is not the ADR-003 of this repo.
 
 ---
 
-## Modelos LLM (estado actual, 7-oct-2026)
+## LLM models (current state, 7 Oct 2026)
 
-Lo que usa producción. Los valores por defecto del código están en `llm.py`; el entorno
-los sobrescribe, y `/health` (campo `modelos`) muestra los activos.
+What production uses. The code defaults are in `llm.py`; the environment
+overrides them, and `/health` (field `modelos`) shows the active ones.
 
-| Tarea | Modelo | Variable |
+| Task | Model | Variable |
 |---|---|---|
-| CV adaptado (`/generar-cv`) | `claude-sonnet-4-6` | `CV_MODEL` |
-| Carta (`/generar-carta`) | `claude-sonnet-4-6` | `CARTA_MODEL` |
-| Fallback del CV y la carta (`call_llm_calidad` y `call_llm`) | Si Claude falla: Groq (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku. `modelo_usado` informa del modelo que la escribió de verdad | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
-| Ranking de ofertas (`real_jobs.rankear_con_groq`) | `openai/gpt-oss-120b` (Groq), con fallback heurístico determinista | `GROQ_MODEL` |
-| Texto general (`call_llm`) | Groq, luego Gemini, luego Claude Haiku 4.5 | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
+| Adapted CV (`/generar-cv`) | `claude-sonnet-4-6` | `CV_MODEL` |
+| Cover letter (`/generar-carta`) | `claude-sonnet-4-6` | `CARTA_MODEL` |
+| CV and letter fallback (`call_llm_calidad` and `call_llm`) | If Claude fails: Groq (`openai/gpt-oss-120b`), then Gemini, then Claude Haiku. `modelo_usado` reports the model that actually wrote it | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
+| Offer ranking (`real_jobs.rankear_con_groq`) | `openai/gpt-oss-120b` (Groq), with a deterministic heuristic fallback | `GROQ_MODEL` |
+| General text (`call_llm`) | Groq, then Gemini, then Claude Haiku 4.5 | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
 
-Notas:
+Notes:
 
-- El valor por defecto de `CV_MODEL` en el código sigue siendo `claude-haiku-4-5`. Producción
-  usa Sonnet porque el entorno lo fija así (ADR-002).
-- `llama-3.3-70b-versatile`, que rankeaba ofertas hasta agosto, está **retirado**: Groq lo
-  dio de baja el 16-ago-2026 y el ranking usa ahora `openai/gpt-oss-120b`.
-- Hasta el ADR-002 (27-jul-2026) el CV lo escribía Claude Haiku 4.5.
+- The default value of `CV_MODEL` in the code is still `claude-haiku-4-5`. Production
+  uses Sonnet because the environment sets it that way (ADR-002).
+- `llama-3.3-70b-versatile`, which ranked offers until August, is **retired**: Groq
+  discontinued it on 16 Aug 2026 and the ranking now uses `openai/gpt-oss-120b`.
+- Until ADR-002 (27 Jul 2026) the CV was written by Claude Haiku 4.5.
 
-**El prompt que adapta el CV y la carta está documentado en
-[`docs/CV-ADAPTATION-PROMPT.md`](./docs/CV-ADAPTATION-PROMPT.md)**: estructura en 3 pasos,
-HEADLINE RULES, posicionamiento por tipo de oferta y las reglas anti-IA. Léelo antes de
-tocar el f-string del prompt en `server.py`.
+**The prompt that adapts the CV and the letter is documented in
+[`docs/CV-ADAPTATION-PROMPT.md`](./docs/CV-ADAPTATION-PROMPT.md)**: 3-step structure,
+HEADLINE RULES, positioning by offer type and the anti-AI rules. Read it before
+touching the prompt f-string in `server.py`.
 
 ---
 
-## Octubre 2026
+## October 2026
 
 ### 10-oct · Neon Postgres foundation for sign-up with CV
 
@@ -87,136 +87,136 @@ tocar el f-string del prompt en `server.py`.
   counts them.
 - Deleting a user cascades to emails, profile, CV masters and consents in one statement.
 
-### 7-oct · Inicio de sesión con Google para invitadas
+### 7-oct · Google sign-in for invited users
 
-**Qué cambió**
+**What changed**
 
-- Nueva ruta `GET /yo`: recibe un token de identidad de Google (`Authorization: Bearer`)
-  y devuelve `{sub, email, nombre}` si la persona está invitada.
-- Nuevo módulo `autenticacion.py` que valida el token: solo RS256, firma contra las
-  claves públicas de Google (JWKS en caché 3600 s; un `kid` desconocido provoca una
-  descarga nueva, como mucho cada 300 s), emisor y audiencia esperados, caducidad con
-  60 s de margen y `email_verified` verdadero.
-- Lista de invitadas por email (`INVITADAS`), provisional hasta tener base de datos.
-- CORS exacto solo en `/yo` y `/health` (`CORS_ORIGENES`).
+- New route `GET /yo`: receives a Google identity token (`Authorization: Bearer`)
+  and returns `{sub, email, nombre}` if the person is invited.
+- New module `autenticacion.py` that validates the token: RS256 only, signature against
+  Google's public keys (JWKS cached for 3600 s; an unknown `kid` triggers a fresh
+  download, at most every 300 s), expected issuer and audience, expiry with a
+  60 s margin and `email_verified` true.
+- Invited-users list by email (`INVITADAS`), provisional until there is a database.
+- Exact CORS only on `/yo` and `/health` (`CORS_ORIGENES`).
 
-**Por qué**
+**Why**
 
-El panel necesita saber quién es la usuaria sin fiarse de un email que llega en el cuerpo
-de la petición, que es justo el agujero que se cerró ese mismo día (entrada siguiente). El
-usuario sale del token y de ningún otro sitio. La decisión completa está en el ADR-003 del
-repo `buscartrabajo` (`docs/adr/ADR-003-authentication.md`).
+The panel needs to know who the user is without trusting an email that arrives in the body
+of the request, which is exactly the hole that was closed the same day (next entry). The
+user comes from the token and from nowhere else. The full decision is in ADR-003 of the
+`buscartrabajo` repo (`docs/adr/ADR-003-authentication.md`).
 
-**Respuestas de `/yo`**
+**`/yo` responses**
 
-| Código | Cuándo |
+| Code | When |
 |---|---|
-| 200 | Token válido y persona invitada |
-| 401 | Falta el token o no es válido |
-| 403 | Token válido, pero la persona no está invitada |
-| 503 | Falta configuración (`OIDC_*`) o no se alcanzan las claves públicas |
+| 200 | Valid token and invited person |
+| 401 | Token missing or not valid |
+| 403 | Valid token, but the person is not invited |
+| 503 | Configuration missing (`OIDC_*`) or the public keys cannot be reached |
 
-**Qué lo protege**
+**What protects it**
 
-| Test | Garantía |
+| Test | Guarantee |
 |---|---|
-| `tests/test_autenticacion.py` | Validación del token: algoritmo, firma, emisor, audiencia, caducidad, email verificado y caché de claves. Sin caché y con Google caído, una descarga fallida no se repite durante 30 s (`REINTENTO_EN_FRIO`), para no bloquear al único worker; una clave mal formada no descarta las demás |
-| `tests/test_ruta_yo.py` | Contrato de `/yo`: 200, 401, 403, 503 y CORS |
+| `tests/test_autenticacion.py` | Token validation: algorithm, signature, issuer, audience, expiry, verified email and key cache. With no cache and Google down, a failed download is not retried for 30 s (`REINTENTO_EN_FRIO`), so as not to block the single worker; a malformed key does not discard the others |
+| `tests/test_ruta_yo.py` | Contract of `/yo`: 200, 401, 403, 503 and CORS |
 
 ---
 
-### 7-oct · Cierre de las rutas del formulario de alta
+### 7-oct · Closing the sign-up form routes
 
-**Qué cambió**
+**What changed**
 
-- Borradas `/check-email` y `/accion-existente`.
-- `POST /registro` exige la clave de máquina (`X-Clave-Maquina`) y ante un fallo
-  devuelve un error genérico (500), sin la excepción.
-- `GET /` sirve una página de invitación (`templates/inicio.html`) con `no-store`.
-- Borrada `templates/alta.html`: ninguna ruta la sirve ya.
+- Deleted `/check-email` and `/accion-existente`.
+- `POST /registro` requires the machine key (`X-Clave-Maquina`) and on a failure
+  returns a generic error (500), without the exception.
+- `GET /` serves an invitation page (`templates/inicio.html`) with `no-store`.
+- Deleted `templates/alta.html`: no route serves it any more.
 
-**Por qué**
+**Why**
 
-Las tres rutas se fiaban de un email que llegaba en el cuerpo de la petición, sin
-comprobar quién lo mandaba. Eso permitía:
+The three routes trusted an email that arrived in the request body, without
+checking who sent it. That allowed:
 
-- Enumerar cuentas: preguntar si un email existía.
-- Lanzar búsquedas en nombre de otras personas.
-- Darse de alta sin invitación.
+- Enumerating accounts: asking whether an email existed.
+- Launching searches on behalf of other people.
+- Signing up without an invitation.
 
-Es el punto 4 del ADR-003 de autenticación, que vive en el repo `buscartrabajo` (`docs/adr/ADR-003-authentication.md`): el usuario sale del token y de ningún otro sitio.
+It is point 4 of the authentication ADR-003, which lives in the `buscartrabajo` repo (`docs/adr/ADR-003-authentication.md`): the user comes from the token and from nowhere else.
 
-**Qué lo protege**
+**What protects it**
 
-| Test | Garantía |
+| Test | Guarantee |
 |---|---|
-| `tests/test_rutas_de_maquina.py` (inventario y `test_rutas_retiradas_no_existen`) | Toda ruta de máquina exige la clave y las rutas retiradas no existen |
-| `tests/test_pagina_de_inicio.py` | La portada no tiene formulario, no llama a rutas retiradas ni enlaza a `/usuarios`. `test_buscar_ahora.py::test_la_portada_no_se_cachea` cubre `no-store` |
+| `tests/test_rutas_de_maquina.py` (inventory and `test_rutas_retiradas_no_existen`) | Every machine route requires the key and the retired routes do not exist |
+| `tests/test_pagina_de_inicio.py` | The landing page has no form, does not call retired routes and does not link to `/usuarios`. `test_buscar_ahora.py::test_la_portada_no_se_cachea` covers `no-store` |
 
 ---
 
-## Julio 2026
+## July 2026
 
-### 20-jul: Saneador tipográfico. Cero guiones largos ni flechas en CV y carta
-Commit `f0ba838`. Nueva función pura `sanear_tipografia(texto, idioma)` en
+### 20-jul: Typographic sanitizer. Zero long dashes or arrows in CV and letter
+Commit `f0ba838`. New pure function `sanear_tipografia(texto, idioma)` in
 `server.py`.
 
-- **Qué hace**: elimina guiones largos, guiones medios y flechas del texto
-  final. Las flechas se traducen a la palabra de transición del idioma ("a" en ES,
-  "to" en EN); los guiones a guion normal. Es rastro tipográfico de IA y NO puede
-  salir a una empresa.
-- **Por qué así**: es una red DETERMINISTA. No depende de que el LLM obedezca el prompt.
-- **TRAMPA (no romper)**: se aplica solo en el RENDER (DOCX y carta), NUNCA sobre el
-  texto que el parser del DOCX usa para detectar estructura. La detección de la línea
-  de empresa usa el guion largo como MARCADOR, así que el parser sigue leyendo la línea
-  cruda y solo se limpia el texto que se escribe. Si metés un saneado global antes de
-  parsear, perdés las negritas y la estructura.
-- **Tests**: `test_sanear_tipografia.py` y `test_render_sin_guiones.py`.
+- **What it does**: removes long dashes, medium dashes and arrows from the final
+  text. Arrows are translated to the transition word of the language ("a" in ES,
+  "to" in EN); dashes become a normal hyphen. It is a typographic trace of AI and it CANNOT
+  go out to a company.
+- **Why this way**: it is a DETERMINISTIC net. It does not depend on the LLM obeying the prompt.
+- **TRAP (do not break)**: it is applied only at RENDER time (DOCX and letter), NEVER on the
+  text that the DOCX parser uses to detect structure. The detection of the company
+  line uses the long dash as a MARKER, so the parser keeps reading the raw line
+  and only the text that is written out is cleaned. If you add a global cleanup before
+  parsing, you lose the bold text and the structure.
+- **Tests**: `test_sanear_tipografia.py` and `test_render_sin_guiones.py`.
 
-### 03-jul: Titulares: identidad real + especialización, y años de experiencia ajustables
+### 03-jul: Headlines: real identity + specialization, and adjustable years of experience
 Commits `9136979`, `d70a5c6`.
 
-- Sistema de titulares que combina identidad real (Full-Stack e IA delante cuando
-  aplica) con resumen adaptado por oferta.
-- Años de experiencia: base **10+**, ajustable por oferta. NO clavar 15+.
+- Headline system that combines real identity (Full-Stack and AI first when
+  applicable) with a summary adapted per offer.
+- Years of experience: base **10+**, adjustable per offer. Do NOT hardcode 15+.
 
-### 01-jul: Refinado de reglas de CV y seniority del titular
+### 01-jul: Refined CV rules and headline seniority
 Commits `1c3702a`, `e95cf17`, `5c9d4e5`, `0da513c`.
 
-- Descartar el bloque "ANÁLISIS INTERNO" del CV (no debe salir al documento final).
-- El titular MANTIENE la seniority (Tech Lead / Senior); no baja al nivel de la oferta.
-- Liderazgo ajustado según el nivel del puesto.
-- Reglas de Vero: titular con IA solo en ofertas de IA, Python como herramienta,
-  optimización ATS, tono no grandilocuente.
+- Discard the "ANÁLISIS INTERNO" (internal analysis) block from the CV (it must not reach the final document).
+- The headline KEEPS the seniority (Tech Lead / Senior); it does not drop to the level of the offer.
+- Leadership adjusted according to the level of the position.
+- Rules from Vero: AI headline only in AI offers, Python as a tool,
+  ATS optimization, non-grandiose tone.
 
 ---
 
-## Cambios operativos / entorno (NO están en git)
+## Operational / environment changes (NOT in git)
 
-Estos fixes fueron de configuración en Render o Brevo, no de código. Por eso no dejan
-rastro en el historial y por eso se documentan aquí: si alguien clona el repo, no los ve.
+These fixes were configuration on Render or Brevo, not code. That is why they leave no
+trace in the history and why they are documented here: if someone clones the repo, they do not see them.
 
-### 17-jul: 500 en /generar-cv: token de Google caducado en Render
-- **Síntoma**: `/generar-cv` y `/generar-carta` devolvían 500 y rompían la cadena de
-  aprobación de ofertas en n8n (al Aprobar no llegaba carta/CV/email).
-- **Causa raíz** (confirmada con huellas de token): Render tenía el
-  `GOOGLE_REFRESH_TOKEN` VIEJO/caducado. El `.env` local ya tenía el bueno (se distinguían
-  por los últimos caracteres del token).
-- **Fix**: actualizar `GOOGLE_REFRESH_TOKEN` en las variables de entorno de Render con
-  el valor bueno. Tras redeploy, 200 OK.
-- **Nota**: el proyecto de Google Cloud con las credenciales OAuth es
-  `<id-del-proyecto>` (OJO: hay dos proyectos llamados "My Project" en la cuenta, no
-  fiarse del nombre). Utilidades para regenerar el token: `regenera_token.py`,
+### 17-jul: 500 on /generar-cv: expired Google token on Render
+- **Symptom**: `/generar-cv` and `/generar-carta` returned 500 and broke the offer approval
+  chain in n8n (on Approve, no letter/CV/email arrived).
+- **Root cause** (confirmed with token fingerprints): Render had the OLD/expired
+  `GOOGLE_REFRESH_TOKEN`. The local `.env` already had the good one (they were told apart
+  by the last characters of the token).
+- **Fix**: update `GOOGLE_REFRESH_TOKEN` in the Render environment variables with
+  the good value. After a redeploy, 200 OK.
+- **Note**: the Google Cloud project with the OAuth credentials is
+  `<id-del-proyecto>` (WATCH OUT: there are two projects called "My Project" in the account, do not
+  trust the name). Utilities to regenerate the token: `regenera_token.py`,
   `get_refresh_token.py`, `diagnostico_drive.py`.
 
-### 18-jul: El email de aprobación va por Brevo, no por Gmail
-- El mail que se manda al aprobar una oferta sale por **Brevo** (SMTP API), no por Gmail.
-- Sender verificado: `remitente@example.com`. La credencial de Brevo en n8n debe
-  usar la API key viva y ese sender exacto; un mismatch de sender o key hace que Brevo
-  no entregue aunque la petición parezca correcta.
-- Prueba directa a `api.brevo.com/v3/smtp/email` con ese sender devuelve 201 y entrega.
+### 18-jul: The approval email goes through Brevo, not Gmail
+- The mail sent when an offer is approved goes out through **Brevo** (SMTP API), not Gmail.
+- Verified sender: `remitente@example.com`. The Brevo credential in n8n must
+  use the live API key and that exact sender; a sender or key mismatch makes Brevo
+  not deliver even though the request looks correct.
+- A direct test to `api.brevo.com/v3/smtp/email` with that sender returns 201 and delivers.
 
 ---
 
-**Última actualización:** 7 octubre 2026
-**Fuente de verdad operativa del flujo completo:** `../buscartrabajo/README.md`
+**Last updated:** 7 October 2026
+**Operational source of truth for the full flow:** `../buscartrabajo/README.md`
