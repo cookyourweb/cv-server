@@ -9,7 +9,7 @@ la configuracion, y estan bien, pero no responden la pregunta que importa:
 
 Los tres fallos de calidad de este mes los cazo una persona LEYENDO:
 
-  1. Resumen de 180 palabras (Social You, 29ago). El prompt pedia dos parrafos.
+  1. Resumen de 180 palabras (una agencia de marketing digital, 29ago). El prompt pedia dos parrafos.
   2. La carta ignoro OCHO ANOS de Azure cuando la oferta lo nombraba cinco veces,
      y escribio "Azure is the gap I am ready to close". Regalaba su mejor baza.
   3. Un CV salio con la empresa equivocada: "AppCast" no es un empleador, es la
@@ -40,7 +40,7 @@ MASTER = (
 
 CASO_AZURE = Caso(
     nombre="oferta-que-pide-azure",
-    empresa="Nerdio",
+    empresa="Acme Cloud",
     oferta="We need strong Azure experience. Azure, Azure DevOps, Azure AD.",
     master=MASTER,
     debe_aparecer=["Azure"],
@@ -65,7 +65,7 @@ def test_caza_la_fortaleza_relevante_que_falta():
 
 def test_caza_al_intermediario_colado_como_empresa():
     # El fallo 3: "AppCast" es la plataforma, no el empleador.
-    caso = Caso(nombre="appcast", empresa="Lodgify", oferta="Senior AI Engineer",
+    caso = Caso(nombre="appcast", empresa="Acme Rentals", oferta="Senior AI Engineer",
                 master=MASTER, no_debe_aparecer=["AppCast"])
     fallos = evaluar("Dear AppCast team, ...", caso)
     assert any("appcast" in f.detalle.lower() for f in fallos)
@@ -73,7 +73,7 @@ def test_caza_al_intermediario_colado_como_empresa():
 
 def test_caza_el_resumen_demasiado_largo():
     # El fallo 1: 180 palabras donde caben 80.
-    caso = Caso(nombre="resumen-largo", empresa="Social You", oferta="GenAI",
+    caso = Caso(nombre="resumen-largo", empresa="Acme Marketing", oferta="GenAI",
                 master=MASTER, max_palabras_resumen=80)
     largo = "PROFESSIONAL SUMMARY\n" + "palabra " * 180 + "\n\nEXPERIENCE\nAyvens"
     fallos = evaluar(largo, caso)

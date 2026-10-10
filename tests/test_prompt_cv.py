@@ -55,13 +55,13 @@ def test_escribe_la_accion_no_el_efecto_atribuido():
 def test_el_prompt_se_rellena_sin_perder_las_reglas():
     texto = srv.PROMPT_CV.format(
         contexto_candidato="CV master de prueba",
-        empresa="Mindera",
+        empresa="Acme Consulting",
         puesto="Senior AI Engineer",
         descripcion="Agentic AI, evaluation infrastructure",
         idioma_nombre="inglés",
         bloque_formato=srv.PROMPT_ESTRUCTURA_EN,
     )
-    assert "Mindera" in texto and "Senior AI Engineer" in texto
+    assert "Acme Consulting" in texto and "Senior AI Engineer" in texto
     assert "{" not in texto.replace("{{", "").replace("}}", ""), "quedan huecos sin rellenar"
     assert "NO INVENTAR NUNCA" in texto
     assert "REGLA MAESTRA" in texto

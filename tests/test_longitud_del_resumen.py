@@ -2,7 +2,7 @@
 
 Historia de por que existe este test:
 
-29-ago-2026, CV para la oferta de Social You. El resumen salio con **180
+29-ago-2026, CV para una oferta de una agencia de marketing digital. El resumen salio con **180
 palabras en dos parrafos densos**. No fue culpa del modelo: el prompt pedia
 literalmente `2 full paragraphs (4-6 lines each)`, o sea entre ocho y doce
 lineas. El modelo obedecio.

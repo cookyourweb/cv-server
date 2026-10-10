@@ -1,13 +1,13 @@
 """TDD - detectar que el TITULAR generado se sale del contrato del PERFIL BASE.
 
 Caso real, 24jul2026. Se desplegaron las reglas del titular ancla y se regeneraron los
-CV de N-iX y Revolut. Los DOS salieron con:
+CV de la consultora de Europa del Este y la fintech de Londres. Los DOS salieron con:
 
     AI Engineer | Full-Stack Developer | Frontend Tech Lead | ...
 
 que es el orden de "Variante permitida", cuya condicion declarada es "solo empresas cuyo
-producto principal sea la IA (OpenAI, Anthropic, Cohere, Mistral, Hugging Face)". Ni N-iX
-(outsourcing IT) ni Revolut (fintech) la cumplen. El modelo leyo el parentesis como
+producto principal sea la IA (OpenAI, Anthropic, Cohere, Mistral, Hugging Face)". Ni la consultora de Europa del Este
+(outsourcing IT) ni la fintech de Londres (fintech) la cumplen. El modelo leyo el parentesis como
 ejemplos y se autorizo la excepcion.
 
 Es el mismo patron que dejo pasar "Leader" en el guardrail de seniority: una lista que el
@@ -83,7 +83,7 @@ def test_el_aviso_menciona_la_variante_cuando_coincide_con_ella():
 
 
 def test_identidad_que_no_esta_en_el_repertorio_se_marca():
-    """'AI Engineering Leader' fue el titular inventado del primer CV de N-iX."""
+    """'AI Engineering Leader' fue el titular inventado del primer CV de la consultora de Europa del Este."""
     t = "AI Engineering Leader | Full-Stack Developer | GenAI Adoption"
     avisos = srv.detectar_titular_fuera_de_contrato(t, MASTER)
     assert any("AI Engineering Leader" in a for a in avisos)

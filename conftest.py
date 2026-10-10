@@ -6,3 +6,50 @@ reporta las que faltan al arrancar, no al importar.
 
 Ver `tests/test_modulos_sin_entorno.py`, que lo comprueba en un proceso limpio.
 """
+
+import os
+from pathlib import Path
+
+import pytest
+
+
+def _url_de_pruebas() -> str:
+    """Test database URL: the environment first, then a local `.env` (never printed)."""
+    url = os.getenv("DATABASE_URL_PRUEBAS", "")
+    if not url and (Path(__file__).parent / ".env").exists():
+        from dotenv import dotenv_values
+
+        url = dotenv_values(Path(__file__).parent / ".env").get("DATABASE_URL_PRUEBAS") or ""
+    return url
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "bd: needs a real PostgreSQL (DATABASE_URL_PRUEBAS); skipped when it is unset"
+    )
+    config.addinivalue_line(
+        "markers",
+        "bd_destructiva: drops schema objects (alembic downgrade base); "
+        "skipped unless ALLOW_DESTRUCTIVE_DB_TESTS=1 is set in the environment",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if not _url_de_pruebas():
+        omitir = pytest.mark.skip(reason="DATABASE_URL_PRUEBAS is not set")
+        for item in items:
+            if "bd" in item.keywords:
+                item.add_marker(omitir)
+    if os.getenv("ALLOW_DESTRUCTIVE_DB_TESTS") != "1":
+        omitir = pytest.mark.skip(
+            reason="destructive DB test: set ALLOW_DESTRUCTIVE_DB_TESTS=1 (and point "
+            "DATABASE_URL_PRUEBAS at a disposable database) to run it"
+        )
+        for item in items:
+            if "bd_destructiva" in item.keywords:
+                item.add_marker(omitir)
+
+
+@pytest.fixture(scope="session")
+def url_de_pruebas() -> str:
+    return _url_de_pruebas()

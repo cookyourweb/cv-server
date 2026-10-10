@@ -242,7 +242,7 @@ def idioma_de_oferta(puesto: str, descripcion: str, empresa: str) -> str:
 
     El titulo del puesto viene tal cual del anuncio, en su idioma. La descripcion,
     en cambio, la reescribe la tarea programada casi siempre en español, asi que
-    ahogaba la señal del titulo (caso Revolut, 23jul2026: titulo ingles, carta en
+    ahogaba la señal del titulo (caso de la fintech de Londres, 23jul2026: titulo ingles, carta en
     español). El puesto pesa x3, pero no es absoluto: una descripcion con señal
     española muy marcada todavia puede ganar (oferta española titulada en ingles).
 
@@ -972,8 +972,8 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         )
 
     # 5d. Guardrail del titular: que respete el contrato del PERFIL BASE. Es el unico
-    #     de los tres que mira la CABECERA, y viene de un fallo medido: los CV de N-iX y
-    #     Revolut usaron la Variante permitida sin cumplir su condicion.
+    #     de los tres que mira la CABECERA, y viene de un fallo medido: los CV de la consultora de Europa del Este y
+    #     la fintech de Londres usaron la Variante permitida sin cumplir su condicion.
     titular_sospechoso = detectar_titular_fuera_de_contrato(titular, cv_master)
     if titular_sospechoso:
         logger.warning(

@@ -40,6 +40,8 @@ import logging
 import requests
 from html import unescape
 
+import match
+
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────
@@ -343,21 +345,53 @@ Score: 0-100. Motivo: máximo 15 palabras en español.
     return resultado
 
 
-def _ranking_fallback(ofertas: list, top_n: int) -> list:
-    """Ranking heurístico cuando el LLM no está disponible."""
-    ordenadas = sorted(
-        ofertas,
-        key=lambda o: o.get("_stack_matches", 0),
+def _ranking_fallback(ofertas: list, top_n: int, master_texto: str = None) -> list:
+    """Ranking heurístico cuando el LLM no está disponible.
+
+    Sin `master_texto` conserva el orden de siempre (por `_stack_matches`).
+    Con él, usa el encaje honesto de `match.py`: alcanzable primero, luego
+    cobertura, y a igualdad remoto, con sueldo declarado y `_stack_matches`.
+    """
+    if not master_texto:
+        ordenadas = sorted(
+            ofertas,
+            key=lambda o: o.get("_stack_matches", 0),
+            reverse=True,
+        )
+        return [
+            {
+                **o,
+                "score":  60 + (o.get("_stack_matches", 0) * 5),
+                "motivo": f"Encaja en {o.get('_stack_matches', 0)} tecnologías de tu stack",
+            }
+            for o in ordenadas[:top_n]
+        ]
+
+    evaluadas = []
+    for o in ofertas:
+        texto = " ".join([o.get("puesto", ""), " ".join(o.get("tags", [])),
+                          o.get("descripcion", "")])
+        evaluadas.append((o, match.evaluar(texto, {}, master_texto)))
+    evaluadas.sort(
+        key=lambda par: (
+            par[1].alcanzable,
+            par[1].cobertura,
+            (par[0].get("modalidad") or "").lower() == "remoto",
+            bool(par[0].get("salario")),
+            par[0].get("_stack_matches", 0),
+        ),
         reverse=True,
     )
-    return [
-        {
-            **o,
-            "score":  60 + (o.get("_stack_matches", 0) * 5),
-            "motivo": f"Encaja en {o.get('_stack_matches', 0)} tecnologías de tu stack",
-        }
-        for o in ordenadas[:top_n]
-    ]
+    resultado = []
+    for o, e in evaluadas[:top_n]:
+        if e.tecnologias_pedidas:
+            motivo = f"Cubres {e.tecnologias_cubiertas} de {e.tecnologias_pedidas}"
+            if e.tecnologias_hueco:
+                motivo += "; te falta: " + ", ".join(e.tecnologias_hueco)
+        else:
+            motivo = "No se pueden evaluar requisitos concretos de esta oferta"
+        resultado.append({**o, "score": 50 + round(e.cobertura * 45), "motivo": motivo})
+    return resultado
 
 
 # ══════════════════════════════════════════════

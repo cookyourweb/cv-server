@@ -1,6 +1,6 @@
 """TDD - resolver el idioma de una oferta de forma fiable.
 
-Caso real (23jul2026): Revolut, oferta en ingles, salio la carta en espanol. El CV
+Caso real (23jul2026): una fintech de Londres, oferta en ingles, salio la carta en espanol. El CV
 acerto y la carta no, para la MISMA oferta. Causa: el idioma se detectaba de la
 DESCRIPCION, que la tarea programada reescribe siempre en espanol, asi que ahogaba
 la senal del titulo, que si viene en el idioma del anuncio.
@@ -17,12 +17,12 @@ DESC_ES = ("Buscamos un ingeniero con experiencia en desarrollo de aplicaciones.
 
 
 def test_puesto_en_ingles_gana_a_descripcion_en_espanol():
-    # El caso Revolut: titulo ingles, notas reescritas en espanol.
-    assert srv.idioma_de_oferta("Applied AI Engineer", DESC_ES, "Revolut") == "en"
+    # El caso de la fintech de Londres: titulo ingles, notas reescritas en espanol.
+    assert srv.idioma_de_oferta("Applied AI Engineer", DESC_ES, "Acme Fintech") == "en"
 
 
 def test_puesto_en_espanol_da_espanol():
-    assert srv.idioma_de_oferta("Programador Senior Backend", DESC_ES, "Arelance") == "es"
+    assert srv.idioma_de_oferta("Programador Senior Backend", DESC_ES, "Acme Sistemas") == "es"
 
 
 def test_titulo_con_senal_neta_manda_sobre_la_descripcion():
@@ -32,7 +32,7 @@ def test_titulo_con_senal_neta_manda_sobre_la_descripcion():
     # Idioma de Notion, que manda sobre esta deteccion.
     desc_muy_es = DESC_ES + (" Desarrollador con conocimientos de gestion, liderazgo, "
                              "programador de aplicaciones, requisitos imprescindibles.")
-    assert srv.idioma_de_oferta("Senior Frontend Engineer", desc_muy_es, "Indra") == "en"
+    assert srv.idioma_de_oferta("Senior Frontend Engineer", desc_muy_es, "Acme") == "en"
 
 
 def test_sin_puesto_cae_a_la_descripcion():
@@ -48,4 +48,4 @@ def test_puesto_ingles_claro_todo_ingles():
     assert srv.idioma_de_oferta(
         "Senior Full-Stack Engineer",
         "We are looking for a developer with strong experience. Remote role.",
-        "Trimble") == "en"
+        "Acme Geospatial") == "en"

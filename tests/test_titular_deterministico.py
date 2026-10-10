@@ -45,14 +45,14 @@ BASE = ("Frontend Tech Lead | Full-Stack Developer | AI Engineer | "
 
 
 def test_si_el_modelo_invierte_el_orden_se_corrige():
-    """El fallo de Revolut: uso la Variante permitida sin cumplir la condicion."""
+    """El fallo de la fintech de Londres: uso la Variante permitida sin cumplir la condicion."""
     malo = "AI Engineer | Full-Stack Developer | Frontend Tech Lead | LLM Systems"
     out = srv.construir_titular(malo, MASTER)
     assert out.startswith("Frontend Tech Lead | Full-Stack Developer | AI Engineer")
 
 
 def test_si_el_modelo_fusiona_identidades_se_corrige():
-    """El fallo de N-iX: 'AI Engineer & Full-Stack Developer' como un solo bloque."""
+    """El fallo de la consultora de Europa del Este: 'AI Engineer & Full-Stack Developer' como un solo bloque."""
     malo = "AI Engineer & Full-Stack Developer | Frontend Tech Lead | React · TypeScript"
     out = srv.construir_titular(malo, MASTER)
     assert out.startswith("Frontend Tech Lead | Full-Stack Developer | AI Engineer")
@@ -60,7 +60,7 @@ def test_si_el_modelo_fusiona_identidades_se_corrige():
 
 
 def test_si_el_modelo_inventa_una_identidad_se_descarta():
-    """'AI Engineering Leader' fue el titular del primer CV de N-iX."""
+    """'AI Engineering Leader' fue el titular del primer CV de la consultora de Europa del Este."""
     malo = "AI Engineering Leader | Full-Stack Developer"
     out = srv.construir_titular(malo, MASTER)
     assert "Leader" not in out
@@ -86,7 +86,7 @@ def test_el_modificador_sin_respaldo_se_descarta():
 
 
 def test_la_seniority_nunca_se_pierde():
-    """El CV de N-iX se comio '10+ years' para meter posicionamiento en su hueco."""
+    """El CV de la consultora de Europa del Este se comio '10+ years' para meter posicionamiento en su hueco."""
     malo = ("AI Engineer | Full-Stack Developer | Frontend Tech Lead | "
             "React · TypeScript · Node.js | GenAI Adoption")
     out = srv.construir_titular(malo, MASTER)
@@ -133,8 +133,8 @@ def test_el_detector_ya_no_encuentra_nada_en_lo_construido():
 
 
 # ── Regresion 31-ago-2026: el titular TARTAMUDO ──────────────────────────────
-# Cuatro CV salieron con la seniority DOS VECES, y dos ya se enviaron (Leadtech,
-# UL Solutions). El fixture MASTER de arriba no podia cazarlo: su seniority es la
+# Cuatro CV salieron con la seniority DOS VECES, y dos ya se enviaron (una empresa de medios digitales y
+# una de certificacion de seguridad). El fixture MASTER de arriba no podia cazarlo: su seniority es la
 # corta ("10+ years in digital product"), y el PERFIL BASE real la tiene LARGA.
 # Con la corta, un prefijo de la seniority no existe; con la larga, si.
 #
@@ -160,7 +160,7 @@ SENIORITY_REAL = "10+ years in digital product · applying AI in production sinc
 
 
 def test_regresion_la_seniority_no_sale_dos_veces():
-    """El CV de Mindera (AI-Systems-EN): el modelo colo un PREFIJO de la seniority."""
+    """El CV de una consultora de software portuguesa (AI-Systems-EN): el modelo colo un PREFIJO de la seniority."""
     malo = ("Frontend Tech Lead | Full-Stack Developer | AI Engineer | "
             "10+ years in digital product | " + SENIORITY_REAL)
     out = srv.construir_titular(malo, MASTER_REAL)
@@ -168,7 +168,7 @@ def test_regresion_la_seniority_no_sale_dos_veces():
 
 
 def test_regresion_variante_de_la_seniority_tampoco_se_cuela():
-    """El CV de Leadtech y UL Solutions: una VARIANTE, no un prefijo literal."""
+    """El CV de la empresa de medios digitales y la de certificacion de seguridad: una VARIANTE, no un prefijo literal."""
     malo = ("Frontend Tech Lead | Full-Stack Developer | AI Engineer | "
             "LLM Integration · RAG · Agent Workflows | "
             "10+ years in digital product · AI systems in production since 2025 | "

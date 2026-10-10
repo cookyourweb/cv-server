@@ -14,6 +14,7 @@ solo `os` y `re`, asi que se puede leer y probar aislado.
 """
 import os
 import re
+import unicodedata
 
 _NUM_RE = re.compile(r"\d[\d.,]*")
 
@@ -128,7 +129,7 @@ for _t in ("WordPress", "Drupal", "Shopify", "Strapi", "Contentful", "Magento", 
 for _t in ("Claude Code", "Cursor", "LangChain", "TensorFlow", "PyTorch",
            "Hugging Face", "Ollama", "Pandas", "NumPy", "Git", "Jira", "Figma"):
     _reg_tec(_t)
-# El nombre corto tambien cuenta: el CV de N-iX (24jul2026) colo "Copilot-class AI
+# El nombre corto tambien cuenta: el CV de la consultora de Europa del Este (24jul2026) colo "Copilot-class AI
 # systems" sin respaldo del Master y el guardrail no salto, porque solo estaba dado de
 # alta "GitHub Copilot" y el patron usa fronteras de palabra.
 _reg_tec("GitHub Copilot", "Copilot")
@@ -158,12 +159,15 @@ def _tecnologias_en(texto: str) -> set:
     return encontradas
 
 
+tecnologias_en = _tecnologias_en
+
+
 def detectar_tecnologias_no_respaldadas(cv_texto: str, master_texto: str) -> list:
     """Tecnologias que el CV generado atribuye a la candidata y NO estan en su Master.
 
     Regla de evidencia: una tecnologia entra en el CV solo si el Master la respalda.
     El prompt ya lo prohibe y el modelo lo hizo igual (PHP/Symfony en la oferta de
-    Tenth Revolution, 23jul2026), asi que se verifica la salida.
+    una agencia de reclutamiento, 23jul2026), asi que se verifica la salida.
 
     Sin master no se alerta: no hay fuente contra la que contrastar."""
     if not cv_texto or not master_texto:
@@ -173,7 +177,7 @@ def detectar_tecnologias_no_respaldadas(cv_texto: str, master_texto: str) -> lis
 
 # ── Guardrail de veracidad: skills declaradas sin respaldo ───────────────────
 # El detector de arriba solo ve lo que esta dado de alta en el catalogo, y lo que
-# el modelo copia es el stack NUEVO de cada oferta: en el CV de Koinly (11ago2026)
+# el modelo copia es el stack NUEVO de cada oferta: en el CV de una empresa de software fiscal cripto (11ago2026)
 # entraron enteros "React 19 · Tailwind (v4) · Radix UI · Mantine" y "TanStack
 # Query" sin que saltara nada, porque ninguno de los cuatro estaba en las 173
 # variantes. No es un descuido de la lista: una lista blanca no puede cubrir un
@@ -266,7 +270,7 @@ def detectar_skills_no_respaldadas(cv_texto: str, master_texto: str) -> list:
 
 # ── Guardrail del TITULAR: que no se salga del contrato del PERFIL BASE ──────────
 # El 24jul2026 se desplegaron las reglas del titular ancla y los DOS CV regenerados
-# (N-iX y Revolut) salieron con el orden de "Variante permitida", cuya condicion no
+# (la consultora de Europa del Este y la fintech de Londres) salieron con el orden de "Variante permitida", cuya condicion no
 # cumplia ninguna de las dos empresas. El modelo leyo el parentesis de la condicion
 # como ejemplos. Mismo patron que dejo pasar "Leader" en el guardrail de seniority.
 # Leccion medida: la regla en el prompt es DISCIPLINA; solo el detector es MECANISMO.
@@ -584,6 +588,59 @@ def evaluar_descripcion_oferta(descripcion: str, minimo: int = None) -> dict:
     return {"suficiente": True, "chars": len(descripcion or ""), "aviso": ""}
 
 
+# ── Guardrail de inflacion: afirmaciones de exclusividad, liderazgo o alcance ─
+# Un CV puede inflar sin inventar una cifra ni una tecnologia: "el unico
+# responsable", "referente", "lidere", "solucion completa". Se detecta por
+# CONCEPTO bilingue: se marca un concepto si la salida usa alguna variante y el
+# master no usa NINGUNA (asi "lidere" en el master respalda "liderado").
+#
+# Falsos positivos: las palabras sueltas "only", "full" y "reference" son
+# demasiado comunes en ingles ("only use", "full-stack", "reference letter"),
+# asi que solo cuentan en frases que afirman algo ("the only", "full ownership",
+# "reference for"). Para ampliar: anadir variantes (regex) a un concepto o un
+# concepto nuevo; el resto del codigo no cambia.
+
+_INFLACION = {
+    "unico": (r"unico", r"unica", r"unique", r"sole", r"the only", r"only one"),
+    "referente": (r"referente", r"go-to", r"the reference", r"reference (?:for|in|point)"),
+    "liderado": (r"lidere", r"liderado", r"liderada", r"led", r"spearheaded"),
+    "completa": (r"completa", r"completo", r"end-to-end", r"full (?:ownership|responsibility)"),
+}
+
+
+def _plano(texto: str) -> str:
+    """Minusculas y sin acentos, para comparar sin que importen ni uno ni otro."""
+    base = unicodedata.normalize("NFKD", texto or "")
+    return "".join(c for c in base if not unicodedata.combining(c)).lower()
+
+
+# Public names for other modules (match.py). The private names stay as the
+# canonical definitions: the single-definition canary test counts them.
+plano = _plano
+
+
+_INFLACION_PATRONES = {
+    concepto: re.compile(
+        r"(?<![a-z0-9])(?:" + "|".join(variantes) + r")(?![a-z0-9])")
+    for concepto, variantes in _INFLACION.items()
+}
+
+
+def detectar_inflacion(texto: str, master_texto: str) -> list:
+    """Conceptos de inflacion presentes en el texto y ausentes del master.
+
+    Sin texto o sin master no se alerta: no hay con que contrastar."""
+    if not texto or not master_texto:
+        return []
+    salida, ref = _plano(texto), _plano(master_texto)
+    hallazgos = []
+    for concepto, patron in _INFLACION_PATRONES.items():
+        m = patron.search(salida)
+        if m and not patron.search(ref):
+            hallazgos.append(f"{concepto}: '{m.group(0)}'")
+    return hallazgos
+
+
 # ══════════════════════════════════════════════
 # REGISTRO DE GUARDRAILS
 # ══════════════════════════════════════════════
@@ -660,6 +717,7 @@ GUARDRAILS = [
     # ese hueco se conserva aqui a proposito: cambiar comportamiento dentro de un
     # refactor es como se rompen las cosas en silencio. Anotado para decidirlo.
     _Detector("experiencia_mal_atribuida", frozenset({CARTA}), detectar_experiencia_mal_atribuida),
+    _Detector("inflacion", frozenset({CV, CARTA}), detectar_inflacion),
 ]
 
 

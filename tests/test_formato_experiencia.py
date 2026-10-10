@@ -1,6 +1,6 @@
 """TDD - la EXPERIENCIA se lee como una trayectoria de PUESTOS, no de empresas.
 
-Caso real, 24jul2026. Verónica revisó los CV regenerados de N-iX y Revolut y detectó
+Caso real, 24jul2026. Verónica revisó los CV regenerados de la consultora de Europa del Este y la fintech de Londres y detectó
 que la experiencia no cuenta la historia: quiere leer "Tech Lead en Bitcode, Frontend en
 Mutualidad, antes diseñadora". El puesto es la narrativa de una carrera; la empresa es
 el contexto.
@@ -80,7 +80,7 @@ def test_las_fechas_no_llevan_guion_largo_ni_medio():
 def test_el_render_sigue_detectando_la_linea_de_puesto_por_el_guion():
     """El guion largo sigue siendo el marcador: si se quita, se pierde la negrita.
 
-    Documentado en PROMPT-ADAPTACION-CV.md ('no metas un saneado tipográfico global
+    Documentado en CV-ADAPTATION-PROMPT.md ('no metas un saneado tipográfico global
     antes de parsear el DOCX')."""
     assert re.search(r'if \("—" in linea or "–" in linea\)', RENDER), (
         "Cambió la detección de la línea de puesto/empresa en el render del DOCX: "
