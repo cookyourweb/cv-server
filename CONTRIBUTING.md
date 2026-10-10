@@ -1,146 +1,145 @@
-# Cómo se trabaja en este repositorio
+# How we work in this repository
 
-No es un manual de buenas intenciones: es lo que este repositorio **exige**, y una
-parte la comprueba git solo antes de dejarte commitear.
+This is not a manual of good intentions: it is what this repository **requires**, and
+part of it is checked by git itself before it lets you commit.
 
-## Activarlo, una vez por clon
+## Enable it, once per clone
 
 ```bash
 git config core.hooksPath scripts/hooks
 ```
 
-A partir de ahí, cada `git commit` corre la suite. Si está en rojo, no hay commit.
+From then on, every `git commit` runs the suite. If it is red, there is no commit.
 
 ---
 
-## El ciclo: rojo, verde, commit
+## The cycle: red, green, commit
 
-**Primero el test que falla. Siempre.**
+**The failing test first. Always.**
 
-Un test que nunca has visto fallar no sabes si prueba algo. Escribirlo después del
-código solo demuestra que el código hace lo que hace.
+If you have never seen a test fail, you do not know whether it tests anything. Writing it after the
+code only proves that the code does what it does.
 
 ```
-1. Escribe el test que describe el fallo o el comportamiento que falta
-2. Ejecútalo y MIRA el rojo. Lee el mensaje: ¿dice lo que quieres que diga?
-3. Escribe el código mínimo que lo pone en verde
-4. Ejecuta la suite ENTERA, no solo tu test
+1. Write the test that describes the failure or the missing behavior
+2. Run it and WATCH it go red. Read the message: does it say what you want it to say?
+3. Write the minimum code that turns it green
+4. Run the WHOLE suite, not just your test
 5. Commit
 ```
 
-El paso 2 no es ceremonia. El 28-ago-2026 un test escrito aquí pasó a la primera
-estando el código mal: comparaba con `not in` y la subcadena que buscaba estaba
-contenida en la forma correcta. Verlo en rojo primero es lo que lo destapa.
+Step 2 is not ceremony. On 28 Aug 2026 a test written here passed on the first run
+while the code was wrong: it compared with `not in` and the substring it was looking for
+was contained in the correct form. Seeing it red first is what exposes that.
 
-## Dónde viven los tests
+## Where the tests live
 
-En `tests/`, en la raíz del repositorio. No al lado del código que prueban.
+In `tests/`, at the root of the repository. Not next to the code they test.
 
-Es la convención que ya se usó en la prueba técnica de osapiens, y aquí se adoptó
-el 28-ago-2026 sacando 23 ficheros de test de la raíz. El movimiento destapó dos
-tests que dependían de estar físicamente al lado del fuente que leían: una
-dependencia que nadie sabía que existía porque nunca se habían movido.
+It is the convention already used in the osapiens technical test, and here it was adopted
+on 28 Aug 2026 by moving 23 test files out of the root. The move exposed two
+tests that depended on being physically next to the source they read: a
+dependency nobody knew existed because they had never been moved.
 
-## Idioma: commits y comentarios en inglés
+## Language: commits and comments in English
 
-Desde el 8 de octubre de 2026. El repositorio es público y lo leen empresas de
-fuera, así que lo que se escribe a partir de ahora va en inglés:
+Since 8 October 2026. The repository is public and read by companies from
+abroad, so what is written from now on goes in English:
 
-- **Mensajes de commit y descripciones de PR, en inglés.** Son lo primero que se
-  lee del historial. Se mantiene el formato convencional (`fix:`, `feat:`...) y
-  la regla de explicar el porqué.
-- **Comentarios del código nuevo o del que se toque, en inglés.**
-- **Los nombres del dominio se quedan en español** (`Oferta`, `Candidatura`,
-  `autenticacion`, `ClavesPublicas`...). Son el lenguaje del negocio, una
-  búsqueda de empleo en España, y el código usa las mismas palabras (lenguaje
-  ubicuo). No se renombran.
-- **Los comentarios antiguos no se traducen de golpe:** pasan a inglés cuando se
-  toca ese fichero. Traducirlo todo de una vez llena el historial de ruido.
-- **La documentación sigue bilingüe:** `README.md` en inglés y `README.es.md` en
-  español, con los mismos datos.
+- **Commit messages and PR descriptions, in English.** They are the first thing read
+  in the history. The conventional format is kept (`fix:`, `feat:`...) and so is
+  the rule of explaining the why.
+- **Comments in new code, or in code you touch, in English.**
+- **Domain names stay in Spanish** (`Oferta`, `Candidatura`,
+  `autenticacion`, `ClavesPublicas`...). They are the language of the business, a
+  job search in Spain, and the code uses the same words (ubiquitous
+  language). They are not renamed.
+- **Old comments are not translated all at once:** they move to English when that file
+  is touched. Translating everything at once fills the history with noise.
+- **Documentation stays bilingual:** `README.md` in English and `README.es.md` in
+  Spanish, with the same facts.
 
-## Un commit, una unidad de trabajo
+## One commit, one unit of work
 
-Un commit tiene que poder explicarse en una frase y revertirse sin arrastrar
-nada más. Si el mensaje necesita un "y además", son dos commits.
+A commit has to be explainable in one sentence and revertible without dragging
+anything else along. If the message needs an "and also", it is two commits.
 
-Los tests viajan **con** el código que prueban, en el mismo commit. Un commit que
-añade comportamiento sin su test está incompleto.
+Tests travel **with** the code they test, in the same commit. A commit that
+adds behavior without its test is incomplete.
 
-## El mensaje dice POR QUÉ, no qué
+## The message says WHY, not what
 
-El "qué" ya está en el diff. Lo que se pierde es el porqué, y es lo que hace falta
-dentro de seis meses.
+The "what" is already in the diff. What gets lost is the why, and that is what is needed
+six months from now.
 
-Formato [convencional](https://www.conventionalcommits.org/): `fix:`, `feat:`,
+[Conventional](https://www.conventionalcommits.org/) format: `fix:`, `feat:`,
 `refactor:`, `docs:`, `test:`, `chore:`, `ci:`.
 
-**`test:` es para commits que son SOLO tests**, y conviene distinguir dos cosas
-que no son lo mismo:
+**`test:` is for commits that are ONLY tests**, and it is worth telling apart two things
+that are not the same:
 
 ```
-test: add test suite with TDD for input validation   <- el test fue primero
-test: add missing tests for the happy path           <- rellenar un hueco despues
+test: add test suite with TDD for input validation   <- the test came first
+test: add missing tests for the happy path           <- filling a gap afterwards
 ```
 
-Las dos son legítimas, pero no son iguales, y el mensaje tiene que decir cuál es.
-Llamar TDD a rellenar huecos es engañarte a ti misma dentro de seis meses.
+Both are legitimate, but they are not equal, and the message has to say which one it is.
+Calling gap-filling TDD is fooling yourself six months from now.
 
 ```
-fix(guardrails): `_tecnologias_en` estaba definida dos veces y ganaba la mala
+fix(guardrails): `_tecnologias_en` was defined twice and the bad one won
 
-Medido sobre las 519 combinaciones del catalogo, difieren en 9, todas con
-tecnologias de VARIAS palabras, donde el espacio del medio no es caracter de
-palabra:
+Measured over the 519 combinations of the catalog, they differ in 9, all with
+MULTI-word technologies, where the middle space is not a word character:
 
-  "react native"  =>  {React Native}          correcto
-                  =>  {React, React Native}   ingenua, se inventa React
+  "react native"  =>  {React Native}          correct
+                  =>  {React, React Native}   naive, it invents React
 ```
 
-Cuando hay un número, va el número. "Mejora el rendimiento" no dice nada;
-"de 22 segundos a 3" sí.
+When there is a number, the number goes in. "Improves performance" says nothing;
+"from 22 seconds to 3" does.
 
-## Los tests siguen al código
+## Tests follow the code
 
-Si mueves una función a otro módulo, los tests que la miran se actualizan **en el
-mismo commit**. Y ojo con esto, que muerde:
+If you move a function to another module, the tests that look at it are updated **in the
+same commit**. And watch out for this, it bites:
 
 ```python
-# Esto YA NO parchea nada si `call_llm_calidad` vive en otro módulo:
+# This NO LONGER patches anything if `call_llm_calidad` lives in another module:
 patch.object(servidor, "call_claude", ...)
 
-# Hay que apuntar donde la función VIVE, no donde se reexporta:
+# You have to point to where the function LIVES, not where it is re-exported:
 patch.object(llm, "call_claude", ...)
 ```
 
-## Nunca se toca un test para que pase
+## A test is never touched just to make it pass
 
-Se toca un test cuando **lo que prueba** ha cambiado, o cuando mira detalles
-internos que se han movido. Nunca para tapar un fallo.
+A test is touched when **what it tests** has changed, or when it looks at
+internal details that have moved. Never to cover up a failure.
 
-La diferencia es la que separa un refactor de un destrozo: durante la división de
-`server.py` en seis módulos, los 175 tests pasaron sin que ninguno se relajara.
+The difference is what separates a refactor from a wreck: during the split of
+`server.py` into six modules, all 175 tests passed without a single one being relaxed.
 
-## Antes de dar algo por terminado
+## Before calling something done
 
-- La suite entera en verde, no solo lo tuyo
-- La CI en verde en GitHub
-- Si tocaste algo que se despliega, comprobarlo **en producción**, no en tu máquina
+- The whole suite green, not just your part
+- CI green on GitHub
+- If you touched something that gets deployed, check it **in production**, not on your machine
 
-Lo último no es paranoia. Ese mismo día un arreglo estuvo verde en local durante
-horas mientras producción seguía sirviendo el código de la víspera.
+The last one is not paranoia. On that same day a fix was green locally for
+hours while production kept serving the previous day's code.
 
 ---
 
-## Lo que comprueba la máquina y lo que no
+## What the machine checks and what it does not
 
-| | Quién |
+| | Who |
 |---|---|
-| La suite en verde antes de commitear | El hook `scripts/hooks/pre-commit` |
-| La suite en verde en cada push y PR | GitHub Actions |
-| Los modelos retirados, una vez por semana | Cron de la CI, lunes 06:00Z |
-| Un commit por unidad de trabajo | Tú |
-| El mensaje que dice por qué | Tú |
-| Ver el test en rojo antes de arreglarlo | Tú |
+| The suite green before committing | The `scripts/hooks/pre-commit` hook |
+| The suite green on every push and PR | GitHub Actions |
+| Retired models, once a week | CI cron, Monday 06:00Z |
+| One commit per unit of work | You |
+| The message that says why | You |
+| Seeing the test red before fixing it | You |
 
-Las tres últimas no se pueden automatizar. Por eso están escritas.
+The last three cannot be automated. That is why they are written down.
