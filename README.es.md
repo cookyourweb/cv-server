@@ -175,6 +175,9 @@ Documentadas como ADRs en [`docs/`](docs/):
 - **[ADR-004](docs/ADR-004-llm-backend.md)**. LiteLLM se escribe y se deja apagado
   (`LLM_BACKEND`). Se midió: +146 MB de disco, +5,96 s de arranque y 207 MB de RAM frente
   a 9 MB.
+- **[ADR-007](docs/ADR-007-cv-encryption-at-rest.md)**. Los CV master se cifran en reposo
+  desde la aplicación con AES-256-GCM y un llavero que nunca toca la base de datos
+  (`cifrado.py`). Cada cifrado queda ligado a su dueña y a su idioma.
 
 > **La autenticación está en el ADR-003 del repo `buscartrabajo`**
 > (`docs/adr/ADR-003-authentication.md`), que no es el ADR-003 de arriba.

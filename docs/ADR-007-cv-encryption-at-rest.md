@@ -45,7 +45,7 @@ none of them: whoever can run a `SELECT` reads plain text.
 ## Consequences
 
 - Losing every copy of a key makes the rows encrypted with it unrecoverable. The
-  keyring must be backed up separately from the database backups (ADR-008).
+  keyring must be backed up separately from the database backups (a separate backup ADR, to be written).
 - A leaked key plus a leaked dump exposes the CVs; the two live in different
   systems on purpose.
 - Encrypted text cannot be searched in SQL. Nothing needs it: the master is read

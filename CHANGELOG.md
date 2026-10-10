@@ -61,6 +61,43 @@ touching the prompt f-string in `server.py`.
 
 ---
 
+## Unreleased
+
+### Encryption at rest, honest match and review fixes
+
+**Added**
+
+- `cifrado.py` and [ADR-007](docs/ADR-007-cv-encryption-at-rest.md): AES-256-GCM
+  encryption of CV masters, with an AAD that binds each ciphertext to its owner and
+  language, key versions for rotation (`CV_CLAVES`, `CV_CLAVE_ACTIVA`) and fail-closed
+  behaviour on any configuration or authentication problem. The keyring lives in the
+  environment, never in the database.
+- `match.py`: honest, rule-based match between an offer and a CV master. Pure (no I/O,
+  network or LLM), every claim carries evidence from the master, soft skills go to
+  "not evaluable" and are never guessed. **Staged:** `real_jobs._ranking_fallback(master_texto=...)`
+  is not yet wired to production callers; the wiring arrives with the `/encaje`
+  endpoints.
+- Inflation guardrail (`guardrails.detectar_inflacion`): flags claims of exclusivity,
+  leadership or scope in generated text that the master does not support.
+
+**Fixed (from the security and quality reviews)**
+
+- `match.py` was open to ReDoS: the years and language patterns backtracked
+  quadratically on long runs of whitespace in untrusted offer text. Whitespace is now
+  normalised and the offer and master text are capped (20,000 characters) before any
+  regex, and the quantifiers are bounded.
+- `match.py` no longer reaches into private helpers: `guardrails.tecnologias_en` and
+  `guardrails.plano` are public (the private names remain as the canonical definitions).
+- The one database test that runs `alembic downgrade base` is skipped unless
+  `ALLOW_DESTRUCTIVE_DB_TESTS=1` is set in the command environment.
+- `cifrado.py`: error messages are in English, duplicate key versions in `CV_CLAVES` are
+  rejected instead of silently shadowing a key, and `usuario_id` must be a non-empty
+  string or UUID before the AAD is built.
+- `base_de_datos.py` requires TLS (`sslmode=require`) unless the URL sets its own
+  `sslmode`.
+
+---
+
 ## October 2026
 
 ### 10-oct · Neon Postgres foundation for sign-up with CV

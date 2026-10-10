@@ -177,6 +177,9 @@ Documented as ADRs in [`docs/`](docs/):
 - **[ADR-004](docs/ADR-004-llm-backend.md)**. LiteLLM is written and left switched off
   (`LLM_BACKEND`). It was measured: +146 MB of disk, +5.96 s of startup and 207 MB of RAM
   versus 9 MB.
+- **[ADR-007](docs/ADR-007-cv-encryption-at-rest.md)**. CV masters are encrypted at rest
+  by the application with AES-256-GCM and a keyring that never touches the database
+  (`cifrado.py`). Each ciphertext is bound to its owner and language.
 
 > **Authentication is covered in ADR-003 of the `buscartrabajo` repo**
 > (`docs/adr/ADR-003-authentication.md`), which is not the ADR-003 above.
