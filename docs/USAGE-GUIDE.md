@@ -1,150 +1,152 @@
-# Guía de uso
+# Usage guide
 
-Sistema que cada mañana te manda ofertas por email y, al aprobar una, genera el CV
-adaptado y la carta de presentación.
+A system that sends you job offers by email every morning and, when you approve one,
+generates the adapted CV and the cover letter.
 
-**Estado:** beta privada. Hace falta invitación.
+**Status:** private beta. You need an invitation.
 
-Si lo que buscas es el detalle técnico, está en el [README](../README.es.md).
-
----
-
-## Cómo empezar
-
-El servicio es una **beta privada**. No hay formulario público: el acceso es por
-invitación y la cuenta la crea la administradora.
-
-### Paso 1. Pide tu invitación
-
-Escribe a administración y cuéntale qué buscas, en tus propias palabras. Para crearte la
-cuenta necesita:
-
-- Nombre completo
-- Email, el que usarás para recibir las ofertas
-- Perfil libre: qué buscas
-
-Opcionales, pero cuanto más completes más precisas salen las ofertas:
-
-- Rol objetivo (por ejemplo "Senior Frontend Developer" o "Tech Lead")
-- Ciudad, para los filtros de híbrido
-- Modalidad preferida: remoto, híbrido Madrid, híbrido Barcelona o presencial
-- Stack técnico
-- Salario mínimo anual en euros
-- LinkedIn, la URL completa
-
-### Paso 2. Aporta tu CV Master
-
-El sistema adapta TU CV a cada oferta, así que necesita una versión base de la que partir.
-
-**Opción A, recomendada.** Sube un `.txt` con tu CV completo a tu Google Drive, hazlo
-público con "cualquiera con el enlace puede ver", y manda el enlace a administración.
-
-**Opción B.** Manda el CV a administración y lo sube a la carpeta compartida con el
-nombre `CV_Master_{tu_email_con_guiones}.txt`.
-
-### Paso 3. Espera el primer envío
-
-Cuando la administradora crea tu cuenta, el sistema lanza una primera búsqueda y recibes
-tus primeras ofertas por email. Desde ahí, el envío es diario a las 9:00.
-
-Si alguien visita la dirección del servicio sin invitación, solo ve una página que explica
-que es una beta privada. Es normal: no hay nada que rellenar.
+If you are looking for the technical detail, it is in the [README](../README.md).
 
 ---
 
-## El día a día
+## Getting started
 
-### El email de la mañana
+The service is a **private beta**. There is no public form: access is by
+invitation and the account is created by the administrator.
 
-Cada día a las 9:00 recibes un email con ofertas reales: empresa, puesto, salario,
-modalidad, enlace y contacto de recursos humanos. Cada una trae dos botones,
-**Aprobar** y **Descartar**, dentro del propio email. No hace falta abrir nada más.
+### Step 1. Ask for your invitation
 
-### Al aprobar una oferta
+Write to the administrator and tell them what you are looking for, in your own words. To create
+your account they need:
 
-En uno o dos minutos llega un segundo email con:
+- Full name
+- Email, the one you will use to receive the offers
+- Free-form profile: what you are looking for
 
-- La carta de presentación, personalizada para esa empresa y ese puesto
-- El enlace al CV adaptado, un DOCX en tu Drive
-- Un botón **Mandar a empresa**, que marca la oferta como enviada y te manda un tercer
-  email de confirmación con los datos de contacto
+Optional, but the more you fill in, the more precise the offers are:
 
-### Lo que haces tú
+- Target role (for example "Senior Frontend Developer" or "Tech Lead")
+- City, for the hybrid filters
+- Preferred work mode: remote, hybrid Madrid, hybrid Barcelona or on-site
+- Technical stack
+- Minimum annual salary in euros
+- LinkedIn, the full URL
 
-Abres el CV, lo revisas, y mandas el email a la empresa. **El sistema nunca envía nada
-a la empresa por su cuenta**: solo te lo deja preparado.
+### Step 2. Provide your CV Master
+
+The system adapts YOUR CV to each offer, so it needs a base version to start from.
+
+**Option A, recommended.** Upload a `.txt` with your full CV to your Google Drive, make it
+public with "anyone with the link can view", and send the link to the administrator.
+
+**Option B.** Send the CV to the administrator and they upload it to the shared folder under the
+name `CV_Master_{your_email_with_hyphens}.txt`.
+
+### Step 3. Wait for the first delivery
+
+When the administrator creates your account, the system runs a first search and you receive
+your first offers by email. From then on, delivery is daily at 9:00.
+
+If someone visits the service address without an invitation, they only see a page explaining
+that it is a private beta. That is normal: there is nothing to fill in.
 
 ---
 
-## Cambiar tus preferencias
+## Day to day
 
-Tu perfil vive en una base de datos de Notion. Para cambiar email, stack o salario,
-pausar los envíos sin borrarte, o eliminar tu cuenta, contacta con quien te invitó.
-Más adelante habrá una forma de editar tu perfil tú misma.
+### The morning email
+
+Every day at 9:00 you receive an email with real offers: company, position, salary,
+work mode, link and HR contact. Each one has two buttons,
+**Approve** and **Discard**, inside the email itself. You do not need to open anything else.
+
+### When you approve an offer
+
+In one or two minutes a second email arrives with:
+
+- The cover letter, personalized for that company and that position
+- The link to the adapted CV, a DOCX in your Drive
+- A **Send to company** button, which marks the offer as sent and sends you a third
+  confirmation email with the contact details
+
+### What you do
+
+You open the CV, review it, and send the email to the company. **The system never sends anything
+to the company on its own**: it only leaves it ready for you.
 
 ---
 
-## Si algo falla
+## Changing your preferences
 
-**La página del servicio tarda en cargar.** Espera 60 segundos, que el servidor se despierta
-con la primera visita del día. Si a los dos minutos sigue igual, avisa.
+Your profile lives in a Notion database. To change your email, stack or salary,
+pause deliveries without deleting you, or delete your account, contact whoever invited you.
+Later there will be a way to edit your profile yourself.
 
-**No llega el email de las ofertas.** Mira en spam y en promociones, y comprueba el
-remitente. Si no aparece, avisa indicando el email con el que te registraste.
+---
 
-**Aprobé una oferta y no llegó el CV.** El flujo tarda uno o dos minutos: el modelo
-escribe la carta, adapta el CV y lo sube a Drive. Si pasan cinco minutos sin nada,
-avisa y se revisan los logs.
+## If something fails
 
-**El CV generado tiene datos de otra persona.** Casi seguro que tu CV Master no está
-subido y el sistema tiró de uno de reserva. Comprueba que lo subiste y avisa.
+**The service page takes a long time to load.** Wait 60 seconds, the server wakes up
+with the first visit of the day. If it is still the same after two minutes, let us know.
 
-### Los estados de una oferta
+**The offers email does not arrive.** Check spam and promotions, and verify the
+sender. If it does not appear, let us know, giving the email you registered with.
 
-| Estado | Qué significa |
+**I approved an offer and the CV did not arrive.** The flow takes one or two minutes: the model
+writes the letter, adapts the CV and uploads it to Drive. If five minutes pass with nothing,
+let us know and the logs will be checked.
+
+**The generated CV has another person's data.** Almost certainly your CV Master has not been
+uploaded and the system used a fallback one. Check that you uploaded it and let us know.
+
+### Offer statuses
+
+The status names below are shown as they appear in the Notion database (in Spanish).
+
+| Status | What it means |
 |---|---|
-| Pendiente | Recién llegada, sin decidir |
-| Aprobado | Pulsaste "Aprobar", carta y CV en camino |
-| En proceso | Carta y CV generados, esperando que la mandes |
-| Enviado a empresa | Pulsaste "Mandar", candidatura enviada |
-| Descartado | Pulsaste "Descartar" |
-| Rechazado | La empresa respondió que no |
-| Caducada | La oferta ya no está disponible |
+| Pendiente (Pending) | Just arrived, undecided |
+| Aprobado (Approved) | You pressed "Approve", letter and CV on the way |
+| En proceso (In progress) | Letter and CV generated, waiting for you to send it |
+| Enviado a empresa (Sent to company) | You pressed "Send", application sent |
+| Descartado (Discarded) | You pressed "Discard" |
+| Rechazado (Rejected) | The company replied that it is a no |
+| Caducada (Expired) | The offer is no longer available |
 
 ---
 
-## Privacidad
+## Privacy
 
-- Tu perfil está en una base de datos privada de Notion, con acceso solo de administración.
-- Los CVs adaptados se guardan en Drive, en una carpeta con tu email como nombre.
-- La generación usa la API de Claude (Anthropic) con tu CV Master y la descripción de la oferta.
-- Ningún dato se vende ni se comparte con terceros.
-- Para borrar tu cuenta entera, avisa y se elimina en 24 horas.
-
----
-
-## Preguntas frecuentes
-
-**¿Las ofertas son reales?**
-Sí. Entran de portales de empleo reales: Adzuna, Tecnoempleo y los feeds RSS de LinkedIn.
-Antes de llegarte pasan por filtros de modalidad, ubicación y encaje con tu perfil.
-
-**¿Cuánto cuesta?**
-Nada. Es una beta privada cerrada. Si pasa a producto comercial se avisa antes.
-
-**¿Cuántas ofertas recibo?**
-Las que superen los filtros ese día, con un tope diario. Fines de semana y festivos
-también, no hay pausa.
-
-**¿Puedo usarlo desde el móvil?**
-Sí, los emails están adaptados.
-
-**¿Puedo invitar a alguien?**
-Todavía no. Manda el contacto a administración y se da de alta a mano.
+- Your profile is in a private Notion database, with access for the administrator only.
+- The adapted CVs are stored in Drive, in a folder with your email as its name.
+- Generation uses the Claude API (Anthropic) with your CV Master and the offer description.
+- No data is sold or shared with third parties.
+- To delete your entire account, let us know and it is removed within 24 hours.
 
 ---
 
-## Contacto
+## Frequently asked questions
 
-Cualquier incidencia, duda o comentario: responde a cualquier email del sistema y llega
-a administración.
+**Are the offers real?**
+Yes. They come from real job portals: Adzuna, Tecnoempleo and the LinkedIn RSS feeds.
+Before reaching you they go through filters for work mode, location and fit with your profile.
+
+**How much does it cost?**
+Nothing. It is a closed private beta. If it becomes a commercial product, you will be told first.
+
+**How many offers do I receive?**
+Those that pass the filters that day, with a daily cap. Weekends and holidays
+too, there is no pause.
+
+**Can I use it from my phone?**
+Yes, the emails are adapted for it.
+
+**Can I invite someone?**
+Not yet. Send the contact to the administrator and they are added by hand.
+
+---
+
+## Contact
+
+For any incident, question or comment: reply to any email from the system and it reaches
+the administrator.

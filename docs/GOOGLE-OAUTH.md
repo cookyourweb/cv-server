@@ -1,68 +1,68 @@
-# Google OAuth y el token de Drive
+# Google OAuth and the Drive token
 
-**Estado:** vigente · **Fecha:** 18 de agosto de 2026
+**Status:** current · **Date:** 18 August 2026
 
-Este fichero existe porque el mismo fallo ha caído tres veces (24-jul, 11-ago y
-18-ago) y las tres veces se rediagnosticó desde cero. El dato que faltaba no era
-el mecanismo: era **qué proyecto de Google**.
+This file exists because the same failure has hit three times (24 Jul, 11 Aug and
+18 Aug) and each time it was diagnosed again from scratch. The missing piece was not
+the mechanism: it was **which Google project**.
 
-## Los datos
+## The facts
 
-| Qué | Valor |
+| What | Value |
 |---|---|
-| Proyecto de Google | `<id-del-proyecto>`, número de proyecto `<numero-de-proyecto>` |
-| Cómo se identificó | CONFIRMADO por Vero el 18-ago-2026 en la consola de Google. Antes era solo una inferencia por eliminación |
-| Cliente que usa Render | `cv-server-render-web`, tipo Aplicación web, creado el 2 may 2026, ID `<numero-de-proyecto>-<prefijo-web>...` |
-| Otro cliente del proyecto | `subirCv`, tipo Escritorio, creado el 9 abr 2026, ID `<numero-de-proyecto>-<prefijo-escritorio>...`. NO es el de Render |
-| Cómo distinguirlos | Por los caracteres tras el guion en `GOOGLE_CLIENT_ID`: `<prefijo-web>` es el web de Render, `<prefijo-escritorio>` es el de escritorio (los prefijos reales se consultan en la consola de Google, no se publican aquí) |
-| Permiso solicitado | `https://www.googleapis.com/auth/drive` (Drive completo, categoría restringida) |
-| Dónde viven las credenciales | Render, servicio `cv-server`, pestaña Environment |
+| Google project | `<id-del-proyecto>` (the project ID), project number `<numero-de-proyecto>` |
+| How it was identified | CONFIRMED by Vero on 18 Aug 2026 in the Google console. Before that it was only an inference by elimination |
+| Client used by Render | `cv-server-render-web`, type Web application, created on 2 May 2026, ID `<numero-de-proyecto>-<prefijo-web>...` |
+| Other client in the project | `subirCv`, type Desktop, created on 9 Apr 2026, ID `<numero-de-proyecto>-<prefijo-escritorio>...`. It is NOT the Render one |
+| How to tell them apart | By the characters after the hyphen in `GOOGLE_CLIENT_ID`: `<prefijo-web>` is the Render web client, `<prefijo-escritorio>` is the desktop one (the real prefixes are looked up in the Google console, they are not published here) |
+| Requested scope | `https://www.googleapis.com/auth/drive` (full Drive, restricted category) |
+| Where the credentials live | Render, service `cv-server`, Environment tab |
 | Variables | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` |
-| Servicio desplegado | `https://cv-server-ggd8.onrender.com` |
+| Deployed service | `https://cv-server-ggd8.onrender.com` |
 
-**El otro proyecto, `n8n-asistente-correo`, NO es este.** Ese es el del
-asistente de correo, su cliente es de tipo Web con redirección a n8n, y ya está
-publicado en producción.
+**The other project, `n8n-asistente-correo`, is NOT this one.** That one belongs to the
+email assistant, its client is of type Web with a redirect to n8n, and it is already
+published in production.
 
-## Por qué se muere el token, con la cita
+## Why the token dies, with the quote
 
-Documentación de Google, `developers.google.com/identity/protocols/oauth2`:
+Google documentation, `developers.google.com/identity/protocols/oauth2`:
 
 > A Google Cloud Platform project with an OAuth consent screen configured for an
 > external user type and a publishing status of "Testing" is issued a refresh
 > token expiring in 7 days, unless the only OAuth scopes requested are a subset
 > of name, email address, and user profile
 
-cv-server pide Drive completo, que no está en ese subconjunto. Por tanto, en modo
-Testing **el token muere cada siete días exactos**. El error que aparece es
+cv-server requests full Drive, which is not in that subset. Therefore, in Testing
+mode **the token dies every seven days exactly**. The error that appears is
 `invalid_grant: Token has been expired or revoked`.
 
-Las fechas lo confirman: token regenerado el 24-jul, muerto el 31-jul, y no se
-notó hasta el 11-ago porque el sistema estuvo parado del 24-jul al 5-ago.
-Regenerado el 11-ago, muerto el 18-ago.
+The dates confirm it: token regenerated on 24 Jul, dead on 31 Jul, and nobody
+noticed until 11 Aug because the system was stopped from 24 Jul to 5 Aug.
+Regenerated on 11 Aug, dead on 18 Aug.
 
-## El arreglo definitivo, una vez
+## The permanent fix, once
 
-Publicar la pantalla de consentimiento:
+Publish the consent screen:
 
-`console.cloud.google.com/auth/audience?project=<id-del-proyecto>` y pulsar
-PUBLICAR APLICACIÓN.
+`console.cloud.google.com/auth/audience?project=<id-del-proyecto>` and click
+PUBLISH APP.
 
-Al pasar a "In production" desaparece la caducidad de siete días. Sale un aviso
-de aplicación no verificada, y es irrelevante: Vero es la única usuaria de su
-propia aplicación y el límite sin verificar son 100 usuarios.
+Moving to "In production" removes the seven-day expiry. An unverified-app warning
+appears, and it is irrelevant: Vero is the only user of her own
+application and the unverified limit is 100 users.
 
-## El arreglo de arquitectura, cuando toque
+## The architecture fix, when the time comes
 
-Usar una **cuenta de servicio** en vez de consentimiento de usuario. Un servidor
-que lee un documento sin que haya nadie delante no debería depender de un
-consentimiento humano. Se comparte el CV Master con la dirección de la cuenta de
-servicio y se usa su clave. Ninguna de las siete causas de expiración que lista
-Google aplica a una cuenta de servicio.
+Use a **service account** instead of user consent. A server
+that reads a document with nobody in front of it should not depend on a
+human consent. The CV Master is shared with the service account address
+and its key is used. None of the seven expiry causes that Google
+lists applies to a service account.
 
-## Regenerar el token a mano: SON DOS PASOS
+## Regenerating the token by hand: IT TAKES TWO STEPS
 
-Uno solo no basta, y ya se falló por esto el 11-ago.
+One alone is not enough, and this already failed on 11 Aug.
 
 ```bash
 # 1. generar. Ojo: el venv es oculto y las dependencias no estan en el python del sistema
@@ -75,50 +75,59 @@ Uno solo no basta, y ya se falló por esto el 11-ago.
 #    Render > cv-server > Environment > GOOGLE_REFRESH_TOKEN, pegar y desplegar
 ```
 
-Generar el token sin pegarlo en Render deja el sistema exactamente igual de roto.
+In plain English, the commented steps are: 1. generate the token (note that the venv is
+hidden and the dependencies are not in the system Python; run it from the root of the
+`cv-server` repository). The script opens `localhost:8080`, you choose the account that
+owns the Drive, and it saves the token in `.env` and verifies that it can read
+`CV_MASTER_VERONICA_ES`. 2. Take it to production: in Render, go to cv-server >
+Environment > `GOOGLE_REFRESH_TOKEN`, paste it and deploy.
 
-## Cómo comprobar si está vivo
+Generating the token without pasting it into Render leaves the system exactly as broken.
 
-`/health` NO comprueba Drive, así que no sirve para esto. La única prueba real es
-aprobar una oferta en Notion y ver si el CV se genera, o mirar el payload del
-Error Trigger de n8n en `execution.error.description`, que es donde está el
-mensaje útil. El estado de la ejecución sale `success` aunque haya fallado.
+## How to check whether it is alive
 
-## Registro: 18 de agosto de 2026, resuelto
+`/health` does NOT check Drive, so it is no use for this. The only real test is
+to approve an offer in Notion and see whether the CV is generated, or to look at the payload of the
+n8n Error Trigger in `execution.error.description`, which is where the useful
+message is. The execution status shows `success` even if it failed.
 
-1. Confirmado en la consola que el proyecto es `<id-del-proyecto>` y que el
-   cliente de Render es `cv-server-render-web`, tipo Aplicación web.
-2. **Publicada la aplicación a producción.**
-3. Regenerado el token DESPUÉS de publicar, que es el orden que importa.
-   Verificado por el propio script: `REFRESH OK` y `LEE EL MASTER:
-   'CV_MASTER_VERONICA_ES'`.
-4. Pegado en Render y redespliegue.
+## Log: 18 August 2026, resolved
 
-**Este token ya no caduca a los siete días.** Si vuelve a fallar, la causa es
-otra y este documento ya no la explica.
+1. Confirmed in the console that the project is `<id-del-proyecto>` and that the
+   Render client is `cv-server-render-web`, type Web application.
+2. **Published the app to production.**
+3. Regenerated the token AFTER publishing, which is the order that matters.
+   Verified by the script itself: `REFRESH OK` and `LEE EL MASTER:
+   'CV_MASTER_VERONICA_ES'` (the script's own Spanish output: "reads the Master").
+4. Pasted into Render and redeployed.
 
-## Dos trampas del procedimiento, para la próxima
+**This token no longer expires after seven days.** If it fails again, the cause is
+another one and this document no longer explains it.
 
-**La URL de consentimiento puede quedar invisible.** Si el script se lanza sin
-terminal, Python almacena la salida en un búfer y el enlace no aparece: parece
-colgado cuando en realidad está esperando en `localhost:8080`. Se lanza con
-`python -u` para que la salida salga al momento.
+## Two traps in the procedure, for next time
 
-Y si un intento anterior quedó vivo, el puerto está ocupado y el segundo intento
-choca. Se comprueba con:
+**The consent URL can end up invisible.** If the script is launched without a
+terminal, Python buffers the output and the link does not appear: it looks
+hung when it is actually waiting on `localhost:8080`. Launch it with
+`python -u` so the output comes out immediately.
+
+And if a previous attempt was left running, the port is busy and the second attempt
+collides. Check with:
 
 ```bash
 lsof -nP -iTCP:8080 -sTCP:LISTEN
 ```
 
-**El script imprime el token en claro** en la última línea. Si se lanza desde una
-herramienta que registra la salida, el token queda escrito en ese registro. Para
-llevarlo a Render sin mostrarlo:
+**The script prints the token in clear text** on the last line. If it is launched from a
+tool that records the output, the token ends up written in that log. To
+take it to Render without displaying it:
 
 ```bash
 pbcopy < <(rg -o '^1//[A-Za-z0-9_-]+$' ruta/de/la/salida)
 ```
 
-Conviene comparar la longitud del original con la del portapapeles antes de
-pegar: un salto de línea de más rompe la autenticación y el error que da Google
-es el mismo `invalid_grant`, así que se diagnostica mal.
+(`ruta/de/la/salida` means "path to the output file".)
+
+Compare the length of the original with that of the clipboard before
+pasting: an extra line break breaks authentication and the error Google gives
+is the same `invalid_grant`, so it gets misdiagnosed.

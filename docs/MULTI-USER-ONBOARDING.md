@@ -1,115 +1,122 @@
-# Onboarding multiusuario: de un CV cualquiera a un PERFIL BASE
+# Multi-user onboarding: from any CV to a PERFIL BASE
 
-Spec de la entrevista de alta. **Todavía no implementado.** Escrito el 24 de julio de 2026,
-ampliado el 25 con la arquitectura de tres capas y el flujo de 9 pasos.
+Spec of the sign-up interview. **Not implemented yet.** Written on 24 July 2026,
+expanded on the 25th with the three-layer architecture and the 9-step flow.
+
+> **Language note.** `PERFIL BASE` and the names of its sections (`Identidad profesional`,
+> `Identidades permitidas`, `Orden del titular`, `Variante permitida`, `Nunca permitido`, and so on)
+> are literal identifiers: the prompt in `server.py` reads them by name. They stay in Spanish
+> and are glossed in English the first time they are explained. See `CV-ADAPTATION-PROMPT.md`.
 
 ---
 
-## LA LECCIÓN RAÍZ: el problema nunca fue el CV
+## THE ROOT LESSON: the problem was never the CV
 
-Estábamos intentando adaptar un documento que **mezclaba tres cosas distintas**:
+We were trying to adapt a document that **mixed three different things**:
 
-1. **Quién eres** (identidad)
-2. **Qué has hecho** (hechos)
-3. **Cómo venderlo para una oferta concreta** (adaptación)
+1. **Who you are** (identity)
+2. **What you have done** (facts)
+3. **How to sell it for a specific offer** (adaptation)
 
-Un documento que mezcla las tres capas obliga al modelo a separarlas por su cuenta cada vez
-que genera, y ahí es donde inventa. La solución no fue una regla mejor: fue **separar las
-capas en el dato**.
+A document that mixes the three layers forces the model to separate them on its own every time
+it generates, and that is where it invents. The solution was not a better rule: it was **separating the
+layers in the data**.
 
-| Capa | Qué es | Cambia |
+| Layer | What it is | Changes |
 |---|---|---|
-| **PERFIL BASE** | Identidad permanente | Casi nunca |
-| **Master CV** | Todos los hechos verificables | Cuando ocurren hechos nuevos |
-| **CV adaptado** | Selección y orden de esos hechos según la oferta | En cada oferta |
+| **PERFIL BASE** | Permanent identity | Almost never |
+| **Master CV** | All the verifiable facts | When new facts happen |
+| **Adapted CV** | Selection and order of those facts according to the offer | In every offer |
 
-Con las capas separadas, generar un CV deja de ser "reinterpretar quién eres" y pasa a ser
-**seleccionar y ordenar hechos que ya existen**. Eso es lo que elimina la invención.
+With the layers separated, generating a CV stops being "reinterpreting who you are" and becomes
+**selecting and ordering facts that already exist**. That is what removes invention.
 
-> **Si tuviéramos que crear el sistema desde cero para otra persona, empezaríamos por esta
-> arquitectura.** No por el CV. El CV es la salida, no el punto de partida.
+> **If we had to build the system from scratch for another person, we would start with this
+> architecture.** Not with the CV. The CV is the output, not the starting point.
 
 ---
 
-## EL ORDEN DE LA ENTREVISTA (construir el Master ANTES de generar CVs)
+## THE ORDER OF THE INTERVIEW (build the Master BEFORE generating CVs)
 
-El error de partida sería pedir "el CV y la oferta". El orden correcto es al revés: **primero
-se construye el Master (la fuente de verdad), después se generan infinitos CV adaptados.** La
-oferta no entra hasta que el Master está terminado.
+The starting mistake would be to ask for "the CV and the offer". The right order is the reverse: **first
+the Master (the source of truth) is built, then infinite adapted CVs are generated.** The
+offer does not come in until the Master is finished.
 
-Nueve pasos, en este orden estricto:
+Nine steps, in this strict order:
 
-1. **Identidad profesional**: antes que nada, quién eres. *¿A qué te dedicas realmente? ¿Qué
-   problemas sabes resolver? ¿Qué puestos puedes defender en una entrevista? ¿Qué puestos NO
-   quieres que aparezcan nunca?* La identidad es lo único que no cambia entre ofertas.
-2. **Objetivo profesional**: *¿Qué tipos de oferta quieres poder atacar con este Master?*
+1. **Professional identity**: before anything else, who you are. *What do you really do? What
+   problems can you solve? What positions can you defend in an interview? What positions do you NOT
+   want to ever appear?* Identity is the only thing that does not change between offers.
+2. **Professional goal**: *What types of offer do you want to be able to target with this Master?*
    (Backend, Frontend Tech Lead, AI Engineer, Engineering Manager, Solutions Architect,
-   GenAI Adoption...). No para ponerlo en el CV: para saber qué variaciones debe soportar el
-   sistema. Alimenta `Tipos de oferta compatibles`.
-3. **CV actual**: ahora sí. No para mejorarlo, para **extraer hechos**: empresas, proyectos,
-   tecnologías, responsabilidades, logros, formación.
-4. **Lo que falta**: donde casi todos los CV fallan. *¿Qué haces de verdad que no aparece en
-   el CV?* Mentorizar, entrevistar, documentar, experimentar, automatizar, formar equipos,
-   definir procesos, comparar herramientas, hacer arquitectura. Ocurre, pero nadie lo escribe.
-5. **Límites**: *¿Qué NO quieres que el sistema invente nunca?* No inventar liderazgo,
-   métricas, equipos, tecnologías, cloud, IA. **Aquí nacen los guardrails de ese usuario.**
-6. **Identidad estructurada**: se construye el `PERFIL BASE` con Identidad profesional,
-   Identidades permitidas, Orden del titular, Variante permitida, Nunca permitido, Tipos de
-   oferta compatibles, Áreas de contribución, Posicionamiento, Especialización, Tecnologías
-   principales. Este bloque apenas cambiará nunca.
-7. **Experiencia**: los bullets NO se escriben pensando en una oferta, se escriben pensando
-   *¿qué ocurrió de verdad?* Cada experiencia responde: qué construiste, diseñaste, lideraste,
-   automatizaste, aprendiste; qué tecnologías, qué decisiones, qué enseñaste, qué documentaste.
-   Todavía sin pensar en ATS.
-8. **Inventario de palabras clave**: solo cuando el Master está terminado. Un inventario
-   grande (AI Engineering, LLMs, OpenAI, Claude, React, Node, Developer Productivity, AI
-   Adoption, Architecture, Technical Leadership...). No para meterlas todas: para que el
-   adaptador pueda **elegir** según la oferta.
-9. **Reglas del sistema**: al final del todo. No inventar experiencia, no cambiar seniority,
-   no crear identidades nuevas, no alterar el orden del titular, adaptar el énfasis y no los
-   hechos, priorizar la experiencia relevante, reutilizar solo información existente en el
+   GenAI Adoption...). Not to put it on the CV: to know which variations the system must
+   support. It feeds `Tipos de oferta compatibles` (compatible offer types).
+3. **Current CV**: now, yes. Not to improve it, but to **extract facts**: companies, projects,
+   technologies, responsibilities, achievements, education.
+4. **What is missing**: where almost every CV fails. *What do you really do that does not appear on
+   the CV?* Mentoring, interviewing, documenting, experimenting, automating, training teams,
+   defining processes, comparing tools, doing architecture. It happens, but nobody writes it down.
+5. **Limits**: *What do you NOT want the system to ever invent?* Do not invent leadership,
+   metrics, teams, technologies, cloud, AI. **This is where that user's guardrails are born.**
+6. **Structured identity**: the `PERFIL BASE` is built with `Identidad profesional` (professional
+   identity), `Identidades permitidas` (allowed identities), `Orden del titular` (headline order),
+   `Variante permitida` (allowed variant), `Nunca permitido` (never allowed), `Tipos de oferta
+   compatibles` (compatible offer types), `Áreas de contribución` (contribution areas),
+   `Posicionamiento` (positioning), `Especialización` (specialization) and `Tecnologías principales`
+   (main technologies). This block will hardly ever change.
+7. **Experience**: the bullets are NOT written thinking about an offer, they are written thinking
+   *what really happened?* Each experience answers: what you built, designed, led,
+   automated, learned; what technologies, what decisions, what you taught, what you documented.
+   Still without thinking about ATS.
+8. **Keyword inventory**: only when the Master is finished. A large inventory (AI
+   Engineering, LLMs, OpenAI, Claude, React, Node, Developer Productivity, AI
+   Adoption, Architecture, Technical Leadership...). Not to include them all: so that the
+   adapter can **choose** according to the offer.
+9. **System rules**: at the very end. Do not invent experience, do not change seniority,
+   do not create new identities, do not alter the headline order, adapt the emphasis and not the
+   facts, prioritize relevant experience, reuse only information that exists in the
    Master.
 
-**Por qué este orden importa:** ATS y adaptación van al final a propósito. Si se piensa en la
-oferta antes de tener los hechos, el usuario (o el modelo) empieza a escribir para agradar en
-vez de para describir, y ahí vuelve la invención. Primero la verdad, luego la venta.
+**Why this order matters:** ATS and adaptation go last on purpose. If the offer is thought about
+before the facts are in hand, the user (or the model) starts writing to please instead of
+to describe, and that is where invention comes back. First the truth, then the sale.
 
 ---
 
-El resto de este documento detalla CÓMO ejecutar esos pasos: qué se lee en vez de preguntar,
-las preguntas ancladas en fallos reales, y dónde vive el contrato.
+The rest of this document details HOW to run those steps: what is read instead of asked,
+the questions anchored in real failures, and where the contract lives.
 
-- **Qué produce la entrevista**: el bloque `PERFIL BASE` (paso 6) + el Master de hechos
-  (paso 7). Ver `CV-ADAPTATION-PROMPT.md`, sección *El PERFIL BASE es un CONTRATO de datos*.
-- **Por qué hace falta el PERFIL BASE**: sin ese bloque el prompt cae al fallback ("deriva las
-  identidades de la experiencia") y **derivar obliga a interpretar**. De interpretar salió
-  *AI Engineering Leader* en el CV de N-iX. La entrevista existe para que el modelo no tenga
-  que deducir nada.
+- **What the interview produces**: the `PERFIL BASE` block (step 6) + the Master of facts
+  (step 7). See `CV-ADAPTATION-PROMPT.md`, section *The PERFIL BASE is a data CONTRACT*.
+- **Why the PERFIL BASE is needed**: without that block the prompt falls back to the fallback ("derive the
+  identities from the experience") and **deriving forces interpretation**. Interpretation produced
+  *AI Engineering Leader* in the N-iX CV. The interview exists so that the model does not
+  have to deduce anything.
 
 ---
 
-## Principio: no preguntes lo que puedes leer
+## Principle: do not ask what you can read
 
-Un formulario largo mata el alta. Y la mayoría de las respuestas ya están en los dos
-documentos que el usuario acaba de entregar. Tres modos, y solo el tercero cuesta tiempo:
+A long form kills sign-up. And most of the answers are already in the two
+documents the user has just handed over. Three modes, and only the third costs time:
 
-| Modo | Qué es | Coste para el usuario |
+| Mode | What it is | Cost for the user |
 |---|---|---|
-| **EXTRAER** | Se lee del CV o de LinkedIn. No se pregunta | Cero |
-| **CONFIRMAR** | Se le propone lo extraído y dice sí o corrige | Un clic |
-| **PREGUNTAR** | No está en ningún documento. Hay que preguntarlo | Real |
+| **EXTRACT** | Read from the CV or LinkedIn. Not asked | Zero |
+| **CONFIRM** | The extracted data is proposed and they say yes or correct it | One click |
+| **ASK** | It is in no document. It has to be asked | Real |
 
-**Toda pregunta de este documento justifica su existencia con un fallo real** que se cometió
-generando los CV de Verónica. Una pregunta sin fallo detrás no entra.
+**Every question in this document justifies its existence with a real failure** made
+while generating Verónica's CVs. A question with no failure behind it does not get in.
 
 ---
 
-## Se engancha al alta que YA existe
+## It hooks into the sign-up that ALREADY exists
 
-No es un alta nueva. El registro actual lo hace la administradora con `POST /registro`, que
-desde el 7-oct-2026 exige la clave de máquina. El formulario público que se servía en `/`
-se eliminó: hoy `/` es una página de invitación. El alta crea el usuario en Notion con
-estos campos:
+It is not a new sign-up. The current registration is done by the administrator with `POST /registro`, which
+since 7 Oct 2026 requires the machine key. The public form that was served at `/`
+was removed: today `/` is an invitation page. The sign-up creates the user in Notion with
+these fields:
 
 ```bash
 curl -X POST "$BASE/registro" \
@@ -121,178 +128,178 @@ curl -X POST "$BASE/registro" \
        "cv_master_url": "..."}'
 ```
 
-Solo `email` es obligatorio para la ruta; el resto rellena el perfil en Notion.
+Only `email` is required by the route; the rest fills in the profile in Notion.
 
-| Campo en Notion | Qué es | Para la entrevista |
+| Field in Notion | What it is | For the interview |
 |---|---|---|
-| `Email` · `Name` · `Ciudad` | Identificación | n/a |
-| `LinkedIn` | URL del perfil | **Fuente de EXTRAER** |
-| `CV Master URL` · `cv_master_file_id` | El Master en Drive | **Fuente de EXTRAER** |
-| `Perfil` | Texto libre | Solapa con `Resumen profesional` |
-| `Rol objetivo` | Texto libre | Solapa con `Roles objetivo` |
-| `Stack` | Multi-select | Solapa con `Tecnologías principales` |
-| `Salario min` · `Modalidad` · `Activo` | Filtros de búsqueda | n/a |
+| `Email` · `Name` · `Ciudad` | Identification | n/a |
+| `LinkedIn` | Profile URL | **EXTRACT source** |
+| `CV Master URL` · `cv_master_file_id` | The Master in Drive | **EXTRACT source** |
+| `Perfil` | Free text | Overlaps with `Resumen profesional` |
+| `Rol objetivo` | Free text | Overlaps with `Roles objetivo` |
+| `Stack` | Multi-select | Overlaps with `Tecnologías principales` |
+| `Salario min` · `Modalidad` · `Activo` | Search filters | n/a |
 
-**Las dos fuentes que necesita la entrevista ya se piden.** Y tres campos ya cubren parte del
-contrato: no se vuelven a preguntar, se **confirman**.
+**The two sources the interview needs are already requested.** And three fields already cover part of the
+contract: they are not asked again, they are **confirmed**.
 
-Los pasos nuevos son solo los que producen lo que hoy no existe: identidades, orden,
-variante, posicionamiento y las preguntas de evidencia y frontera.
-
----
-
-## DÓNDE VIVE EL CONTRATO: en Notion, no en el Google Doc
-
-Con Verónica el `PERFIL BASE` se pegó **a mano** al principio de su CV Master. Para una
-usuaria eso vale. Para multiusuario **no**, y hay evidencia del mismo día.
-
-*El 24-jul-2026, pegando ese bloque en dos documentos, el contenido español acabó dentro del
-Master inglés **dos veces seguidas**. Lo detectó una lectura desde Drive, no la usuaria. Si
-falla quien diseñó el bloque, falla cualquiera.*
-
-**Propuesta (no implementada)**: el contrato se guarda como campos del usuario en Notion, y
-el servidor **construye el bloque `PERFIL BASE` y lo antepone al texto del Master** antes de
-mandarlo al modelo. El usuario no pega nada. Su Master sigue siendo solo su CV.
-
-Ventajas, más allá de quitar el copiar y pegar:
-
-- **Editable desde la aplicación**: cambiar el titular es actualizar un campo, no reeditar un
-  documento de Drive.
-- **Validable**: se puede comprobar que `Identidades permitidas` tiene entre 1 y 4 entradas, o
-  que la condición de la variante contiene nombres propios y no una categoría. Sobre texto
-  pegado en un Doc no se puede validar nada.
-- **Arregla de paso la incoherencia del detector**: hoy
-  `detectar_tecnologias_no_respaldadas` compara contra el texto completo del Master,
-  `PERFIL BASE` incluido, así que una tecnología escrita ahí queda dada por respaldada y
-  ciega el guardrail. Si el bloque se inyecta aparte, el detector puede seguir comparando
-  contra el Master **sin** el bloque, que es lo que el prompt dice que debe pasar.
-
-El prompt **no cambia**: sigue leyendo las mismas secciones por su nombre. Solo cambia quién
-escribe el bloque y dónde se guarda.
+The new steps are only the ones that produce what does not exist today: identities, order,
+variant, positioning and the evidence and boundary questions.
 
 ---
 
-## FASE 0: EXTRAER (sin preguntar nada)
+## WHERE THE CONTRACT LIVES: in Notion, not in the Google Doc
 
-Del CV y del perfil de LinkedIn se saca automáticamente:
+With Verónica the `PERFIL BASE` was pasted **by hand** at the top of her CV Master. For a
+single user that works. For multi-user it does **not**, and there is evidence from the same day.
 
-- Titular actual de LinkedIn: candidato a `Identidad profesional`
-- Puestos, empresas y fechas
-- Tecnologías mencionadas, y **en qué puesto aparece cada una**
-- Formación e idiomas
-- Años totales de trayectoria
+*On 24 Jul 2026, while pasting that block into two documents, the Spanish content ended up inside the
+English Master **twice in a row**. It was caught by a read from Drive, not by the user. If
+the person who designed the block gets it wrong, anyone will.*
 
-Esto no se pregunta nunca. Ya está escrito.
+**Proposal (not implemented)**: the contract is stored as user fields in Notion, and
+the server **builds the `PERFIL BASE` block and prepends it to the Master text** before
+sending it to the model. The user pastes nothing. Their Master remains only their CV.
+
+Advantages, beyond removing the copy and paste:
+
+- **Editable from the application**: changing the headline means updating a field, not re-editing a
+  Drive document.
+- **Validatable**: you can check that `Identidades permitidas` has between 1 and 4 entries, or
+  that the variant condition contains proper names and not a category. Nothing can be validated on text
+  pasted into a Doc.
+- **It also fixes the detector inconsistency**: today
+  `detectar_tecnologias_no_respaldadas` compares against the full text of the Master,
+  `PERFIL BASE` included, so a technology written there is considered backed and
+  blinds the guardrail. If the block is injected separately, the detector can keep comparing
+  against the Master **without** the block, which is what the prompt says must happen.
+
+The prompt **does not change**: it keeps reading the same sections by name. Only who
+writes the block and where it is stored changes.
 
 ---
 
-## FASE 1: CONFIRMAR la identidad (un clic por pregunta)
+## PHASE 0: EXTRACT (without asking anything)
 
-Se propone lo extraído y el usuario valida. Construye el contrato.
+From the CV and the LinkedIn profile, the following is taken automatically:
 
-**1.1 · Tu titular**: *"Tu LinkedIn dice X. ¿Ese es el titular con el que quieres que se
-generen todos tus CV?"*
-Va a: `Identidad profesional`
+- Current LinkedIn headline: candidate for `Identidad profesional`
+- Positions, companies and dates
+- Technologies mentioned, and **in which position each one appears**
+- Education and languages
+- Total years of career
 
-**1.2 · Tus identidades**: *"He detectado estas: A, B, C. ¿Sobran o falta alguna?"*
-Máximo 4. Es un repertorio **cerrado**: ninguna otra podrá usarse nunca.
-Va a: `Identidades permitidas`
-*Previene*: identidades inventadas por oferta (*AI Engineering Leader*, *GenAI Adoption Lead*).
+None of this is ever asked. It is already written.
 
-**1.3 · El orden**: *"¿En qué orden van? La primera es con la que te van a identificar."*
-Va a: `Orden del titular`
-*Previene*: que el CV se reordene según la oferta y parezca otra persona en cada envío.
+---
 
-**1.4 · La excepción**: *"¿Hay empresas concretas para las que invertirías ese orden?
-Nómbralas. Si dudas, deja esto vacío."*
-Va a: `Variante permitida`
+## PHASE 1: CONFIRM the identity (one click per question)
 
-> **Esta es la pregunta más delicada de todo el alta.** El 24-jul-2026 la condición de
-> Verónica decía *"empresas cuyo producto principal sea la IA (OpenAI, Anthropic,
-> Cohere...)"*, y el modelo aplicó la variante **a N-iX y a Revolut**, que no son ninguna de
-> esas. Leyó el paréntesis como ejemplos, no como lista cerrada. Es el mismo patrón que
-> dejó pasar *"Leader"* en el guardrail de seniority.
+What was extracted is proposed and the user validates it. This builds the contract.
+
+**1.1 · Your headline**: *"Your LinkedIn says X. Is that the headline you want all your CVs to be
+generated with?"*
+Goes to: `Identidad profesional`
+
+**1.2 · Your identities**: *"I have detected these: A, B, C. Are there too many, or is one missing?"*
+Maximum 4. It is a **closed** repertoire: no other can ever be used.
+Goes to: `Identidades permitidas`
+*Prevents*: identities invented per offer (*AI Engineering Leader*, *GenAI Adoption Lead*).
+
+**1.3 · The order**: *"In what order do they go? The first is the one people will identify you by."*
+Goes to: `Orden del titular`
+*Prevents*: the CV being reordered according to the offer and looking like a different person in every application.
+
+**1.4 · The exception**: *"Are there specific companies for which you would invert that order?
+Name them. If in doubt, leave this empty."*
+Goes to: `Variante permitida`
+
+> **This is the most delicate question of the whole sign-up.** On 24 Jul 2026 Verónica's condition
+> said *"companies whose main product is AI (OpenAI, Anthropic,
+> Cohere...)"*, and the model applied the variant **to N-iX and to Revolut**, which are neither of
+> those. It read the parenthesis as examples, not as a closed list. It is the same pattern that
+> let *"Leader"* through the seniority guardrail.
 >
-> **Regla que se deriva**: la condición debe ser una **lista de nombres propios**, nunca una
-> categoría. Si el usuario responde con una categoría ("empresas de IA", "startups"), hay
-> que repreguntar pidiendo nombres. Y si no sabe cuáles, se deja vacío: **sin variante
-> declarada, no hay excepción posible.** Vacío es más seguro que ambiguo.
+> **Rule that follows**: the condition must be a **list of proper names**, never a
+> category. If the user answers with a category ("AI companies", "startups"), the question
+> must be asked again, requesting names. And if they do not know which, it is left empty: **with no variant
+> declared, no exception is possible.** Empty is safer than ambiguous.
 
-**1.5 · Seniority**: *"¿Cuántos años declaras?"*
-*Previene*: inflar el número según lo que valore la oferta.
+**1.5 · Seniority**: *"How many years do you declare?"*
+*Prevents*: inflating the number according to what the offer values.
 
-**1.6 · Lo que no eres**: *"¿Con qué rol te confunden y no quieres que te confundan?"*
-Va a: bloque `POSICIONAMIENTO`
-Verónica: *"No soy Data Scientist. No soy investigadora de IA."* Es una frontera, y el prompt
-la respeta aunque la oferta pida lo contrario.
-
----
-
-## FASE 2: La EVIDENCIA (lo que impide inventar)
-
-Aquí no vale confirmar: hay que preguntar. Es lo que separa un CV defendible de uno bonito.
-
-**2.1 · Qué hiciste tú**: por cada puesto relevante, *"¿Qué hiciste con tus manos, no tu
-equipo?"*
-*Previene*: atribuirse el trabajo del equipo.
-
-**2.2 · Tecnologías por puesto**: *"De estas que aparecen en tu CV, ¿cuáles usaste **en este
-puesto concreto**?"*
-*Previene*: el fallo de GraphQL. En el CV de Revolut el modelo escribió *"implemented
-GraphQL and webhook patterns"* en el puesto de Bitcode, cuando el Master solo las tiene en
-habilidades sin ligarlas a ningún puesto. La tecnología era real; **la atribución, inventada**.
-
-**2.3 · Cifras**: *"¿Qué cifras puedes defender con un dato real que tengas a mano?"*
-Si no hay dato, no hay cifra. Un CV sin cifras es defendible; con una cifra inventada, no.
-
-**2.4 · Lo que conoces pero no usaste**: *"¿Qué tecnologías has tocado pero no usarías como
-argumento en una entrevista?"*
-Van a una **lista negra explícita** del usuario. Complementa al detector, que solo sabe
-comparar contra el Master.
+**1.6 · What you are not**: *"What role are you mistaken for that you do not want to be mistaken for?"*
+Goes to: `POSICIONAMIENTO` block
+Verónica: *"I am not a Data Scientist. I am not an AI researcher."* It is a boundary, and the prompt
+respects it even if the offer asks for the opposite.
 
 ---
 
-## FASE 3: La FRONTERA (lo único que ningún guardrail cubre)
+## PHASE 2: the EVIDENCE (what prevents inventing)
 
-Las dos preguntas más importantes del alta, y las que nadie hace.
+Confirming is not enough here: you have to ask. This is what separates a defensible CV from a pretty one.
 
-**3.1 · Aspiración**: *"¿Qué quieres hacer que todavía no has hecho?"*
-Va a `Roles objetivo`, **jamás a Experiencia**. El prompt trata el `PERFIL BASE` como guía
-de identidad y **nunca como evidencia**, así que declararlo ahí no puede inflar el cuerpo del
-CV. La aspiración queda dicha sin afirmar nada.
+**2.1 · What you did**: for each relevant position, *"What did you do with your own hands, not your
+team?"*
+*Prevents*: taking credit for the team's work.
 
-**3.2 · La prueba de la entrevista**: *"¿Hay algo en tu CV actual que no podrías defender en
-veinte minutos de entrevista?"*
+**2.2 · Technologies per position**: *"Of these that appear on your CV, which did you use **in this
+specific position**?"*
+*Prevents*: the GraphQL failure. In the Revolut CV the model wrote *"implemented
+GraphQL and webhook patterns"* in the Bitcode position, when the Master only has them under
+skills without tying them to any position. The technology was real; **the attribution was invented**.
 
-> **Por qué existe esta pregunta.** Todos los guardrails del sistema comparan **el CV
-> generado contra el Master**. Si una afirmación sin respaldo vive **dentro del Master**, es
-> indetectable: el Master es el axioma.
+**2.3 · Figures**: *"What figures can you defend with real data that you have at hand?"*
+If there is no data, there is no figure. A CV without figures is defensible; with an invented figure, it is not.
+
+**2.4 · What you know but did not use**: *"What technologies have you touched but would not use as an
+argument in an interview?"*
+They go to an **explicit blacklist** for the user. It complements the detector, which can only
+compare against the Master.
+
+---
+
+## PHASE 3: the BOUNDARY (the only thing no guardrail covers)
+
+The two most important questions of the sign-up, and the ones nobody asks.
+
+**3.1 · Aspiration**: *"What do you want to do that you have not done yet?"*
+Goes to `Roles objetivo` (target roles), **never to Experience**. The prompt treats the `PERFIL BASE` as an identity guide
+and **never as evidence**, so declaring it there cannot inflate the body of the
+CV. The aspiration is stated without claiming anything.
+
+**3.2 · The interview test**: *"Is there anything on your current CV that you could not defend in
+twenty minutes of interview?"*
+
+> **Why this question exists.** All the guardrails in the system compare **the generated CV
+> against the Master**. If an unbacked claim lives **inside the Master**, it is
+> undetectable: the Master is the axiom.
 >
-> El 24-jul-2026 los dos Masters de Verónica afirmaban *"formación técnica para empresas"*.
-> Ella no había impartido todavía ningún curso a empresas. Ningún detector podía verlo, y de
-> ahí había salido ya una carta a N-iX afirmándolo. Lo paró ella, no el sistema.
+> On 24 Jul 2026 both of Verónica's Masters claimed *"technical training for companies"*.
+> She had not yet taught any course to companies. No detector could see it, and a cover letter to N-iX
+> claiming it had already come out of that. She stopped it, not the system.
 >
-> **La regla de evidencia protege la frontera oferta a CV. No protege la frontera
-> realidad a Master. Esa solo la sostiene la persona.** Con un usuario desconocido, esta
-> pregunta es lo único que hay. Conviene repetirla cada vez que edite su Master.
+> **The evidence rule protects the offer-to-CV boundary. It does not protect the
+> reality-to-Master boundary. Only the person can hold that one.** With an unknown user, this
+> question is all there is. It is worth repeating each time they edit their Master.
 
 ---
 
-## FASE 4: Arquetipos
+## PHASE 4: Archetypes
 
-**4.1**: *"¿A qué tipo de puesto apuntas?"* Se le enseñan los arquetipos que el prompt sabe
-distinguir (ver `CV-ADAPTATION-PROMPT.md`) y elige uno o varios.
+**4.1**: *"What type of position are you aiming for?"* They are shown the archetypes the prompt knows how to
+tell apart (see `CV-ADAPTATION-PROMPT.md`) and choose one or several.
 
-**Limitación conocida**: los arquetipos están **escritos en el prompt** y son del sector
-tecnológico. Un perfil de diseño, ventas o administración no encaja en ninguno. Para abrir el
-sistema fuera de tecnología habrá que sacarlos a datos, igual que se hizo con las identidades.
-No se toca hasta que haya un usuario real que lo necesite.
+**Known limitation**: the archetypes are **written in the prompt** and belong to the
+technology sector. A design, sales or administration profile fits none of them. To open the
+system outside technology they will have to be moved into data, as was done with the identities.
+It is not touched until there is a real user who needs it.
 
 ---
 
-## Salida de la entrevista
+## Output of the interview
 
-El bloque que se pega al principio del CV Master del usuario:
+The block that is pasted at the top of the user's CV Master:
 
 ```
 # PERFIL BASE
@@ -310,21 +317,25 @@ POSICIONAMIENTO               (1.6)
 EVOLUCIÓN PROFESIONAL         (extraído de fechas y puestos)
 ```
 
----
-
-## Errores a evitar en el alta
-
-- **No preguntar lo que está en el CV.** Cada pregunta redundante es un usuario que abandona.
-- **No aceptar categorías donde hace falta una lista de nombres** (pregunta 1.4).
-- **No dejar que la aspiración entre en Experiencia.** Va a `Roles objetivo` y punto.
-- **No pegar tecnologías en el `PERFIL BASE` que no estén en la experiencia.** El detector
-  compara contra el texto completo del Master, `PERFIL BASE` incluido: escribir ahí una
-  tecnología la da por respaldada y **ciega el guardrail**. Incoherencia conocida entre el
-  prompt (que dice que el `PERFIL BASE` no es evidencia) y el detector (que no distingue
-  secciones). Si alguna vez muerde, se arregla excluyendo el bloque del texto que ve el
-  detector.
+(The parenthesized notes read: `fijo, igual para todos` is "fixed, the same for everyone";
+`extraído, confirmado` is "extracted, confirmed"; `extraído de fechas y puestos` is "extracted from
+dates and positions".)
 
 ---
 
-**Ver también**: `CV-ADAPTATION-PROMPT.md` (las reglas que esta entrevista alimenta),
-`../tests/test_proyeccion_arquetipos.py` (los invariantes del prompt).
+## Mistakes to avoid at sign-up
+
+- **Do not ask what is in the CV.** Every redundant question is a user who drops out.
+- **Do not accept categories where a list of names is needed** (question 1.4).
+- **Do not let the aspiration into Experience.** It goes to `Roles objetivo` and that is it.
+- **Do not paste technologies into the `PERFIL BASE` that are not in the experience.** The detector
+  compares against the full text of the Master, `PERFIL BASE` included: writing a
+  technology there marks it as backed and **blinds the guardrail**. Known inconsistency between the
+  prompt (which says the `PERFIL BASE` is not evidence) and the detector (which does not tell
+  sections apart). If it ever bites, it is fixed by excluding the block from the text the
+  detector sees.
+
+---
+
+**See also**: `CV-ADAPTATION-PROMPT.md` (the rules this interview feeds),
+`../tests/test_proyeccion_arquetipos.py` (the prompt invariants).
