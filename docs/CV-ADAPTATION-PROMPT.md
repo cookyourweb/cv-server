@@ -1,439 +1,446 @@
-# Prompt de adaptación del CV y la carta
+# CV and cover letter adaptation prompt
 
-Fuente de verdad legible del prompt que adapta el CV del usuario a cada oferta.
-El prompt REAL vive como f-string en `server.py`; este documento explica su
-estructura y el PORQUÉ de cada regla, para que nadie las rompa al editar el código.
+Readable source of truth for the prompt that adapts the user's CV to each job offer.
+The REAL prompt lives as an f-string in `server.py`; this document explains its
+structure and the REASON behind each rule, so that nobody breaks them when editing the code.
 
-- **Prompt del CV**: constante `PROMPT_CV` en `server.py`, usada por `generar_cv_core`.
-  Dentro de ella, la sección `HEADLINE RULES` fija el titular.
-- **Prompt de la carta**: constante `PROMPT_CARTA` en `server.py`, usada por `generar_carta`.
-- **Bloque de formato** (ES/EN): `PROMPT_ESTRUCTURA_ES` y `PROMPT_ESTRUCTURA_EN`, que
-  `generar_cv_core` elige según el idioma de la oferta y pasa a `PROMPT_CV` como
+> **Language note.** The prompt text in `server.py` is written in Spanish, and so are
+> the section names that the prompt reads from the CV Master (`PERFIL BASE`,
+> `Identidades permitidas`, and so on) and some of its own markers (`PASO 1`,
+> `ANÁLISIS INTERNO`, `NIVEL DEL PUESTO`, `HECHOS, NO EFECTOS`). They are literal
+> identifiers: this document keeps them in code format and explains them in English.
+> Do not translate them in the code or in a Master without changing both sides.
+
+- **CV prompt**: constant `PROMPT_CV` in `server.py`, used by `generar_cv_core`.
+  Inside it, the `HEADLINE RULES` section sets the headline.
+- **Cover letter prompt**: constant `PROMPT_CARTA` in `server.py`, used by `generar_carta`.
+- **Format block** (ES/EN): `PROMPT_ESTRUCTURA_ES` and `PROMPT_ESTRUCTURA_EN`, which
+  `generar_cv_core` picks according to the language of the offer and passes to `PROMPT_CV` as
   `bloque_formato`.
-- **Modelos**: CV y carta con `claude-sonnet-4-6` en producción. Los fija el entorno
-  (`CV_MODEL`, `CARTA_MODEL`), no el código: el valor por defecto de `CV_MODEL` en
-  `llm.py` sigue siendo Haiku 4.5 (ver ADR-002). Si Claude falla, cae a Groq
-  (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku (`call_llm_calidad` y
-  `call_llm` en `llm.py`). Cada respuesta informa en `modelo_usado` del modelo que la
-  escribió de verdad. `/health` muestra los modelos activos.
+- **Models**: CV and cover letter use `claude-sonnet-4-6` in production. The environment
+  sets them (`CV_MODEL`, `CARTA_MODEL`), not the code: the default value of `CV_MODEL` in
+  `llm.py` is still Haiku 4.5 (see ADR-002). If Claude fails, the call falls back to Groq
+  (`openai/gpt-oss-120b`), then Gemini, then Claude Haiku (`call_llm_calidad` and
+  `call_llm` in `llm.py`). Each response reports in `modelo_usado` the model that actually
+  wrote it. `/health` shows the active models.
 
-> Regla de oro del proyecto: **el CV no debe inventar**. Todo sale del CV master del usuario.
-> El prompt solo cambia ORDEN, ÉNFASIS y TITULAR, no el contenido real. Es una petición al
-> modelo, no una garantía: los detectores avisan de cifras y tecnologías no respaldadas, pero
-> la inflación del alcance del rol (`coordinated` pasa a `owned`) no se detecta
-> automáticamente.
+> Golden rule of the project: **the CV must not invent anything**. Everything comes from the user's CV Master.
+> The prompt only changes ORDER, EMPHASIS and HEADLINE, never the real content. It is a request to the
+> model, not a guarantee: the detectors warn about unsupported figures and technologies, but
+> inflation of the scope of a role (`coordinated` becoming `owned`) is not detected
+> automatically.
 
-## Modelo mental: IDENTIDAD vs POSICIONAMIENTO
+## Mental model: IDENTITY vs POSITIONING
 
-La distinción base del sistema (Verónica, 24-jul-2026). Confundirlas es el origen de casi
-todos los fallos que hemos corregido.
+The basic distinction of the system (Verónica, 24 Jul 2026). Confusing the two is the origin of almost
+every failure we have fixed.
 
-| | **Identidad** | **Posicionamiento** |
+| | **Identity** | **Positioning** |
 |---|---|---|
-| Responde a | Quién **ES** la candidata | Cómo se **PRESENTA** ante esta oferta |
-| Naturaleza | **Cerrada** | **Variable** |
-| Quién la fija | El `PERFIL BASE` del Master | El **arquetipo** de la oferta |
-| Cambia entre ofertas | **Nunca** | Sí, en cada una |
-| Ejemplos | Frontend Tech Lead, Full-Stack Developer, AI Engineer | GenAI Adoption, Context Engineering, Applied AI, AI Automation |
-| Dónde va en el titular | Huecos de identidad | Huecos de **modificador** |
+| Answers | Who the candidate **IS** | How she **PRESENTS** herself for this offer |
+| Nature | **Closed** | **Variable** |
+| Who sets it | The `PERFIL BASE` of the Master | The **archetype** of the offer |
+| Changes between offers | **Never** | Yes, in each one |
+| Examples | Frontend Tech Lead, Full-Stack Developer, AI Engineer | GenAI Adoption, Context Engineering, Applied AI, AI Automation |
+| Where it goes in the headline | Identity slots | **Modifier** slots |
 
-**Un posicionamiento no es una identidad nueva**: es la misma trayectoria presentada según
-el problema que la empresa quiere resolver. Por eso el posicionamiento puede cambiar en
-cada oferta y la identidad no cambia nunca.
+**A positioning is not a new identity**: it is the same career presented according to
+the problem the company wants to solve. That is why the positioning can change in
+every offer and the identity never changes.
 
-**El posicionamiento también necesita respaldo del Master.** Un posicionamiento sin
-evidencia es una identidad inventada con otro nombre. Si el Master no respalda el que pide
-la oferta, se usa el que sí esté respaldado aunque encaje peor.
+**The positioning also needs backing from the Master.** A positioning without
+evidence is an invented identity under another name. If the Master does not back the one the
+offer asks for, the one that is backed is used, even if it fits worse.
 
-> **Decisión de diseño**: no existe una sección `Posicionamientos permitidos` en el
-> contrato, y es deliberado. La identidad se declara porque es cerrada; el posicionamiento
-> se **deriva**, y ya está acotado por tres puertas que existen: la lista cerrada de
-> arquetipos, el *límite del arquetipo* (sin evidencia no se fuerza) y la regla de
-> evidencia sobre tecnologías. Declararlo además obligaría a mantener una lista que el
-> sistema no necesita.
+> **Design decision**: there is no `Posicionamientos permitidos` (allowed positionings) section in the
+> contract, and that is deliberate. The identity is declared because it is closed; the positioning
+> is **derived**, and it is already bounded by three gates that exist: the closed list of
+> archetypes, the *archetype limit* (without evidence it is not forced) and the
+> evidence rule on technologies. Declaring it as well would force us to maintain a list that the
+> system does not need.
 
-## REGLA MAESTRA: proyección, no identidad nueva
+## MASTER RULE: projection, not a new identity
 
-> **La adaptación debe producir una PROYECCIÓN distinta de la MISMA trayectoria
-> profesional, nunca una nueva identidad profesional.**
+> **The adaptation must produce a different PROJECTION of the SAME professional
+> career, never a new professional identity.**
 
-Formulada por Verónica el **24 de julio de 2026**. Es la regla de más alto nivel del
-generador: si se cumple, muchas de las demás salen casi gratis. Implica automáticamente
-no cambiar el título radicalmente, no subir el seniority, no inventar herramientas, no
-mover skills a experiencia, no convertir un proyecto propio en una multinacional, y
-cambiar solo el énfasis según el arquetipo de la oferta.
+Stated by Verónica on **24 July 2026**. It is the highest-level rule of the
+generator: if it holds, many of the other rules follow almost for free. It automatically implies
+not changing the title radically, not raising the seniority, not inventing tools, not
+moving skills into experience, not turning a personal project into a multinational, and
+changing only the emphasis according to the archetype of the offer.
 
-El criterio de comprobación: un recruiter que viera tres CV suyos debe reconocer a la
-misma profesional adaptando el contenido, no a tres personas distintas. **Si un cambio la
-hace parecer otra profesional, ese cambio está mal aunque cada frase por separado sea
-cierta.**
+The test: a recruiter who saw three of her CVs must recognize the
+same professional with adapted content, not three different people. **If a change makes
+her look like a different professional, that change is wrong even if each sentence on its own is
+true.**
 
 ---
 
-## Prompt del CV: estructura en 3 pasos
+## CV prompt: 3-step structure
 
-El rol que se le da al modelo: *"senior tech recruiter que revisa 200+ CVs al día"*.
-El CV entero se genera en el idioma de la oferta (títulos de sección y contenido).
+The role given to the model: *"senior tech recruiter reviewing 200+ CVs a day"*.
+The whole CV is generated in the language of the offer (section titles and content).
 
-### PASO 1: Análisis interno (SOLO mental, no se escribe)
-El modelo piensa, sin volcarlo al output: qué skills del master encajan, qué keywords de
-la oferta deben aparecer, qué logros demuestran el fit. **No inventar** experiencia,
-métricas ni logros. La respuesta DEBE empezar exactamente por la línea `HEADLINE: ...`;
-prohibido escribir análisis o encabezados antes de esa línea.
+### `PASO 1`: Internal analysis (mental ONLY, never written)
+The model thinks, without dumping it into the output: which Master skills fit, which keywords
+of the offer must appear, which achievements show the fit. **Do not invent** experience,
+metrics or achievements. The response MUST start exactly with the line `HEADLINE: ...`;
+writing analysis or headings before that line is forbidden.
 
-*Por qué*: sin este paso el modelo tiende a volcar su razonamiento al documento final. El
-fix del 1-jul (`1c3702a`) descarta explícitamente el bloque "ANÁLISIS INTERNO" del CV.
+*Why*: without this step the model tends to dump its reasoning into the final document. The
+fix of 1 Jul (`1c3702a`) explicitly discards the `ANÁLISIS INTERNO` block from the CV.
 
-### PASO 2: CV adaptado (output principal)
-Reglas estrictas:
-1. **No inventar nunca**: solo experiencia real del master. Nada de tecnologías no usadas,
-   liderazgo no ejercido ni métricas exageradas. El CV debe ser 100% defendible en
-   entrevista.
-2. Adaptar **orden y énfasis** según la oferta, no el contenido.
-3. **ATS**: integrar las keywords EXACTAS de la oferta cuando sean parte de su experiencia
-   real.
-4. Bullets con **fórmula XYZ** ("Logré X, medido por Y, haciendo Z") siempre que los datos
-   lo permitan. Nada de "responsable de...".
-5. **Densidad real**: no recortar el master. Puestos recientes 6-9 bullets, antiguos 3-4.
-6. Redacción como **perfil de producto**: negocio a soluciones digitales, colaboración con
-   diseño y producto, B2B/B2C, Design Systems.
-7. Máximo 2 páginas.
+### `PASO 2`: Adapted CV (main output)
+Strict rules:
+1. **Never invent**: only real experience from the Master. No technologies that were not used,
+   leadership that was not exercised, or exaggerated metrics. The CV must be 100% defensible in an
+   interview.
+2. Adapt **order and emphasis** to the offer, not the content.
+3. **ATS**: include the EXACT keywords of the offer when they are part of the real
+   experience.
+4. Bullets use the **XYZ formula** ("Accomplished X, as measured by Y, by doing Z") whenever the data
+   allows it. No "responsible for...".
+5. **Real density**: do not trim the Master. Recent positions get 6-9 bullets, older ones 3-4.
+6. Write it as a **product profile**: business to digital solutions, collaboration with
+   design and product, B2B/B2C, Design Systems.
+7. Maximum 2 pages.
 
-### HEADLINE RULES (primera línea del output)
+### HEADLINE RULES (first line of the output)
 
-> **El titular es data-driven desde el 21 de julio de 2026.** El prompt NO contiene
-> identidades escritas a mano. `test_headline_datadriven.py` falla si alguien las vuelve a
-> meter. Si querés cambiar cómo se presenta Verónica, se edita **el CV Master**, no esto.
+> **The headline has been data-driven since 21 July 2026.** The prompt contains NO hand-written
+> identities. `test_headline_datadriven.py` fails if someone puts them back. If you want to change
+> how Verónica presents herself, edit **the CV Master**, not this.
 
-- **Fuente de verdad**: las identidades profesionales y los roles objetivo salen del bloque
-  `PERFIL BASE` del CV Master, secciones "Identidades profesionales" y "Roles objetivo". Es
-  la ÚNICA fuente. Una identidad que no esté ahí, no se usa.
-- **Cómo se construye**: se seleccionan y REORDENAN las identidades del `PERFIL BASE` que
-  mejor encajan con la oferta, y se añade especialización o stack solo si aparece en el
-  `PERFIL BASE` o en la experiencia real del Master. **Cambia el énfasis y el orden, nunca
-  las identidades.**
-- **La oferta decide qué destacar, nunca qué inventar**: si pide un rol que no está en el
-  `PERFIL BASE`, no se usa. La oferta solo elige cuáles de las identidades existentes se
-  resaltan.
-- **Coherencia identidad/experiencia**: cada identidad del titular tiene que poder
-  justificarse leyendo la EXPERIENCIA del Master. Si una identidad del `PERFIL BASE` no
-  tiene experiencia que la respalde, fuera del titular.
-- **Fallback**: si el Master no trae bloque `PERFIL BASE`, las identidades se derivan de la
-  experiencia real, nunca se inventan.
-- **Nada grandilocuente** (*Principal Architect*, *Head of Engineering*) salvo que la oferta
-  lo pida explícitamente y sea justificable.
+- **Source of truth**: the professional identities and target roles come from the `PERFIL BASE`
+  block of the CV Master, sections "Identidades profesionales" (professional identities) and
+  "Roles objetivo" (target roles). It is the ONLY source. An identity that is not there is not used.
+- **How it is built**: the identities of the `PERFIL BASE` that best fit the offer are
+  selected and REORDERED, and a specialization or stack is added only if it appears in the
+  `PERFIL BASE` or in the Master's real experience. **The emphasis and the order change, never
+  the identities.**
+- **The offer decides what to highlight, never what to invent**: if it asks for a role that is not in the
+  `PERFIL BASE`, it is not used. The offer only chooses which of the existing identities
+  are highlighted.
+- **Identity/experience coherence**: every identity in the headline must be
+  justifiable by reading the Master's EXPERIENCE. If an identity of the `PERFIL BASE` has no
+  experience backing it, it is left out of the headline.
+- **Fallback**: if the Master has no `PERFIL BASE` block, the identities are derived from the
+  real experience, never invented.
+- **Nothing grandiose** (*Principal Architect*, *Head of Engineering*) unless the offer
+  explicitly asks for it and it is justifiable.
 
-#### El PERFIL BASE es un CONTRATO de datos (24-jul-2026)
+#### The PERFIL BASE is a data CONTRACT (24 Jul 2026)
 
-La causa raíz de la deriva de títulos no era que el modelo inventase por capricho: era
-que **no existía el bloque `PERFIL BASE` en ningún Master**. El prompt caía al fallback
-("deriva las identidades de la experiencia real"), y derivar obliga a interpretar. De
-interpretar salieron *AI Engineering Leader*, y de ahí a *GenAI Adoption Lead* o
-*Solutions Architect* en la siguiente oferta.
+The root cause of title drift was not that the model invented things on a whim: it was
+that **no Master had a `PERFIL BASE` block**. The prompt fell back to the fallback
+("derive the identities from the real experience"), and deriving forces interpretation.
+Interpretation produced *AI Engineering Leader*, and from there *GenAI Adoption Lead* or
+*Solutions Architect* in the next offer.
 
-El arreglo no es pedirle al modelo que se contenga. Es **no dejarle nada que deducir**.
-El `PERFIL BASE` declara la identidad en secciones explícitas y el prompt las LEE:
+The fix is not to ask the model to restrain itself. It is to **leave it nothing to deduce**.
+The `PERFIL BASE` declares the identity in explicit sections and the prompt READS them:
 
-| Sección | Qué declara |
+| Section | What it declares |
 |---|---|
-| `Identidad profesional` | El titular base completo. Es el ancla |
-| `Identidades permitidas` | Repertorio **cerrado**. Ninguna otra existe |
-| `Orden del titular` | El orden exacto. Es un dato, no una decisión del modelo |
-| `Variante permitida` | El único titular alternativo, con la condición que lo habilita |
-| `Nunca permitido` | Restricciones que declara el propio Master. Innegociables |
+| `Identidad profesional` | The complete base headline. It is the anchor |
+| `Identidades permitidas` | A **closed** repertoire. No other identity exists |
+| `Orden del titular` | The exact order. It is data, not a decision of the model |
+| `Variante permitida` | The only alternative headline, with the condition that enables it |
+| `Nunca permitido` | Restrictions declared by the Master itself. Non-negotiable |
 
-Las únicas libertades del modelo: **sustituir uno o dos modificadores** de especialización
-o stack por los que la oferta valora (siempre tomados del Master), u **omitir** uno que no
-aporte nada. Las identidades y su orden no se tocan.
+The model's only freedoms: **replace one or two modifiers** of specialization
+or stack with the ones the offer values (always taken from the Master), or **omit** one that adds
+nothing. The identities and their order are not touched.
 
-*Por qué*: si en cada oferta la candidata pasa de *Frontend Tech Lead* a *AI Engineering
-Leader*, luego a *GenAI Adoption Lead* y después a *Solutions Architect*, parece que
-intenta convertirse en lo que pide cada empresa. El CV tiene que sostener la misma
-identidad profesional que su perfil público de LinkedIn.
+*Why*: if in each offer the candidate goes from *Frontend Tech Lead* to *AI Engineering
+Leader*, then to *GenAI Adoption Lead* and then to *Solutions Architect*, it looks like she
+is trying to become whatever each company asks for. The CV has to hold the same professional
+identity as her public LinkedIn profile.
 
-> **Nota sobre reutilización**: el prompt no conoce ninguna identidad concreta, solo los
-> NOMBRES de las secciones del contrato. Por eso el generador sirve para cualquier
-> usuario: cada uno declara su propio `PERFIL BASE` en su Master.
-> `test_proyeccion_arquetipos.py::test_titular_base_sigue_siendo_data_driven` falla si
-> alguien vuelve a escribir una identidad concreta en el código.
+> **Note on reuse**: the prompt does not know any specific identity, only the
+> NAMES of the contract sections. That is why the generator works for any
+> user: each one declares their own `PERFIL BASE` in their Master.
+> `test_proyeccion_arquetipos.py::test_titular_base_sigue_siendo_data_driven` fails if
+> someone writes a specific identity into the code again.
 
-#### El guardrail de seniority es un PRINCIPIO, no una lista
+#### The seniority guardrail is a PRINCIPLE, not a list
 
-La regla anterior enumeraba *Principal, Staff, Head, Director, Architect, Distinguished,
-Manager* y *"Lead" de personas*. El CV de N-iX salió con **"AI Engineering Leader"** y no
-saltó nada: *Leader* no estaba en la lista.
+The previous rule enumerated *Principal, Staff, Head, Director, Architect, Distinguished,
+Manager* and people *"Lead"*. The N-iX CV came out with **"AI Engineering Leader"** and nothing
+fired: *Leader* was not in the list.
 
-Ahora la regla enuncia el principio (**no incrementar el nivel jerárquico, la autoridad
-ni el alcance organizativo declarados en el `PERFIL BASE`**) y marca los ejemplos como
-lista **abierta**. La prueba no es si la palabra aparece en una enumeración, sino si el
-titular sugiere un rango mayor que el declarado.
+Now the rule states the principle (**do not raise the hierarchical level, the authority
+or the organizational scope declared in the `PERFIL BASE`**) and marks the examples as an
+**open** list. The test is not whether the word appears in an enumeration, but whether the
+headline suggests a higher rank than the declared one.
 
-*Lección general*: **las reglas deben expresar principios, no listas cerradas.** Mañana
-aparecerá *Champion*, *Evangelist*, *Technical Authority* o *Principal Contributor* y
-volvería a escaparse.
-- **Años de experiencia**: base **10+**. No clavar 15+ ni un número alto en todas las
-  ofertas. Reflejar más solo si la oferta valora seniority, siempre veraz.
+*General lesson*: **rules must express principles, not closed lists.** Tomorrow
+*Champion*, *Evangelist*, *Technical Authority* or *Principal Contributor* will show up and
+slip through again.
+- **Years of experience**: base **10+**. Do not hardcode 15+ or a high number in every
+  offer. Reflect more only if the offer values seniority, always truthfully.
 
-**Consecuencia práctica.** El titular es coherente entre ofertas porque el `PERFIL BASE` es
-el mismo. Lo que cambia entre un CV de Frontend y uno de IA es qué identidad va delante y
-qué stack la acompaña, no quién es la candidata. Esa es la respuesta al riesgo de "un CV
-distinto en cada candidatura": no puede pasar, porque el repertorio de identidades está
-cerrado y vive fuera del prompt.
+**Practical consequence.** The headline is consistent across offers because the `PERFIL BASE` is
+the same. What changes between a Frontend CV and an AI CV is which identity comes first and
+which stack goes with it, not who the candidate is. That is the answer to the risk of "a different
+CV in every application": it cannot happen, because the repertoire of identities is
+closed and lives outside the prompt.
 
-*Nota histórica*: hasta el 21 de julio de 2026 esta sección listaba identidades fijas
-(*Frontend Tech Lead*, *Full-Stack Developer*, *UX Engineer*) y titulares por tipo de
-oferta, con *AI Product Builder* y *AI Solutions Engineer* para las de IA. Eso obligaba a
-tocar el prompt cada vez que Verónica se reposicionaba, y de hecho quedó desfasado cuando el
-22 de julio los dos Masters pasaron a *AI Engineer*. Por eso el repertorio se movió al
+*Historical note*: until 21 July 2026 this section listed fixed identities
+(*Frontend Tech Lead*, *Full-Stack Developer*, *UX Engineer*) and headlines by offer type,
+with *AI Product Builder* and *AI Solutions Engineer* for the AI ones. That forced us to
+touch the prompt every time Verónica repositioned herself, and in fact it went out of date when on
+22 July both Masters changed to *AI Engineer*. That is why the repertoire moved to the
 Master.
 
-### RESUMEN: estabilidad 70-80% (24-jul-2026)
-El resumen **no se reescribe desde cero** en cada oferta. Aproximadamente tres cuartas
-partes describen la misma trayectoria con las mismas ideas y casi las mismas palabras: de
-dónde viene, cómo ha evolucionado, qué la define hoy. Solo la parte final, o los ejemplos
-concretos que se eligen, se ajustan al arquetipo.
+### SUMMARY: 70-80% stability (24 Jul 2026)
+The summary is **not rewritten from scratch** for each offer. Roughly three quarters of it
+describe the same career with the same ideas and almost the same words: where she comes from, how she
+has evolved, what defines her today. Only the final part, or the specific examples that are
+chosen, are adjusted to the archetype.
 
-Así el titular, el resumen y el perfil público cuentan la misma historia, y esa coherencia
-se sostiene también en la entrevista.
+This way the headline, the summary and the public profile tell the same story, and that coherence
+also holds in the interview.
 
-### PERFIL: anclaje a la oferta (obligatorio)
-El resumen debe RESONAR con la oferta: identifica 2-3 requisitos o keywords concretas de la
-descripción que la candidata YA haya trabajado de verdad, e intégralos en el perfil
-redactados como experiencia real y demostrable ("con experiencia en X aplicada a Y").
+### PROFILE: anchoring to the offer (mandatory)
+The summary must RESONATE with the offer: identify 2-3 specific requirements or keywords from the
+description that the candidate has ALREADY really worked with, and integrate them into the profile
+written as real, demonstrable experience ("experience in X applied to Y").
 
-*Línea roja*: PROHIBIDO meter un requisito de la oferta que NO esté respaldado por su
-trayectoria real. Si la oferta lo pide pero ella no lo ha hecho, NO entra. Esto ancla el
-perfil a la oferta usando SOLO lo cierto y defendible en entrevista; nunca es una puerta
-para inventar.
+*Red line*: it is FORBIDDEN to include a requirement of the offer that is NOT backed by her real
+career. If the offer asks for it but she has not done it, it does NOT go in. This anchors the
+profile to the offer using ONLY what is true and defensible in an interview; it is never a gateway
+to invent.
 
-#### Anclaje SUTIL: prohibido el eco (23-jul-2026)
+#### SUBTLE anchoring: no echo (23 Jul 2026)
 
-El anclaje se hace con **su experiencia**, nunca copiando el texto del anuncio. Si una
-frase del perfil se puede rastrear casi literal hasta la oferta, sobra.
+The anchoring is done with **her experience**, never by copying the text of the posting. If a
+sentence of the profile can be traced almost literally to the offer, it is superfluous.
 
-Prohibido devolverle a la empresa sus propias palabras como si fueran rasgos de la
-candidata. Ejemplo real que hubo que quitar a mano: la oferta decía "equipo reducido, con
-mucha autonomía, mínima burocracia" y el perfil salió con "Acostumbrada a equipos
-reducidos con alta autonomía y poca burocracia". No es mentira, pero **no dice nada de
-ella**: ocupa una línea, no aporta evidencia y se nota que está copiado.
+Handing the company its own words back as if they were traits of the
+candidate is forbidden. Real example that had to be removed by hand: the offer said "small team, with
+a lot of autonomy, minimal bureaucracy" and the profile came out with "Used to small
+teams with high autonomy and little bureaucracy". It is not a lie, but **it says nothing about
+her**: it takes up a line, adds no evidence and it shows that it was copied.
 
-Cómo se hace bien:
-- La keyword entra **dentro de un hecho suyo**, no como adjetivo suelto. La oferta pide
-  Core Web Vitals: "optimización de rendimiento web (Core Web Vitals)" dentro de la
-  lista de lo que ha hecho. No: "orientada a la optimización del rendimiento".
-- Las condiciones de trabajo del anuncio (tamaño de equipo, burocracia, cultura,
-  metodología, tráfico del producto) **NO se reflejan en el perfil**. Son del puesto, no
-  de la candidata.
-- Regla de comprobación: si al leer una frase se puede señalar el renglón del anuncio del
-  que salió, se borra.
+How to do it well:
+- The keyword goes **inside a fact of hers**, not as a loose adjective. The offer asks for
+  Core Web Vitals: "web performance optimization (Core Web Vitals)" inside the
+  list of what she has done. Not: "oriented to performance optimization".
+- The working conditions of the posting (team size, bureaucracy, culture,
+  methodology, product traffic) are **NOT reflected in the profile**. They belong to the position, not
+  to the candidate.
+- Check rule: if, when reading a sentence, you can point to the line of the posting
+  it came from, delete it.
 
-### NIVEL DEL PUESTO (aplica al CUERPO, no al titular)
-- Si el puesto NO menciona lead/manager/responsable/principal/head/coordinador/director, es
-  **desarrollo individual**: reducir el liderazgo al mínimo, reformular logros hacia el
-  trabajo técnico (qué construyó, migró, arquitectura/componentes/APIs), no hacia gestión.
-  El liderazgo aparece como contexto breve, nunca como venta principal.
-- Solo si el puesto pide lead/manager/etc., se destaca ownership y coordinación técnica.
+### `NIVEL DEL PUESTO` (applies to the BODY, not the headline)
+- If the position does NOT mention lead/manager/owner/principal/head/coordinator/director, it is
+  **individual development**: reduce leadership to a minimum, reword achievements toward
+  technical work (what she built, migrated, architecture/components/APIs), not toward management.
+  Leadership appears as brief context, never as the main selling point.
+- Only if the position asks for lead/manager/etc. are ownership and technical coordination highlighted.
 
-*Por qué*: fix del 1-jul (`0da513c`): el titular mantiene la seniority real (Tech Lead de
-facto del frontend) sin bajar al nivel de la oferta, pero el cuerpo se ajusta al nivel real
-del puesto para seguir siendo defendible.
+*Why*: fix of 1 Jul (`0da513c`): the headline keeps the real seniority (de facto Tech Lead of
+the frontend) without dropping to the level of the offer, but the body is adjusted to the real level
+of the position so that it stays defensible.
 
-### ARQUETIPO de la oferta (ajusta el ÉNFASIS, nunca inventa)
+### Offer ARCHETYPE (adjusts the EMPHASIS, never invents)
 
-> Reescrito el **24 de julio de 2026**. Hasta esa fecha esta sección listaba cinco
-> categorías y una de ellas era **"IA"**, a secas. Ese bucket único fue exactamente el
-> fallo del CV de N-iX. Además, la lista que aquí se documentaba llevaba tiempo sin
-> existir en el código: el prompt real solo decía "prioriza las skills que la oferta
-> valora", genérico. Ahora el bloque existe de verdad y `test_proyeccion_arquetipos.py`
-> falla si alguien vuelve a colapsar los arquetipos de IA.
+> Rewritten on **24 July 2026**. Until that date this section listed five
+> categories and one of them was **"AI"**, just like that. That single bucket was exactly the
+> failure of the N-iX CV. Also, the list documented here had not existed in the code for a
+> long time: the real prompt only said "prioritize the skills the offer values", generic.
+> Now the block really exists and `test_proyeccion_arquetipos.py`
+> fails if someone collapses the AI archetypes again.
 
-La oferta se clasifica en UN arquetipo leyendo el PUESTO y la DESCRIPCIÓN, nunca el
-sector de la empresa. El arquetipo **no toca el titular ni las identidades**: decide qué
-experiencia va primero, qué bullets se priorizan y qué keywords entran.
+The offer is classified into ONE archetype by reading the POSITION and the DESCRIPTION, never the
+sector of the company. The archetype **does not touch the headline or the identities**: it decides which
+experience goes first, which bullets are prioritized and which keywords come in.
 
-- **Frontend**: React, Vue, TypeScript, arquitectura frontend, design systems,
-  rendimiento, accesibilidad, mentoría técnica.
-- **Full Stack**: frontend como fortaleza principal, más Node, APIs, bases de datos.
-- **Tech Lead**: ownership técnico, estándares, code review, coordinación con producto,
-  diseño y backend. No afirmar dirección de personas salvo que el Master lo respalde.
-- **UX Engineer**: Figma, Design Systems, accesibilidad, colaboración con diseño.
-- **IA / AI Engineer**: CONSTRUYE sistemas con IA. LLM, RAG, agentes, APIs, Context
-  Engineering, evaluación, guardrails, pipelines.
-- **IA / GenAI Adoption**: consigue que OTROS desarrolladores trabajen mejor con IA.
-  Formación, workshops, mentoring, pairing, experimentación, herramientas de desarrollo
-  asistido, playbooks, productividad de equipos de ingeniería.
-- **IA / AI Solutions Architect**: DISEÑA sistemas. Arquitectura, escalabilidad, cloud,
-  integración, decisiones técnicas, observabilidad, gobernanza.
-- **IA / AI Product Engineer**: construye PRODUCTO con IA. Métricas, usuarios,
-  experimentos, UX, negocio, iteración.
-- **IA / AI Automation Engineer**: AUTOMATIZA procesos. N8N, MCP, APIs, workflows.
+- **Frontend**: React, Vue, TypeScript, frontend architecture, design systems,
+  performance, accessibility, technical mentoring.
+- **Full Stack**: frontend as the main strength, plus Node, APIs, databases.
+- **Tech Lead**: technical ownership, standards, code review, coordination with product,
+  design and backend. Do not claim people management unless the Master backs it.
+- **UX Engineer**: Figma, Design Systems, accessibility, collaboration with design.
+- **AI / AI Engineer**: BUILDS systems with AI. LLM, RAG, agents, APIs, Context
+  Engineering, evaluation, guardrails, pipelines.
+- **AI / GenAI Adoption**: gets OTHER developers to work better with AI.
+  Training, workshops, mentoring, pairing, experimentation, AI-assisted development
+  tools, playbooks, engineering team productivity.
+- **AI / AI Solutions Architect**: DESIGNS systems. Architecture, scalability, cloud,
+  integration, technical decisions, observability, governance.
+- **AI / AI Product Engineer**: builds PRODUCT with AI. Metrics, users,
+  experiments, UX, business, iteration.
+- **AI / AI Automation Engineer**: AUTOMATES processes. N8N, MCP, APIs, workflows.
 
-**Regla de proyección**: el CV se adapta al **problema que resuelve la empresa que
-contrata**, no al producto que construyó la candidata. La misma trayectoria se proyecta
-hacia un arquetipo u otro sin inventar nada.
+**Projection rule**: the CV is adapted to the **problem the hiring company
+solves**, not to the product the candidate built. The same career is projected
+toward one archetype or another without inventing anything.
 
-**Límite del arquetipo**: si el Master no respalda el arquetipo de la oferta, no se
-fuerza. Un arquetipo sin evidencia es una invitación a inventar.
+**Archetype limit**: if the Master does not back the archetype of the offer, it is not
+forced. An archetype without evidence is an invitation to invent.
 
-*Caso real, 24 de julio de 2026, N-iX (Gen AI Adoption Lead, Engineering Productivity).*
-La oferta pedía impulsar la adopción de Copilot, Claude y Cursor en equipos de ingeniería
-con talleres, pairing y medición de productividad. El CV salió vendiendo Context
-Engineering, guardrails, JSON contracts y deterministic retrieval: un CV de *AI Engineer*
-para una oferta de *enablement*. La carta, con el mismo Master, sí lo enfocó bien.
+*Real case, 24 July 2026, N-iX (Gen AI Adoption Lead, Engineering Productivity).*
+The offer asked for driving the adoption of Copilot, Claude and Cursor in engineering teams
+through workshops, pairing and productivity measurement. The CV came out selling Context
+Engineering, guardrails, JSON contracts and deterministic retrieval: an *AI Engineer* CV
+for an *enablement* offer. The cover letter, with the same Master, did focus it correctly.
 
-### HECHOS, NO EFECTOS
-Se escribe la ACCIÓN concreta y verificable, nunca el efecto que se le atribuye, salvo
-que el Master traiga el dato. El lector deduce el efecto solo, y le convence más.
+### `HECHOS, NO EFECTOS` (facts, not effects)
+Write the concrete, verifiable ACTION, never the effect attributed to it, unless
+the Master has the data. The reader deduces the effect alone, and is more convinced by it.
 
-- MAL: *"Improved engineering productivity"*, *"Led AI transformation"*, *"proven track
+- BAD: *"Improved engineering productivity"*, *"Led AI transformation"*, *"proven track
   record of measurable productivity gains"*, *"measuring adoption impact"*.
-- BIEN: *"Delivered technical workshops on Generative AI for engineering teams"*.
+- GOOD: *"Delivered technical workshops on Generative AI for engineering teams"*.
 
-Prohibido el vocabulario de resultado no medido cuando el Master no lo respalda: *proven
+Unmeasured result vocabulary is forbidden when the Master does not back it: *proven
 track record*, *measurable*, *impact*, *transformation*, *drove*, *boosted*,
 *accelerated*.
 
-*Por qué*: el CV de N-iX afirmó *"Proven track record translating emerging AI
-capabilities into measurable team productivity gains"* y *"measuring adoption impact"*.
-No hay una sola métrica de productividad en el Master. Un hecho concreto sin adjetivos
-vende más que un efecto declarado sin prueba, y además es defendible en entrevista.
+*Why*: the N-iX CV claimed *"Proven track record translating emerging AI
+capabilities into measurable team productivity gains"* and *"measuring adoption impact"*.
+There is not a single productivity metric in the Master. A concrete fact without adjectives
+sells better than an effect declared without proof, and it is also defensible in an interview.
 
-### No mover skills a experiencia
-Una tecnología que el Master lista en HABILIDADES pero **no atribuye a un puesto
-concreto** no puede aparecer como logro de ese puesto. En Habilidades es legítima.
+### Do not move skills into experience
+A technology that the Master lists under SKILLS (`Habilidades`) but **does not attribute to a specific
+position** cannot appear as an achievement of that position. Under Skills it is legitimate.
 
-*Por qué*: el CV de N-iX atribuyó *Jest, React Testing Library y CI/CD* al puesto de
-Bitcode. El Master los tiene en *Architecture & Quality*, sin ligarlos a ese puesto. La
-tecnología es real, la ATRIBUCIÓN es inventada, y el detector de tecnologías no lo ve
-porque solo compara presencia, no a qué puesto se asigna.
+*Why*: the N-iX CV attributed *Jest, React Testing Library and CI/CD* to the Bitcode position.
+The Master has them under *Architecture & Quality*, not tied to that position. The
+technology is real, the ATTRIBUTION is invented, and the technology detector does not see it
+because it only compares presence, not which position it is assigned to.
 
-### No dejarse fuera tecnologías reales que la oferta valora (regla de completitud)
-La regla de evidencia impide inventar. Esta impide lo contrario: dejarse fuera algo real y
-relevante. Si la oferta pide o menciona un área y el Master tiene una tecnología concreta de
-esa área, esa tecnología DEBE aparecer en Habilidades y, si encaja, en un bullet.
+### Do not leave out real technologies that the offer values (completeness rule)
+The evidence rule prevents inventing. This one prevents the opposite: leaving out something real and
+relevant. If the offer asks for or mentions an area and the Master has a specific technology in
+that area, that technology MUST appear under Skills and, if it fits, in a bullet.
 
-Caso real, 23 de julio de 2026, Revolut (Applied AI Engineer, Python, IA): el CV omitió
-**FastAPI** las dos veces que se generó, pese a estar en el Master y ser exactamente lo que
-la oferta valora. No era azar: el prompt no tenía la regla, solo la de no inventar. Ahora sí.
+Real case, 23 July 2026, Revolut (Applied AI Engineer, Python, AI): the CV omitted
+**FastAPI** both times it was generated, even though it was in the Master and was exactly what
+the offer values. It was not chance: the prompt did not have the rule, only the one about not inventing. Now it does.
 
-### Proyectos propios, freelance y consultoría: no sobredimensionar la escala
-Un proyecto personal se describe por la **complejidad técnica del trabajo**, nunca por el
-tamaño aparente de la organización. La pregunta que responde el CV no es *"¿qué empresa
-era?"* sino *"¿qué sabe hacer Verónica?"*.
+### Personal projects, freelance and consulting: do not oversize the scale
+A personal project is described by the **technical complexity of the work**, never by the
+apparent size of the organization. The question the CV answers is not *"what company
+was it?"* but *"what can Verónica do?"*.
 
-Prohibido el lenguaje que sugiera equipos o departamentos que no existían: *"definí la
-estrategia de IA de la compañía"*, *"lideré la arquitectura de la empresa"*, *"responsable
-de la plataforma global"*, *"lideré un equipo de"*. Y nada de vocabulario de CEO
-(estrategia, dirección, transformación digital) salvo que la oferta sea para eso.
+Language that suggests teams or departments that did not exist is forbidden: *"I defined the
+company's AI strategy"*, *"I led the company's architecture"*, *"responsible
+for the global platform"*, *"I led a team of"*. And no CEO vocabulary
+(strategy, direction, digital transformation) unless the offer is for that.
 
-En su lugar: qué construyó, qué problemas resolvió, qué tecnologías usó, qué arquitectura
-diseñó, qué decisiones de ingeniería tomó.
+Instead: what she built, what problems she solved, what technologies she used, what architecture
+she designed, what engineering decisions she made.
 
-**El resumen nunca gira alrededor del proyecto propio.** Describe la trayectoria completa;
-la experiencia actual es el ejemplo de la evolución, no el eje de la identidad. La narrativa
-correcta es *"10+ años de producto digital, especialización frontend, evolución a
-full-stack, especialización actual en AI Engineering"*, nunca *"fundadora de X que hace IA"*.
+**The summary never revolves around the personal project.** It describes the full career;
+the current experience is the example of the evolution, not the axis of the identity. The correct
+narrative is *"10+ years of digital product, frontend specialization, evolution to
+full-stack, current specialization in AI Engineering"*, never *"founder of X doing AI"*.
 
-**El peso de una experiencia no depende del tamaño de la empresa**, sino de la relevancia de
-las competencias para esta oferta. CookYourWeb puede ir primero por ser lo más reciente y
-especializado, pero presentado como trabajo de ingeniería.
+**The weight of an experience does not depend on the size of the company**, but on the relevance of
+the skills for this offer. CookYourWeb can go first for being the most recent and
+specialized, but presented as engineering work.
 
-*Por qué*: 24-jul-2026. Los CV tendían a vender CookYourWeb, que es un proyecto propio, con
-una escala de organización que no corresponde. No es falso (el trabajo es real), pero un
-recruiter senior lo percibe y resta credibilidad.
+*Why*: 24 Jul 2026. The CVs tended to sell CookYourWeb, which is a personal project, with
+an organization scale that does not correspond to it. It is not false (the work is real), but a senior
+recruiter notices it and it costs credibility.
 
-### El titular no hace eco del anuncio
-La identidad del titular sale del `PERFIL BASE` tal cual está escrita, sin calificativos del
-título de la oferta. Si la oferta se titula *Applied AI Engineer* y el `PERFIL BASE` dice
-*AI Engineer*, el titular usa *AI Engineer*. Caso real: Revolut, el titular salió *Applied
-AI Engineer* copiando el "Applied" del anuncio.
+### The headline does not echo the posting
+The identity in the headline comes from the `PERFIL BASE` exactly as written, without qualifiers from the
+title of the offer. If the offer is titled *Applied AI Engineer* and the `PERFIL BASE` says
+*AI Engineer*, the headline uses *AI Engineer*. Real case: Revolut, the headline came out *Applied
+AI Engineer*, copying the "Applied" from the posting.
 
-### PASO 3: Revisión anti-IA
-Elimina todo rastro de texto de IA antes de entregar: cero guiones largos y dobles guiones,
-cero frases tipo "responsable de..."/"orientada a...", cero adjetivos vacíos ("dinámico",
-"proactivo", "apasionado"), cero "passionate about"/"excited to", cero pasivas innecesarias.
-Tono profesional pero natural.
+### `PASO 3`: Anti-AI review
+Remove every trace of AI-written text before delivering: zero long dashes and double dashes,
+zero phrases like "responsible for..."/"oriented to...", zero empty adjectives ("dynamic",
+"proactive", "passionate"), zero "passionate about"/"excited to", zero unnecessary passives.
+Professional but natural tone.
 
-> Esto es la primera red. La SEGUNDA red es determinista: `sanear_tipografia()` limpia
-> guiones largos y flechas en el render, por si el modelo desobedece. Ver `CHANGELOG.md`.
+> This is the first net. The SECOND net is deterministic: `sanear_tipografia()` cleans
+> long dashes and arrows at render time, in case the model disobeys. See `CHANGELOG.md`.
 
 ---
 
-## Guardrails: lo que se comprueba en la SALIDA
+## Guardrails: what is checked in the OUTPUT
 
-El prompt es una instrucción, no una garantía. Estas dos reglas ya estaban escritas y el
-modelo las incumplió igual, así que además se verifica el texto generado y se devuelve el
-resultado en la respuesta de `/generar-cv`.
+The prompt is an instruction, not a guarantee. These two rules were already written and the
+model broke them anyway, so the generated text is also checked and the
+result is returned in the `/generar-cv` response.
 
-Ninguno de los dos aborta la generación. Una alerta puede ser legítima, y abortar dejaría a
-la candidata sin CV. Se avisa para que ella lo revise antes de enviarlo.
+Neither of them aborts the generation. An alert can be legitimate, and aborting would leave the
+candidate without a CV. The warning is raised so that she reviews it before sending.
 
-| Campo de la respuesta | Qué contiene | Función |
+| Response field | What it contains | Function |
 |---|---|---|
-| `cifras_no_respaldadas` | Cifras y magnitudes del CV que no están en el Master | `detectar_cifras_no_respaldadas` |
-| `tecnologias_no_respaldadas` | Tecnologías del CV que no están en el Master | `detectar_tecnologias_no_respaldadas` |
+| `cifras_no_respaldadas` | Figures and magnitudes in the CV that are not in the Master | `detectar_cifras_no_respaldadas` |
+| `tecnologias_no_respaldadas` | Technologies in the CV that are not in the Master | `detectar_tecnologias_no_respaldadas` |
 
-El catálogo de tecnologías reconoce variantes de escritura como equivalentes: `RTL`,
-`React Testing Library` y `Testing Library` son la misma, igual que `Vue` y `Vue.js`. Si el
-Master usa una variante y el CV otra, no salta falsa alarma.
+The technology catalog treats spelling variants as equivalent: `RTL`,
+`React Testing Library` and `Testing Library` are the same, just like `Vue` and `Vue.js`. If the
+Master uses one variant and the CV another, there is no false alarm.
 
-**Regla de evidencia (tecnologías):** una tecnología entra en el CV solo si el Master la
-respalda. Da igual que la oferta la pida.
+**Evidence rule (technologies):** a technology goes into the CV only if the Master
+backs it. It does not matter that the offer asks for it.
 
-Caso real, 23 de julio de 2026, oferta de Tenth Revolution: la oferta pedía "entornos
-PHP/Symfony o templating server-side (Twig, Blade)". Verónica no tiene esa experiencia. El
-CV generado salió con *"experiencia en templating server-side (contexto de integración con
-arquitecturas PHP/Symfony)"*. No es exactamente mentira, y en la bandeja de un recruiter se
-lee como experiencia. Hubo que quitarlo a mano. Ahora sale marcado en la respuesta.
+Real case, 23 July 2026, Tenth Revolution offer: the offer asked for "PHP/Symfony
+environments or server-side templating (Twig, Blade)". Verónica does not have that experience. The
+generated CV came out with *"experience in server-side templating (integration context with
+PHP/Symfony architectures)"*. It is not exactly a lie, and in a recruiter's inbox it
+reads as experience. It had to be removed by hand. Now it is flagged in the response.
 
-El detector trabaja con un catálogo de tecnologías y con sus variantes de escritura, para
-que "Vue" y "Vue.js" cuenten como lo mismo y no salte una falsa alarma. Cuando el Master
-incorpore una tecnología nueva, no hay que tocar nada: el detector compara contra el Master,
-no contra una lista de permitidas.
+The detector works with a technology catalog and its spelling variants, so
+that "Vue" and "Vue.js" count as the same thing and no false alarm is raised. When the Master
+adds a new technology, nothing needs to be touched: the detector compares against the Master,
+not against an allowed list.
 
-**Un alias que falta es un agujero en el guardrail.** Caso real, 24 de julio de 2026,
-N-iX: el CV coló *"integrating Copilot-class AI systems"* sin respaldo del Master y el
-detector no dijo nada. El catálogo daba de alta **"GitHub Copilot"** y el patrón usa
-fronteras de palabra, así que **"Copilot" a secas no matcheaba**. No fue un fallo del
-modelo ni de la regla: fue un alias que no estaba. Arreglado con
-`_reg_tec("GitHub Copilot", "Copilot")` y cubierto por
+**A missing alias is a hole in the guardrail.** Real case, 24 July 2026,
+N-iX: the CV let through *"integrating Copilot-class AI systems"* without backing from the Master and the
+detector said nothing. The catalog registered **"GitHub Copilot"** and the pattern uses
+word boundaries, so a bare **"Copilot" did not match**. It was not a failure
+of the model or of the rule: it was an alias that was missing. Fixed with
+`_reg_tec("GitHub Copilot", "Copilot")` and covered by
 `test_tecnologias_inventadas.py::test_regresion_la_frase_exacta_del_cv_de_n_ix`.
 
-Al añadir una herramienta al catálogo, **da de alta también el nombre corto por el que la
-gente la escribe de verdad**. El patrón consume primero los nombres largos, así que
-registrar el alias corto no produce dobles alertas.
+When adding a tool to the catalog, **also register the short name by which
+people really write it**. The pattern consumes the long names first, so
+registering the short alias does not produce double alerts.
 
 ---
 
-## Prompt de la carta de presentación
+## Cover letter prompt
 
-Rol: *experto en cartas de presentación*. Máximo **250 palabras**, en el idioma de la oferta.
+Role: *expert in cover letters*. Maximum **250 words**, in the language of the offer.
 
-- Solo experiencia real del master y solo la relevante; conectar con lo que pide la oferta.
-  No inventar, no exagerar, nada difícil de defender.
-- **Nivel**: mismo criterio que el CV. Puesto sin lead/manager es desarrollo individual, no
-  usar la coordinación de equipos como argumento principal; enfocar el encaje técnico.
-- Tono profesional, directo y humano. Cero frases de IA ("apasionada", "proactiva",
-  "soluciones innovadoras", "emocionada de la oportunidad").
-- Mencionar logros o tecnologías concretas del CV que encajen.
-- Saludo: a la persona de contacto si se conoce ("A la atención de {contacto}," / "Dear
-  {contacto},"), usando el nombre EXACTO, sin inventarlo. Si no, genérico ("Estimados/as," /
-  "Dear Hiring Team,"). Despedida formal + nombre.
-
----
-
-## Al editar el prompt: no rompas esto
-
-- La primera línea del CV DEBE ser `HEADLINE: ...`: el render la usa como titular de la
-  cabecera. Si el modelo escribe algo antes, se rompe la cabecera.
-- Nombre/email/teléfono NO van en el prompt: se añaden programáticamente en el DOCX.
-- Nada de markdown en el output (`**texto**`, `##`, ```` ``` ````).
-- No metas un saneado tipográfico global antes de parsear el DOCX: la detección de la línea
-  de empresa usa el guion largo como marcador. Ver `CHANGELOG.md`.
+- Only real experience from the Master and only the relevant part; connect with what the offer asks for.
+  Do not invent, do not exaggerate, nothing hard to defend.
+- **Level**: same criterion as the CV. A position without lead/manager is individual development; do not
+  use team coordination as the main argument; focus on technical fit.
+- Professional, direct and human tone. Zero AI phrases ("passionate", "proactive",
+  "innovative solutions", "excited about the opportunity").
+- Mention specific achievements or technologies from the CV that fit.
+- Greeting: to the contact person if known ("A la atención de {contacto}," / "Dear
+  {contacto},"), using the EXACT name, without inventing it. Otherwise generic ("Estimados/as," /
+  "Dear Hiring Team,"). Formal closing + name.
 
 ---
 
-**Última actualización:** 24 julio 2026
-**Ver también:** `../CHANGELOG.md` (cambios técnicos), `../README.md` (guía de usuario),
-`../tests/test_proyeccion_arquetipos.py` (invariantes del prompt: regla maestra, titular base,
-arquetipos, hechos-no-efectos).
+## When editing the prompt: do not break this
+
+- The first line of the CV MUST be `HEADLINE: ...`: the render uses it as the headline of the
+  header. If the model writes anything before it, the header breaks.
+- Name/email/phone do NOT go in the prompt: they are added programmatically in the DOCX.
+- No markdown in the output (`**text**`, `##`, ```` ``` ````).
+- Do not add a global typographic cleanup before parsing the DOCX: the detection of the company
+  line uses the long dash as a marker. See `CHANGELOG.md`.
+
+---
+
+**Last updated:** 24 July 2026
+**See also:** `../CHANGELOG.md` (technical changes), `../README.md` (user guide),
+`../tests/test_proyeccion_arquetipos.py` (prompt invariants: master rule, base headline,
+archetypes, facts-not-effects).
