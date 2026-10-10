@@ -12,6 +12,7 @@ Errors are generic on purpose: they never include the connection string.
 """
 import os
 from contextlib import contextmanager
+from urllib.parse import parse_qs, urlsplit
 
 from sqlalchemy import create_engine
 
@@ -35,8 +36,12 @@ def url_psycopg(url: str) -> str:
 
 def crear_motor(url: str):
     """Build an engine for `url`. Lazy: no connection is opened here."""
+    destino = url_psycopg(url)
+    # Enforce TLS unless the URL states its own sslmode (e.g. verify-full).
+    argumentos = {} if "sslmode" in parse_qs(urlsplit(destino).query) else {"sslmode": "require"}
     return create_engine(
-        url_psycopg(url),
+        destino,
+        connect_args=argumentos,
         pool_size=2,
         max_overflow=0,
         pool_pre_ping=True,

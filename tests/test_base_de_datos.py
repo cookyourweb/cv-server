@@ -57,3 +57,23 @@ def test_the_engine_is_created_once(monkeypatch):
 def test_the_engine_can_be_built_from_an_explicit_url():
     motor = base_de_datos.crear_motor("postgresql://u:p@localhost/db")
     assert motor.dialect.driver == "psycopg"
+
+
+def _kwargs_del_motor(monkeypatch, url):
+    capturado = {}
+    monkeypatch.setattr(base_de_datos, "create_engine",
+                        lambda destino, **kwargs: capturado.update(kwargs, _url=destino))
+    base_de_datos.crear_motor(url)
+    return capturado
+
+
+def test_tls_is_required_when_the_url_has_no_sslmode(monkeypatch):
+    kwargs = _kwargs_del_motor(monkeypatch, "postgresql://u:p@host/db")
+    assert kwargs["connect_args"] == {"sslmode": "require"}
+
+
+@pytest.mark.parametrize("modo", ["verify-full", "disable", "require"])
+def test_an_explicit_sslmode_in_the_url_is_respected(monkeypatch, modo):
+    kwargs = _kwargs_del_motor(monkeypatch, f"postgresql://u:p@host/db?sslmode={modo}")
+    assert "sslmode" not in kwargs.get("connect_args", {})
+    assert f"sslmode={modo}" in kwargs["_url"]
