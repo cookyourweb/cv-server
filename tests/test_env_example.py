@@ -5,7 +5,7 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parent.parent
 VARIABLES = ["OIDC_AUDIENCIA", "OIDC_EMISORES", "OIDC_JWKS_URL", "INVITADAS", "CORS_ORIGENES",
-             "CV_CLAVES", "CV_CLAVE_ACTIVA"]
+             "CV_CLAVES", "CV_CLAVE_ACTIVA", "DATABASE_URL", "DATABASE_URL_PRUEBAS"]
 
 
 def _asignaciones():
