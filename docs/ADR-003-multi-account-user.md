@@ -1,124 +1,124 @@
-# ADR-003: Un usuario, varias cuentas de correo
+# ADR-003: One user, several email accounts
 
-**Estado:** Aceptado · 28 jul 2026
-**Ámbito:** `cv-server`, `buscar_usuario_por_email`, base `Users` de Notion
+**Status:** Accepted · 28 Jul 2026
+**Scope:** `cv-server`, `buscar_usuario_por_email`, Notion `Users` database
 
-> **Para quien retome esto (persona o IA):** si vuelve a aparecer un segundo registro
-> de la misma persona en `Users`, no lo "arregles" copiando campos a mano. Lee la
-> seccion "Por que no vale duplicar el registro": el parche se rompe solo.
+> **For whoever picks this up (person or AI):** if a second record of the same person
+> shows up in `Users` again, do not "fix" it by copying fields by hand. Read the
+> section "Why duplicating the record does not work": the patch breaks on its own.
 
 ---
 
-## Contexto
+## Context
 
-A la usuaria le llegan ofertas a **dos buzones**: `principal@example.com` y
-`alias@example.com`. `buscar_usuario_por_email` filtraba la base `Users` por el
-campo `Email` con `equals`, asi que solo reconocia una direccion.
+The user receives job offers at **two mailboxes**: `principal@example.com` and
+`alias@example.com`. `buscar_usuario_por_email` filtered the `Users` database by the
+`Email` field with `equals`, so it only recognized one address.
 
-La solucion que se adopto en su momento fue **crear un segundo registro** en `Users`,
-con el otro correo. Funcionaba: las ofertas de ambos buzones encontraban usuario.
+The solution adopted at the time was to **create a second record** in `Users`,
+with the other email. It worked: offers from both mailboxes found a user.
 
-## El problema
+## The problem
 
-**Dos registros de la misma persona derivan.** No es una hipotesis: paso.
+**Two records of the same person drift apart.** This is not a hypothesis: it happened.
 
-Estado al detectarlo (28jul2026):
+State when it was detected (28 Jul 2026):
 
-| Campo | `principal@example.com` | `alias@example.com` |
+| Field | `principal@example.com` | `alias@example.com` |
 |---|---|---|
 | `Name` | Persona Ejemplo | persona ejemplo |
-| `Email CV` | cv@example.com | **vacio** |
-| `CV Master URL` | **8.702 chars, con `PERFIL BASE`** | **4.689 chars, SIN `PERFIL BASE`** |
+| `Email CV` | cv@example.com | **empty** |
+| `CV Master URL` | **8,702 chars, with `PERFIL BASE`** | **4,689 chars, WITHOUT `PERFIL BASE`** |
 | `Ciudad` | Ciudad, Provincia | madrid |
 | `Rol objetivo` | AI Engineer · Full-Stack · Tech Lead… | Senior Frontend Develo**p**er *(typo)* |
-| `Perfil` | 3 lineas (IA, RAG, agentes) | "Desarrolladora frontend developer senior" |
-| `Stack` | React, TS, Vue, Node, Python, AI/ML… | solo "React Typescript" |
+| `Perfil` | 3 lines (AI, RAG, agents) | "Senior frontend developer" |
+| `Stack` | React, TS, Vue, Node, Python, AI/ML… | only "React Typescript" |
 
-El CV de PANEL Sistemas se genero contra el segundo registro. Consecuencias, todas
-en el documento que ve un recruiter:
+The PANEL Sistemas CV was generated against the second record. Consequences, all
+in the document a recruiter sees:
 
-1. Cabecera con `madrid` y `alias@example.com`.
-2. Titular `Tech Lead Full Stack | Java · Angular · APIs REST | Arquitectura de
-   Microservicios`: **el titulo literal de la vacante**. Eco puro, prohibido por las
+1. Header with `madrid` and `alias@example.com`.
+2. Headline `Tech Lead Full Stack | Java · Angular · APIs REST | Arquitectura de
+   Microservicios`: **the literal job title**. Pure echo, forbidden by the
    HEADLINE RULES.
-3. Tecnologias ajenas al Master bueno (Maven, Oracle Cloud).
+3. Technologies foreign to the good Master (Maven, Oracle Cloud).
 
-**Y el guardrail del titular no salto.** No por un bug: ese Master no tiene bloque
-`PERFIL BASE`, asi que no habia contrato contra el que validar. Un guardrail que
-depende de un dato solo protege cuando el dato existe.
+**And the headline guardrail did not fire.** Not because of a bug: that Master has no
+`PERFIL BASE` block, so there was no contract to validate against. A guardrail that
+depends on a piece of data only protects when the data exists.
 
-## Por que no vale duplicar el registro
+## Why duplicating the record does not work
 
-La duplicacion es un parche con una fecha de caducidad que nadie ve venir: **funciona
-el dia que se crea y se degrada en silencio**. Cada vez que se afina el Master, el
-perfil o el stack, se toca UN registro. El otro se queda atras, y no hay ningun aviso
-hasta que una oferta entra por el buzon equivocado y sale un CV con la identidad de
-otra persona.
+Duplication is a patch with an expiry date that nobody sees coming: **it works
+the day it is created and degrades silently**. Every time the Master, the
+profile or the stack is refined, ONE record is touched. The other falls behind, and there is no warning
+until an offer comes in through the wrong mailbox and a CV comes out with the identity of
+another person.
 
-El modelo del dominio es claro: **la persona es UNA. Lo que hay son varias direcciones
-de entrada.** Un registro por buzon confunde la identidad con el canal.
+The domain model is clear: **the person is ONE. What there are is several entry
+addresses.** One record per mailbox confuses the identity with the channel.
 
 ## Decision
 
-**Un registro de usuario puede declarar N direcciones.**
+**A user record can declare N addresses.**
 
-- `Email` (email) sigue siendo la direccion **principal**. No cambia.
-- **`Emails alias`** (rich_text, NUEVO): direcciones adicionales, separadas por coma,
-  punto y coma o salto de linea.
+- `Email` (email) remains the **primary** address. It does not change.
+- **`Emails alias`** (rich_text, NEW): additional addresses, separated by comma,
+  semicolon or line break.
 
-`buscar_usuario_por_email` hace **dos pasadas**:
+`buscar_usuario_por_email` makes **two passes**:
 
-1. `Email equals <email>`: camino rapido, comportamiento de siempre.
-2. Si no hay resultado: `Emails alias contains <email>`, y **verifica la coincidencia
-   exacta en Python**.
+1. `Email equals <email>`: fast path, the usual behavior.
+2. If there is no result: `Emails alias contains <email>`, and **verify the exact
+   match in Python**.
 
-### Por que la verificacion en Python no es opcional
+### Why the Python verification is not optional
 
-El filtro `contains` de Notion es de **subcadena**: `vero@gmail.com` casa con
-`notvero@gmail.com`. Sin la verificacion final, un usuario podria recibir el CV de
-otro. Cubierto por `test_no_coincide_por_subcadena`.
+Notion's `contains` filter is a **substring** match: `vero@gmail.com` matches
+`notvero@gmail.com`. Without the final verification, a user could receive another
+user's CV. Covered by `test_no_coincide_por_subcadena`.
 
-### Funciones puras
+### Pure functions
 
-- `emails_de_usuario(props) -> set[str]`: todas las direcciones, normalizadas a
-  minusculas y sin espacios. Descarta lo que no tenga forma de email, para que una
-  nota suelta en el campo ("(el viejo)") no se convierta en direccion.
-- `usuario_tiene_email(props, email) -> bool`: comparacion exacta.
+- `emails_de_usuario(props) -> set[str]`: all the addresses, normalized to
+  lowercase and without spaces. It discards anything that does not look like an email, so that a stray
+  note in the field ("(el viejo)", meaning "the old one") does not turn into an address.
+- `usuario_tiene_email(props, email) -> bool`: exact comparison.
 
-Ambas son puras y testeables sin tocar Notion (15 tests en
+Both are pure and testable without touching Notion (15 tests in
 `test_usuario_multicuenta.py`).
 
-## Consecuencias
+## Consequences
 
-- **A favor:** un solo sitio donde mantener Master, perfil, stack y ciudad. Añadir un
-  buzon es escribir un correo mas en un campo, no clonar un registro.
-- **Coste:** una segunda consulta a Notion cuando el email no es el principal. Solo en
-  ese caso; el camino habitual sigue siendo una sola llamada.
-- **Compatible hacia atras:** si el campo `Emails alias` no existe, la segunda pasada
-  devuelve 400, se registra en el log y la funcion se comporta como antes.
+- **In favor:** a single place to maintain the Master, profile, stack and city. Adding a
+  mailbox means writing one more email in a field, not cloning a record.
+- **Cost:** a second Notion query when the email is not the primary one. Only in
+  that case; the usual path is still a single call.
+- **Backward compatible:** if the `Emails alias` field does not exist, the second pass
+  returns 400, it is logged and the function behaves as before.
 
-## Migracion (manual, en Notion)
+## Migration (manual, in Notion)
 
-1. En `Users`, añadir la propiedad **`Emails alias`** de tipo **Text**.
-2. En el registro bueno (`Persona Ejemplo` / `principal@example.com`),
-   poner en `Emails alias`: `alias@example.com`
-3. En las ofertas cuyo campo `Usuario` apunte al registro duplicado, reapuntarlas al
-   bueno.
-4. **Desactivar** (`Activo` = off) el registro `persona ejemplo` / `alias@example.com`.
-   Desactivar antes que borrar: si alguna oferta historica lo referencia, la relacion
-   no se rompe.
-5. Verificar: `POST /generar-cv` con `email: alias@example.com` debe devolver un CV
-   con la cabecera de `Persona Ejemplo` y `cv@example.com`.
+1. In `Users`, add the property **`Emails alias`** of type **Text**.
+2. In the good record (`Persona Ejemplo` / `principal@example.com`),
+   put in `Emails alias`: `alias@example.com`
+3. In the offers whose `Usuario` field points to the duplicated record, repoint them to the
+   good one.
+4. **Deactivate** (`Activo` = off) the record `persona ejemplo` / `alias@example.com`.
+   Deactivate before deleting: if any historical offer references it, the relation
+   does not break.
+5. Verify: `POST /generar-cv` with `email: alias@example.com` must return a CV
+   with the header of `Persona Ejemplo` and `cv@example.com`.
 
-## Pendiente
+## Pending
 
-- [ ] El paso 3 de la migracion no esta automatizado. Si aparecen muchas ofertas
-      apuntando al registro viejo, merece un script.
-- [ ] Ningun guardrail avisa de que un Master **no tiene bloque `PERFIL BASE`**. Es lo
-      que dejo pasar el titular con eco. Un aviso al leer el Master lo cubriria, y es
-      independiente del modelo y de este ADR.
+- [ ] Step 3 of the migration is not automated. If many offers show up
+      pointing to the old record, it deserves a script.
+- [ ] No guardrail warns that a Master **has no `PERFIL BASE` block**. That is what
+      let the echoed headline through. A warning when reading the Master would cover it, and it is
+      independent of the model and of this ADR.
 
 ---
 
-**Relacionado:** `ADR-002-cv-model.md`, `MULTI-USER-ONBOARDING.md`,
+**Related:** `ADR-002-cv-model.md`, `MULTI-USER-ONBOARDING.md`,
 `test_usuario_multicuenta.py`.

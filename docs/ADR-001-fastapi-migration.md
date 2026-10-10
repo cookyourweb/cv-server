@@ -1,70 +1,70 @@
-# ADR-001: Migración incremental del cv-server a FastAPI + Pydantic
+# ADR-001: Incremental migration of cv-server to FastAPI + Pydantic
 
-**Estado:** Aceptado · 22 jul 2026
-**Ámbito:** `cv-server` (repo `github.com/cookyourweb/cv-server`, rama `develop`)
+**Status:** Accepted · 22 Jul 2026
+**Scope:** `cv-server` (repo `github.com/cookyourweb/cv-server`, branch `develop`)
 
-> **Para quien retome esto (persona o IA):** este documento fija las decisiones de
-> arquitectura de la migración. NO las re-derives ni las re-discutas de memoria: si vas a
-> tocar un endpoint, léelo entero primero y respetá el patrón "core puro + wrapper HTTP".
+> **For whoever picks this up (person or AI):** this document fixes the architecture
+> decisions of the migration. Do NOT re-derive them or re-argue them from memory: if you are going to
+> touch an endpoint, read it in full first and follow the "pure core + HTTP wrapper" pattern.
 
 ---
 
-## Contexto
+## Context
 
-- `cv-server` es hoy un monolito Flask (`server.py`, ~1500 líneas) con la lógica
-  de negocio y la capa HTTP **mezcladas** en las rutas. Ejemplo: `generar_cv()` mezcla el
-  parsing del request, la orquestación de Drive/Notion/LLM y el armado de la respuesta en la
-  misma función.
-- El módulo lee variables de entorno **requeridas al importarse** (`GROQ_API_KEY`,
-  `NOTION_TOKEN`, `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN`). Eso dificulta testear: importar el
-  módulo sin esas env vars revienta.
-- Objetivos de la migración:
-  1. Contratos tipados y validación de entrada/salida (guardrails para las pipelines de IA).
-  2. Separar lógica de transporte: arquitectura limpia y testeable.
-  3. Práctica REAL de FastAPI para el perfil AI Engineer de Vero (experiencia grounded, no
-     inventada: se pone en el CV porque se hizo de verdad).
+- `cv-server` is currently a Flask monolith (`server.py`, ~1500 lines) with business
+  logic and the HTTP layer **mixed together** in the routes. Example: `generar_cv()` mixes
+  request parsing, Drive/Notion/LLM orchestration and response building in the
+  same function.
+- The module reads environment variables that are **required at import time** (`GROQ_API_KEY`,
+  `NOTION_TOKEN`, `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN`). That makes testing hard: importing the
+  module without those env vars blows up.
+- Goals of the migration:
+  1. Typed contracts and input/output validation (guardrails for the AI pipelines).
+  2. Separate business logic from transport: clean, testable architecture.
+  3. REAL FastAPI practice for Vero's AI Engineer profile (grounded experience, not
+  invented: it goes on the CV because it was actually done).
 
-## Decisiones
+## Decisions
 
-1. **Coexistencia, no big-bang.** FastAPI se añade EN PARALELO en `api.py`; Flask
-   (`server.py`) sigue vivo y sirviendo. Se migra endpoint por endpoint.
-2. **Separar lógica del HTTP.** Se extrae el núcleo de cada endpoint a una función de
-   orquestación (ej. `generar_cv_core(email, empresa, puesto, descripcion, idioma) -> dict`).
-   La ruta Flask y la ruta FastAPI son wrappers finos que llaman al MISMO core. La extracción
-   es behavior-preserving: la salida no cambia.
-3. **Errores como excepción tipada.** El core lanza `CVError(status, message)`; cada capa HTTP
-   la mapea a su formato (Flask: `jsonify` + status; FastAPI: `HTTPException`).
-4. **Contratos Pydantic.** Request y response tipados (`GenerarCVRequest`, `GenerarCVResponse`).
-   Es la materialización en código del posicionamiento "JSON structured outputs + validation +
-   guardrails".
-5. **TDD.** Test primero. Por el config-at-import, los tests setean env dummy y mockean el
-   core / los helpers para no tocar Drive/Notion/LLM reales.
+1. **Coexistence, not big-bang.** FastAPI is added IN PARALLEL in `api.py`; Flask
+   (`server.py`) stays alive and keeps serving. Endpoints are migrated one by one.
+2. **Separate logic from HTTP.** The core of each endpoint is extracted into an
+   orchestration function (e.g. `generar_cv_core(email, empresa, puesto, descripcion, idioma) -> dict`).
+   The Flask route and the FastAPI route are thin wrappers that call the SAME core. The extraction
+   is behavior-preserving: the output does not change.
+3. **Errors as a typed exception.** The core raises `CVError(status, message)`; each HTTP layer
+   maps it to its own format (Flask: `jsonify` + status; FastAPI: `HTTPException`).
+4. **Pydantic contracts.** Typed request and response (`GenerarCVRequest`, `GenerarCVResponse`).
+   This is the code materialization of the "JSON structured outputs + validation +
+   guardrails" positioning.
+5. **TDD.** Test first. Because of config-at-import, tests set dummy env vars and mock the
+   core / the helpers so that they do not touch real Drive/Notion/LLM.
 
-## Consecuencias
+## Consequences
 
-- **A favor:** lógica testeable y reutilizable; documentación OpenAPI automática que da FastAPI;
-  base para ir migrando el resto; refuerza el perfil AI con evidencia real.
-- **Coste:** temporalmente dos frameworks en el repo (Flask + FastAPI) hasta completar la
-  migración; hace falta `uvicorn` para servir FastAPI.
-- **Riesgo controlado:** la extracción del core está cubierta por tests y Flask queda como red
-  de seguridad hasta que FastAPI cubra el endpoint en verde.
+- **In favor:** testable, reusable logic; the automatic OpenAPI documentation that FastAPI provides;
+  a base for migrating the rest; it reinforces the AI profile with real evidence.
+- **Cost:** two frameworks in the repo for a while (Flask + FastAPI) until the
+  migration is complete; `uvicorn` is needed to serve FastAPI.
+- **Controlled risk:** the core extraction is covered by tests and Flask stays as a safety
+  net until FastAPI covers the endpoint with passing tests.
 
-## Alternativas descartadas
+## Rejected alternatives
 
-- **Migración big-bang** (reescribir todo de una): riesgo alto sobre un servicio en producción.
-- **Duplicar la lógica del endpoint en FastAPI:** duplicaría el prompt de ~290 líneas y con el
-  tiempo divergiría. Se descarta a favor de extraer el core y compartirlo.
+- **Big-bang migration** (rewrite everything at once): high risk on a service in production.
+- **Duplicating the endpoint logic in FastAPI:** it would duplicate the ~290-line prompt and
+  would diverge over time. Rejected in favor of extracting the core and sharing it.
 
-## Estado de implementación
+## Implementation status
 
-- **Slice 1 (en curso):** `/generar-cv` pasa a `generar_cv_core` + `api.py` (FastAPI/Pydantic) + tests.
-- **Siguientes:** `/generar-carta`, `/usuarios`, `/crear-oferta`, etc., mismo patrón.
+- **Slice 1 (in progress):** `/generar-cv` moves to `generar_cv_core` + `api.py` (FastAPI/Pydantic) + tests.
+- **Next:** `/generar-carta`, `/usuarios`, `/crear-oferta`, etc., same pattern.
 
-## Ejemplo de la API (para entenderla rápido)
+## API example (to understand it quickly)
 
-Servir FastAPI en local: `uvicorn api:app --reload` (docs interactivas en `/docs`).
+Serve FastAPI locally: `uvicorn api:app --reload` (interactive docs at `/docs`).
 
-**Request OK** (`POST /generar-cv`):
+**Valid request** (`POST /generar-cv`):
 
 ```bash
 curl -X POST http://localhost:8000/generar-cv \
@@ -78,7 +78,7 @@ curl -X POST http://localhost:8000/generar-cv \
   }'
 ```
 
-**Respuesta 200** (validada contra `GenerarCVResponse`):
+**200 response** (validated against `GenerarCVResponse`):
 
 ```json
 {
@@ -93,8 +93,8 @@ curl -X POST http://localhost:8000/generar-cv \
 }
 ```
 
-**Falta un campo requerido** (ej. sin `empresa`): **422 automático**, sin que corra nada del
-core. Ese es el guardrail de Pydantic en acción:
+**A required field is missing** (e.g. no `empresa`): **automatic 422**, with none of the
+core running. That is the Pydantic guardrail in action:
 
 ```json
 {
@@ -104,24 +104,24 @@ core. Ese es el guardrail de Pydantic en acción:
 }
 ```
 
-Es el contrato tipado: lo que no cumple la forma, no entra; lo que sale, sale con la forma exacta.
+This is the typed contract: whatever does not match the shape does not get in; whatever comes out has the exact shape.
 
-## Hallazgos relacionados (no bloquean esta migración)
+## Related findings (they do not block this migration)
 
-- **DECISIÓN de precio (no es bug):** el CV se genera con **Groq (`llama-3.3-70b`) por ahora**,
-  a propósito, por coste. `CV_MODEL=claude-haiku-4-5` está declarado, pero al no haber
-  `CLAUDE_API_KEY` seteada, `call_llm_calidad` cae al fallback Groq. Claude daría mejor calidad,
-  pero se difiere por precio (Vero, 22 jul). NO "arreglar" esto sin decisión explícita de Vero.
-  Nota de coste: Claude Haiku 4.5 sale ~$0,02/CV según cabecera del código, o sea la diferencia
-  es pequeña; si algún día la calidad del CV pesa más, el salto es barato.
-- **Etiqueta `modelo_usado`:** la respuesta devuelve `GROQ_MODEL` hardcodeado (~L1359). HOY es
-  correcto porque Groq es el que corre. Solo mentiría si se activara Claude y siguiera diciendo
-  Groq. Menor; al migrar conviene que `generar_cv_core` devuelva el modelo REAL usado.
+- **PRICE decision (not a bug):** the CV is generated with **Groq (`llama-3.3-70b`) for now**,
+  on purpose, for cost. `CV_MODEL=claude-haiku-4-5` is declared, but since no
+  `CLAUDE_API_KEY` is set, `call_llm_calidad` falls back to Groq. Claude would give better quality,
+  but it is deferred on price (Vero, 22 Jul). Do NOT "fix" this without an explicit decision from Vero.
+  Cost note: Claude Haiku 4.5 costs ~$0.02/CV according to the code header, so the difference
+  is small; if CV quality ever matters more, the jump is cheap.
+- **`modelo_usado` label:** the response returns a hardcoded `GROQ_MODEL` (~L1359). TODAY it is
+  correct because Groq is the one running. It would only lie if Claude were enabled and it kept saying
+  Groq. Minor; when migrating, `generar_cv_core` should return the REAL model used.
 
-## Reglas para futuras sesiones (IA incluida)
+## Rules for future sessions (AI included)
 
-- No volver a mezclar lógica y HTTP en las rutas. Todo endpoint nuevo o migrado: **core puro +
-  wrapper HTTP**.
-- No romper Flask hasta que FastAPI cubra ese endpoint con **tests verdes**.
-- Tecnología al CV solo si es experiencia real: esta migración cuenta como práctica FastAPI
-  grounded (se hizo de verdad).
+- Do not mix logic and HTTP in the routes again. Every new or migrated endpoint: **pure core +
+  HTTP wrapper**.
+- Do not break Flask until FastAPI covers that endpoint with **passing tests**.
+- A technology goes on the CV only if it is real experience: this migration counts as grounded
+  FastAPI practice (it was actually done).

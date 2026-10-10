@@ -1,52 +1,52 @@
-# ADR-004: LiteLLM se escribe y se deja apagado, no se adopta
+# ADR-004: LiteLLM is written and left switched off, not adopted
 
-**Estado:** Aceptado · 29 ago 2026
-**Ámbito:** `cv-server`, módulo `llm.py`, variable de entorno `LLM_BACKEND`
+**Status:** Accepted · 29 Aug 2026
+**Scope:** `cv-server`, module `llm.py`, environment variable `LLM_BACKEND`
 
-> **Para quien retome esto (persona o IA):** este documento fija POR QUÉ la cascada
-> de LLMs sigue siendo tres llamadas con `requests` en vez de LiteLLM, teniendo el
-> adaptador de LiteLLM ya escrito y probado en el repo. Si vas a encenderlo, lee
-> antes la sección "Los números". No se rechazó por desconocimiento: se midió.
+> **For whoever picks this up (person or AI):** this document fixes WHY the LLM
+> cascade is still three `requests` calls instead of LiteLLM, even though the
+> LiteLLM adapter is already written and tested in the repo. If you are going to switch it on, read
+> the "The numbers" section first. It was not rejected out of ignorance: it was measured.
 
 ---
 
-## Contexto
+## Context
 
-`llm.py` resuelve la cascada Groq, Gemini y Claude con tres bloques de `requests`
-escritos a mano, unas sesenta líneas. Cada bloque tiene su URL, su forma de sacar
-el texto de una respuesta con una forma distinta, y su `try/except`.
+`llm.py` resolves the Groq, Gemini and Claude cascade with three hand-written
+`requests` blocks, about sixty lines. Each block has its own URL, its own way of extracting
+the text from a response with a different shape, and its own `try/except`.
 
-Eso ha costado dinero real dos veces:
+That has cost real money twice:
 
-- **16 ago 2026:** Groq retiró `llama-3.3-70b-versatile`. El buscador estuvo diez
-  días sin traer una sola oferta.
-- **28 ago 2026:** se retiraron **tres modelos en un día** (Groq, y dos de Gemini).
-- **28 ago 2026:** al extraer `llm.py` del monolito, el `import anthropic` se quedó
-  atrás. La capa de calidad murió y **los CVs enviados los escribió el fallback**
-  durante un día entero sin que nadie se enterase.
+- **16 Aug 2026:** Groq retired `llama-3.3-70b-versatile`. The job search went ten
+  days without bringing in a single offer.
+- **28 Aug 2026:** **three models were retired in one day** (Groq, and two from Gemini).
+- **28 Aug 2026:** when `llm.py` was extracted from the monolith, the `import anthropic` was left
+  behind. The quality layer died and **the CVs that were sent were written by the fallback**
+  for a whole day without anyone noticing.
 
-Los tres son el mismo problema de fondo: **mantener a mano la integración con
-varios proveedores es trabajo recurrente y sus fallos son silenciosos.**
+All three are the same underlying problem: **hand-maintaining the integration with
+several providers is recurring work and its failures are silent.**
 
-[LiteLLM](https://github.com/BerriAI/litellm) es la respuesta estándar del sector:
-una sola llamada, nombres de modelo normalizados, `fallbacks` de serie, y una
-librería que sigue los cambios de los proveedores por ti.
+[LiteLLM](https://github.com/BerriAI/litellm) is the standard answer in the industry:
+a single call, normalized model names, `fallbacks` out of the box, and a
+library that tracks provider changes for you.
 
-## El problema
+## The problem
 
-LiteLLM no es gratis. Medido en este mismo repo, con la versión `1.98.0` instalada
-en el venv de `cv-server`:
+LiteLLM is not free. Measured in this same repo, with version `1.98.0` installed
+in the `cv-server` venv:
 
-## Los números
+## The numbers
 
-| | cascada casera | con LiteLLM |
+| | home-made cascade | with LiteLLM |
 |---|---|---|
-| Dependencias nuevas | 0 | litellm, openai, tokenizers, tiktoken |
-| Disco | 0 MB | **+146 MB** (litellm 114, openai 20, tokenizers 8,8, tiktoken 3) |
-| `import` del módulo | inmediato | **+5,96 s** |
-| RAM del proceso | 9 MB | **207 MB** |
+| New dependencies | 0 | litellm, openai, tokenizers, tiktoken |
+| Disk | 0 MB | **+146 MB** (litellm 114, openai 20, tokenizers 8.8, tiktoken 3) |
+| Module `import` | immediate | **+5.96 s** |
+| Process RAM | 9 MB | **207 MB** |
 
-Cómo se midieron, para que se puedan repetir:
+How they were measured, so that they can be repeated:
 
 ```bash
 .venv/bin/python -c "from importlib.metadata import version; print(version('litellm'))"
@@ -60,64 +60,64 @@ print(f'{time.time()-t:.2f}s   {base:.0f} MB a {mb():.0f} MB')
 "
 ```
 
-**Multiplicar por 23 la memoria del proceso y añadir seis segundos al arranque en
-frío, para sustituir sesenta líneas que funcionan, no lo paga este servicio hoy.**
-Es un servidor web pequeño, y ya se arregló un timeout el 28 de agosto porque una
-petición tardaba 10,7 segundos contra un límite de 8.
+**Multiplying the process memory by 23 and adding six seconds to the cold start, to
+replace sixty lines that work, is not something this service pays for today.**
+It is a small web server, and a timeout was already fixed on 28 August because a
+request took 10.7 seconds against a limit of 8.
 
-## Decisión
+## Decision
 
-**El adaptador se escribe, se prueba y se documenta. Se deja APAGADO.**
+**The adapter is written, tested and documented. It is left SWITCHED OFF.**
 
-1. `llm.py` define un `Protocol` llamado `BackendLLM` con dos implementaciones:
-   `CascadaCasera` (por defecto) y `CascadaLiteLLM`.
-2. Se elige con la variable de entorno `LLM_BACKEND`. Un valor desconocido lanza
-   `ValueError` y no degrada en silencio a otro backend.
-3. **El `import litellm` vive DENTRO del método**, nunca al principio del módulo.
-   Mientras nadie encienda el backend, el proceso no paga ni un byte.
-4. `litellm` **no entra en `requirements.txt`**. Vive en
-   `requirements-litellm.txt`, que solo se instala si se va a encender.
+1. `llm.py` defines a `Protocol` called `BackendLLM` with two implementations:
+   `CascadaCasera` (default) and `CascadaLiteLLM`.
+2. It is chosen with the environment variable `LLM_BACKEND`. An unknown value raises
+   `ValueError` and does not silently degrade to another backend.
+3. **The `import litellm` lives INSIDE the method**, never at the top of the module.
+   As long as nobody switches the backend on, the process does not pay a single byte.
+4. `litellm` is **not in `requirements.txt`**. It lives in
+   `requirements-litellm.txt`, which is only installed if it is going to be switched on.
 
-El contrato del punto 3 no depende de la buena voluntad de quien edite el fichero:
-lo vigila `tests/test_backend_llm.py::test_importar_llm_no_carga_litellm`, que
-arranca un proceso limpio y comprueba que `import llm` no mete `litellm` en
+The contract in point 3 does not depend on the goodwill of whoever edits the file:
+it is guarded by `tests/test_backend_llm.py::test_importar_llm_no_carga_litellm`, which
+starts a clean process and checks that `import llm` does not put `litellm` in
 `sys.modules`.
 
-## Cuándo encenderlo
+## When to switch it on
 
-Cuando se cumpla **cualquiera** de estas:
+When **any** of these holds:
 
-- El plan de alojamiento deja de tener la memoria justa, o el servicio deja de
-  sufrir arranques en frío.
-- Aparece un cuarto proveedor. A partir de ahí el coste de mantener la cascada a
-  mano crece más rápido que el de la librería.
-- Se necesita algo que la casera no da y LiteLLM sí: contabilidad de coste por
-  llamada, reintentos con backoff, o enrutado por presupuesto.
+- The hosting plan no longer has tight memory, or the service stops
+  suffering cold starts.
+- A fourth provider appears. From then on, the cost of maintaining the cascade by
+  hand grows faster than that of the library.
+- Something is needed that the home-made version does not give and LiteLLM does: per-call
+  cost accounting, retries with backoff, or budget-based routing.
 
-Encenderlo es `pip install -r requirements-litellm.txt`, poner
-`LLM_BACKEND=litellm` y reiniciar. Ni una línea de código.
+Switching it on is `pip install -r requirements-litellm.txt`, setting
+`LLM_BACKEND=litellm` and restarting. Not a single line of code.
 
-## Consecuencias
+## Consequences
 
-**A favor**
+**In favor**
 
-- El coste de la decisión está medido y escrito, no intuido.
-- Cambiar de backend deja de ser un refactor y pasa a ser una variable.
-- El adaptador está probado hoy, así que el día que se encienda no se estrena.
-- Segundo sitio del repo donde el principio abierto/cerrado se aplica de verdad,
-  después del registro de guardrails.
+- The cost of the decision is measured and written down, not guessed.
+- Changing backend stops being a refactor and becomes a variable.
+- The adapter is tested today, so the day it is switched on it is not a premiere.
+- Second place in the repo where the open/closed principle is really applied,
+  after the guardrails registry.
 
-**En contra**
+**Against**
 
-- Hay dos caminos que mantener en vez de uno. Se acepta porque el segundo son
-  quince líneas y está cubierto por tests.
-- El backend apagado se prueba contra un doble de `litellm`, no contra la librería
-  real. El día que se encienda hay que hacer una llamada de verdad antes de
-  confiar en él.
+- There are two paths to maintain instead of one. It is accepted because the second is
+  fifteen lines and is covered by tests.
+- The switched-off backend is tested against a `litellm` double, not against the real
+  library. The day it is switched on, a real call must be made before
+  trusting it.
 
-## Ver también
+## See also
 
-- `llm.py`, docstring de `BackendLLM` (las tres formas de romper el contrato)
+- `llm.py`, docstring of `BackendLLM` (the three ways to break the contract)
 - `tests/test_backend_llm.py`
-- `tests/test_capa_calidad.py` (el `import` que faltaba y por qué el fallback lo tapó)
-- `ADR-002` (por qué el CV lo escribe Sonnet)
+- `tests/test_capa_calidad.py` (the `import` that was missing and why the fallback covered it up)
+- `ADR-002` (why Sonnet writes the CV)
