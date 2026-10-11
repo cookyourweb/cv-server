@@ -210,6 +210,10 @@ Two other known debts:
 | `GET /` | Public | Invitation page (`templates/inicio.html`) |
 | `GET /health` | Public | Status, active models and deployed branch/commit |
 | `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is |
+| `GET /perfil` | Google token | The caller's profile (404 if none) |
+| `PUT /perfil` | Google token | Create or replace the profile (422 on invalid data) |
+| `POST /consentimientos` | Google token | Record a consent `{tipo, version}` (201, idempotent) |
+| `DELETE /cuenta` | Google token | Delete the account and its data in one transaction (204) |
 | `POST /registro` | Machine key | User sign-up |
 | `POST /generar-cv` | Machine key | CV tailored to a posting |
 | `POST /generar-carta` | Machine key | Cover letter tailored to a posting |
@@ -288,6 +292,18 @@ export CORS_ORIGENES=http://localhost:4200
 ```
 
 The full design decision is in ADR-003 of the `buscartrabajo` repo.
+
+### Owner-scoped routes
+
+`/perfil`, `/consentimientos` and `/cuenta` act only on the user resolved from the token:
+no path or body field names another user, and the data layer
+(`RepositorioDeUsuaria(conexion, usuario_id)`) filters every statement by that id, so
+another user's data is indistinguishable from data that does not exist (404). Fields are
+snake_case (`anios_experiencia`, `salario_min`, `salario_moneda`); the consent types are
+`almacenar_cv` and `enviar_cv_a_ia` with version `v1`. Deleting the account removes the
+user, mailboxes, profile, CV master and consents; the spend ledger keeps its rows with no
+user attached, so the monthly cap cannot be bypassed. Without `DATABASE_URL` these routes
+answer a generic `503`, and `/yo` and `/health` are unaffected.
 
 ## Database
 

@@ -82,6 +82,32 @@ touching the prompt f-string in `server.py`.
   any signed-in GitHub user, so the dump is encrypted to a public key whose private half stays
   offline. Losing that private key makes the backups unreadable.
 
+### Owner-scoped profile, consent and account routes
+
+**Added**
+
+- `repositorio.py`: `RepositorioDeUsuaria(conexion, usuario_id)`. Every statement is filtered
+  by the constructor's id and no method accepts another one. `PerfilEntrada` (Pydantic,
+  `extra="forbid"`) mirrors the CHECKs of `perfil`; `VERSION_DE_CONSENTIMIENTO = "v1"`.
+- `rutas_alta.py` (blueprint registered in `server.py`, all behind `@con_usuaria`):
+  `GET/PUT /perfil`, `POST /consentimientos`, `DELETE /cuenta`. Wire format taken from the
+  panel (snake_case, 404 when no profile, 201 for a consent, 204 for deletion).
+- Deletion runs in one transaction: owned tables are cleared and the user row last. A failure
+  midway rolls everything back. `extracciones` rows are kept with `usuario_id` NULL so the
+  monthly cap and the one-extraction rule survive (REQ-2.4); the used invitation stays used,
+  so a deleted mailbox cannot sign in again without a new invitation.
+- Without `DATABASE_URL` the routes answer a generic `503` (never 500); `/yo` and `/health`
+  do not change. Errors never echo submitted values, driver messages or connection details.
+
+**Why it is shaped this way**
+
+- There is no `{id}` in these routes on purpose: the owner is always the token's user, so
+  cross-user access is impossible by construction. The tests still pin it (S1.6) and a
+  route-inventory test fails if a route is added to the blueprint without being covered.
+- `POST /consentimientos` rejects any version but the current one with 422 and the
+  consent check ignores older or revoked rows (S2.2).
+- `PUT /perfil` requires all eight fields (the panel always sends them and reads them back).
+
 ### Invitations in the database and an extended /yo
 
 **Added**
