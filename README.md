@@ -236,6 +236,7 @@ Two other known debts:
 | `GET /perfil` | Google token | The caller's profile (404 if none) |
 | `PUT /perfil` | Google token | Create or replace the profile (422 on invalid data) |
 | `POST /consentimientos` | Google token | Record a consent `{tipo, version}` (201, idempotent) |
+| `DELETE /consentimientos/{tipo}` | Google token | Withdraw a consent (`tipo` is `almacenar_cv` or `enviar_cv_a_ia`): **204** with no body, also when it was already revoked or never given; **422** `{ok: false, error, campos: ["tipo"]}` for any other `tipo`. See "Withdrawing a consent" below |
 | `POST /cv` | Google token | Upload a CV (multipart field `archivo`, PDF or DOCX, 2 MB): stored encrypted, one master per language (201 `{idioma, formato, caracteres}`; 403 without the `almacenar_cv` consent, 413, 415, 422) |
 | `GET /cv` | Google token | The caller's masters, metadata only (`idioma`, `formato`, `subido_en`) |
 | `DELETE /cv/{idioma}` | Google token | Delete the caller's master in `es` or `en` (204, 404) |
@@ -327,7 +328,7 @@ The full design decision is in ADR-003 of the `buscartrabajo` repo.
 
 ### Owner-scoped routes
 
-`/perfil`, `/consentimientos`, `/cv`, `/interes` and `/cuenta` act only on the user resolved from the token:
+`/perfil`, `/consentimientos` (including its `DELETE`), `/cv`, `/interes` and `/cuenta` act only on the user resolved from the token:
 no path or body field names another user, and the data layer
 (`RepositorioDeUsuaria(conexion, usuario_id)`) filters every statement by that id, so
 another user's data is indistinguishable from data that does not exist (404). Fields are
@@ -336,6 +337,18 @@ snake_case (`anios_experiencia`, `salario_min`, `salario_moneda`); the consent t
 user, mailboxes, profile, CV master, consents and interest leads; the spend ledgers keep its rows with no
 user attached, so the monthly cap cannot be bypassed. Without `DATABASE_URL` these routes
 answer a generic `503`, and `/yo` and `/health` are unaffected.
+
+**Withdrawing a consent.** `DELETE /consentimientos/{tipo}` stamps `revocado_en` on the active row of
+that type (every version still active). The contract the panel implements against:
+`204` with no body (idempotent: also when it was already revoked or never given; the first
+stamp is kept), `422 {ok: false, error: "datos no validos", campos: ["tipo"]}` for an unknown `tipo`.
+Effects: revoking `enviar_cv_a_ia` makes `POST /extraccion` answer `403` and stops the Neon
+master reaching any model (`fuente_master.MasterEnBase` checks the consent on every read), but the
+stored CV stays. Revoking `almacenar_cv` also deletes every stored CV of the user (all languages)
+in the same transaction (a failure leaves consent and CVs untouched, `503`), and `POST /cv`
+answers `403` until the consent is given again. Giving it again through `POST /consentimientos`
+re-activates the same row (`revocado_en` cleared, `otorgado_en` restarted): the table keeps one row per
+(user, type, version), so the history of an earlier grant or revocation of the same version is not kept.
 
 **CV upload.** The type is read from the magic bytes, never from the name or the
 `Content-Type`; a scanned PDF (under 300 characters of text) is refused so the panel can

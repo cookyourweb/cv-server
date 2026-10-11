@@ -117,11 +117,27 @@ class RepositorioDeUsuaria:
     # --- consent ---------------------------------------------------------------------------
 
     def registrar_consentimiento(self, tipo: str, version: str) -> None:
-        """Record a consent; recording the same (type, version) again changes nothing."""
+        """Record a consent; recording the same (type, version) again changes nothing, unless it
+        was revoked: then it is given afresh (`otorgado_en` restarts, `revocado_en` clears)."""
         self._c.execute(
             text("INSERT INTO consentimientos (usuario_id, tipo, version) VALUES (:u, :t, :v) "
-                 "ON CONFLICT (usuario_id, tipo, version) DO NOTHING"),
+                 "ON CONFLICT (usuario_id, tipo, version) DO UPDATE SET "
+                 "otorgado_en = now(), revocado_en = NULL WHERE consentimientos.revocado_en IS NOT NULL"),
             {"u": self._usuario_id, "t": tipo, "v": version})
+
+    def revocar_consentimiento(self, tipo: str) -> None:
+        """Withdraw her consent of `tipo` (every version still active). Idempotent: revoking a
+        consent that was never given, or already revoked, changes nothing.
+
+        Revoking `almacenar_cv` also deletes every stored CV, in the same transaction: the text
+        promises that withdrawing the consent to keep the CV removes it.
+        """
+        self._c.execute(
+            text("UPDATE consentimientos SET revocado_en = now() "
+                 "WHERE usuario_id = :u AND tipo = :t AND revocado_en IS NULL"),
+            {"u": self._usuario_id, "t": tipo})
+        if tipo == "almacenar_cv":
+            self.borrar_todos_los_cvs()
 
     def tiene_consentimiento(self, tipo: str) -> bool:
         """True only for a consent of the CURRENT version that was not revoked."""
@@ -171,6 +187,11 @@ class RepositorioDeUsuaria:
             text("DELETE FROM cv_master WHERE usuario_id = :u AND idioma = :i"),
             {"u": self._usuario_id, "i": idioma})
         return resultado.rowcount == 1
+
+    def borrar_todos_los_cvs(self) -> int:
+        """Delete her masters in every language. Returns how many there were."""
+        return self._c.execute(text("DELETE FROM cv_master WHERE usuario_id = :u"),
+                               {"u": self._usuario_id}).rowcount
 
     # --- interest leads --------------------------------------------------------------------
 

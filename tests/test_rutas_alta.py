@@ -35,6 +35,7 @@ RUTAS_PROPIAS = {
     ("GET", "/perfil"): None,
     ("PUT", "/perfil"): PERFIL,
     ("POST", "/consentimientos"): CONSENTIMIENTO,
+    ("DELETE", "/consentimientos/<tipo>"): None,
     ("DELETE", "/cuenta"): None,
     ("POST", "/extraccion"): None,
     ("POST", "/interes"): {"tipo": "paquetes"},
@@ -106,7 +107,7 @@ def personas(bd, par):
 
 
 def _llamar(cliente, metodo, ruta, persona, cuerpo=None):
-    return cliente.open(ruta.replace("<idioma>", "es"), method=metodo, headers=persona.cabeceras, json=cuerpo)
+    return cliente.open(ruta.replace("<idioma>", "es").replace("<tipo>", "enviar_cv_a_ia"), method=metodo, headers=persona.cabeceras, json=cuerpo)
 
 
 def _usuario_id(persona):

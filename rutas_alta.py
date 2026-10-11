@@ -23,7 +23,8 @@ import privacidad
 import propuestas
 from cifrado import ErrorDeCifrado, cifrar, descifrar
 from lectura_cv import LIMITE_BYTES, ErrorDeLectura, leer_cv
-from repositorio import ConsentimientoEntrada, InteresEntrada, PerfilEntrada, RepositorioDeUsuaria
+from repositorio import (TIPOS_DE_CONSENTIMIENTO, ConsentimientoEntrada, InteresEntrada, PerfilEntrada,
+                         RepositorioDeUsuaria)
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,16 @@ def crear_blueprint(con_usuaria, requiere_clave_maquina) -> Blueprint:
             return error
         repo.registrar_consentimiento(consentimiento.tipo, consentimiento.version)
         return jsonify({"tipo": consentimiento.tipo, "version": consentimiento.version}), 201
+
+    @alta.delete("/consentimientos/<tipo>")
+    @con_usuaria
+    @_con_repositorio
+    def revocar_consentimiento(repo, tipo):
+        """Withdraw a consent. 204 also when it was already revoked or never given (idempotent)."""
+        if tipo not in TIPOS_DE_CONSENTIMIENTO:
+            return _respuesta(({"ok": False, "error": "datos no validos", "campos": ["tipo"]}, 422))
+        repo.revocar_consentimiento(tipo)
+        return "", 204
 
     @alta.post("/interes")
     @con_usuaria
