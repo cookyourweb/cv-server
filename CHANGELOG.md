@@ -63,6 +63,41 @@ touching the prompt f-string in `server.py`.
 
 ## Unreleased
 
+### Invitations in the database and an extended /yo
+
+**Added**
+
+- `usuarias.py`: `resolver_o_crear` maps the verified Google `(iss, sub)` to `usuarios.id`.
+  On first sign-in an unused, unexpired invitation for the verified email links the user
+  (the invitation is marked used and the mailbox is stored). A second invited mailbox of
+  the same `(iss, sub)` is attached to the same user. A mailbox held by another user is
+  never merged, and no invitation means denial with no writes. `@con_usuaria` sets
+  `g.usuario_id` and `g.identidad` for owner-scoped routes.
+- `autenticacion.identificar` takes an injected `autorizar` callback, so the module still
+  imports no database code. `email_verified` was already required (and tested).
+- `GET /yo` now also returns `tiene_perfil` and `origen_master` (`drive`, `neon` or null).
+- `scripts/invitar.py`: adds or renews an invitation (`--dias` is required because
+  `caduca_en` is NOT NULL). It reads `DATABASE_URL` from the environment and never
+  prints it.
+- CORS by prefix for the panel routes (`/yo`, `/health`, `/perfil`, `/consentimientos`,
+  `/cv`, `/extraccion`, `/cuenta`, `/encajes`, `/ofertas/<id>/encaje`) with
+  `GET, POST, PUT, DELETE` and `Authorization, Content-Type`. Machine routes get none.
+
+**Why it is shaped this way**
+
+- Two modes, so production does not change until the database exists. Without
+  `DATABASE_URL` (Render today) the `INVITADAS` list decides and no database is touched.
+  With it, the `invitaciones` table decides; `INVITADAS` only works as a bootstrap
+  fallback when `INVITADAS_COMO_RESPALDO=1`, to be removed once invitations live only in
+  the table.
+- `tiene_perfil` is true when Neon has a profile OR the legacy Notion user has a Drive
+  master (this keeps Vero working), and false only when both are definitely empty. If
+  the database or Notion is unreachable it is omitted, because the panel guard lets the
+  user through when the flag is missing. Without a database it is never false, since
+  sign-up cannot work there.
+- A cold database at sign-in answers 503 with a generic body, except for an email in the
+  fallback list, which is let in so the owner is never locked out by a cold start.
+
 ### Encryption at rest, honest match and review fixes
 
 **Added**

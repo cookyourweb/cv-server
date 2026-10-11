@@ -235,16 +235,42 @@ audience equal to `OIDC_AUDIENCIA`, expiry with 60 s of leeway, and `email_verif
 
 | Code | Meaning |
 |---|---|
-| 200 | `{sub, email, nombre}` |
+| 200 | `{sub, email, nombre, tiene_perfil?, origen_master}` |
 | 401 | Token missing or invalid |
 | 403 | Valid token, but the email is not invited |
 | 503 | Missing configuration or the public keys cannot be reached |
 
-**Invited users.** The list is the `INVITADAS` variable (comma-separated emails, empty =
-nobody gets in). It is temporary until there is a user database.
+**Invited users.** There are two modes, chosen by whether `DATABASE_URL` is set:
 
-**CORS.** Only `/yo` and `/health` allow it, with exact origin matching against
-`CORS_ORIGENES`. Empty = no origins.
+| Mode | Who decides | Database |
+|---|---|---|
+| Legacy (no `DATABASE_URL`) | the `INVITADAS` list (comma-separated emails, empty = nobody) | never touched |
+| Database (`DATABASE_URL` set) | the `invitaciones` table | used on sign-in |
+
+In database mode the identity is the Google `(iss, sub)` pair, not the email. On first
+sign-in an unused, unexpired invitation for the verified email creates the user and is
+consumed; a second invited mailbox of the same account is attached to the same user; a
+mailbox that already belongs to another user is never merged. `INVITADAS` is ignored
+unless `INVITADAS_COMO_RESPALDO=1`, a temporary bootstrap fallback that also lets the
+owner in while the database is cold. It will be removed once invitations live only in the
+table. `/health` never touches the database.
+
+Add an invitation with the helper (it needs `DATABASE_URL` in the environment and never
+prints it; `--dias` sets the expiry):
+
+```bash
+.venv/bin/python scripts/invitar.py ana@example.com --dias 14
+```
+
+`/yo` also returns `tiene_perfil` (true if Neon has a profile or the legacy Notion user
+has a Drive master, false only when both are definitely empty, omitted when the database
+or Notion cannot be reached) and `origen_master` (`drive`, `neon` or `null`).
+
+**CORS.** The browser routes of the panel (`/yo`, `/health`, `/perfil`,
+`/consentimientos`, `/cv`, `/extraccion`, `/cuenta`, `/encajes` and
+`/ofertas/<id>/encaje`) allow `GET, POST, PUT, DELETE` with `Authorization` and
+`Content-Type`, with exact origin matching against `CORS_ORIGENES`. Empty = no origins.
+Machine routes never get CORS.
 
 **The Google client ID is public on purpose.** It appears in the panel and protects
 nothing by itself: what protects is the audience check, which rejects tokens issued for
