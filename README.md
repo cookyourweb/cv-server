@@ -229,7 +229,7 @@ Two other known debts:
 |---|---|---|
 | `GET /` | Public | Invitation page (`templates/inicio.html`) |
 | `GET /health` | Public | Status, active models and deployed branch/commit |
-| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is, plus `cuota: {usadas, limite, se_renueva}` for Neon users who are not exempt (units with one decimal, [ADR-010](docs/ADR-010-owner-paid-generation-quota.md)) |
+| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is, plus `cuota: {usadas, limite, se_renueva, tope_agotado}` for Neon users who are not exempt (units with one decimal; `tope_agotado` is true when the global monthly cap leaves no room even for a cover letter, [ADR-010](docs/ADR-010-owner-paid-generation-quota.md)) |
 | `GET /perfil` | Google token | The caller's profile (404 if none) |
 | `PUT /perfil` | Google token | Create or replace the profile (422 on invalid data) |
 | `POST /consentimientos` | Google token | Record a consent `{tipo, version}` (201, idempotent) |

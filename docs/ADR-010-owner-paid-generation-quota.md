@@ -61,8 +61,10 @@ for their generations for now, with limits that make the worst month a known num
    savepoint as the send, so concurrent requests send once and a failed send releases the
    marker for a later retry. A failure logs the exception type only and never blocks a
    generation.
-8. **Panel state.** `GET /yo` returns `cuota: {usadas, limite, se_renueva}` (units with one
-   decimal) for Neon users, and omits it for exempt and legacy users. The panel reads `/yo`
+8. **Panel state.** `GET /yo` returns `cuota: {usadas, limite, se_renueva, tope_agotado}` (units with one
+   decimal; `tope_agotado` is a boolean, true when the month's spend, open reservations
+   included, leaves no room for the cheapest generation, a cover letter's reservation, using
+   the same rule as the `tope` refusal, read without the lock) for Neon users, and omits it for exempt and legacy users. The panel reads `/yo`
    field by field, so an extra field breaks nothing.
 9. **Demand signal.** `POST /interes {tipo: "paquetes" | "academia", organizacion?}` stores one
    row per user and kind (idempotent upsert, nothing but `organizacion`, 120 characters at

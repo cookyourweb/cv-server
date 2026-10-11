@@ -1180,8 +1180,8 @@ def generar_carta():
 
     try:
         respuesta_llm = cuota.generar(
-            email, "carta", prompt, modelo=CARTA_MODEL, max_tokens=1500,
-            llamar=lambda: call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500))
+            email, "carta", prompt, modelo=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA,
+            llamar=lambda: call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA))
         carta         = respuesta_llm.contenido
         logger.info("CONSUMO carta %s", consumo_de(respuesta_llm))
     except cuota.Rechazada as r:

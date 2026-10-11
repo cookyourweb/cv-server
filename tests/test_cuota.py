@@ -394,9 +394,11 @@ def test_the_state_reports_units_with_one_decimal_and_the_reset_date(bd):
     _fila("0.3", usuario_id=uid, tipo="carta")
     _fila("0.7", usuario_id=uid, estado="fallida")
     with base_de_datos.transaccion() as c:
-        assert cuota.estado_de(c, uid, MAYO) == {"usadas": 1.0, "limite": 8.0, "se_renueva": "2032-06-01"}
+        assert cuota.estado_de(c, uid, MAYO) == {"usadas": 1.0, "limite": 8.0, "se_renueva": "2032-06-01",
+                                                    "tope_agotado": False}
     assert cuota.estado_de_usuaria(uid, "x@example.com", MAYO) == {"usadas": 1.0, "limite": 8.0,
-                                                                   "se_renueva": "2032-06-01"}
+                                                                   "se_renueva": "2032-06-01",
+                                                    "tope_agotado": False}
 
 
 def test_the_state_is_omitted_for_exempt_users_and_without_a_user(bd, monkeypatch):

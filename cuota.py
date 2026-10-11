@@ -62,6 +62,7 @@ UNIDADES = {
     "cv": _decimal_del_entorno("CUOTA_UNIDADES_CV", "0.7"),
     "carta": _decimal_del_entorno("CUOTA_UNIDADES_CARTA", "0.3"),
 }
+MAX_TOKENS_CARTA = 1500          # output limit the /generar-carta route asks for
 TOPE_EUR = _decimal_del_entorno("TOPE_GENERACION_EUR", "20")
 UMBRAL_AVISO = _decimal_del_entorno("AVISO_GASTO_UMBRAL", "0.7")
 MARGEN = _decimal_del_entorno("MARGEN_GENERACION", "1.25")
@@ -181,6 +182,18 @@ def unidades_usadas(conexion, usuario_id, ahora=None) -> Decimal:
         {"u": usuario_id, "ini": inicio, "fin": fin}).scalar_one()
 
 
+def _supera_el_tope(gasto: Decimal, estimado: Decimal) -> bool:
+    """The cap rule shared by the refusal and by `tope_agotado`: spend plus the new reservation."""
+    return gasto + estimado > TOPE_EUR
+
+
+def tope_agotado(conexion, ahora=None) -> bool:
+    """True when the month's spend (open reservations included) leaves no room for the cheapest
+    generation: a cover letter with an empty prompt, the smallest reservation any request makes.
+    A read: no lock, so it may lag one concurrent reservation, which only matters at the edge."""
+    return _supera_el_tope(gasto_del_mes(conexion, ahora), estimar_eur(0, max_tokens=MAX_TOKENS_CARTA))
+
+
 def reservar_en(c, usuario_id, tipo: str, largo_prompt: int, *, max_tokens: int, modelo: str, ahora=None):
     """Run the gates inside the caller's transaction; the caller commits.
 
@@ -194,7 +207,7 @@ def reservar_en(c, usuario_id, tipo: str, largo_prompt: int, *, max_tokens: int,
     if unidades_usadas(c, usuario_id, ahora) + unidades > LIMITE_UNIDADES:
         return Rechazo("cuota", renueva)
     estimado = estimar_eur(largo_prompt, max_tokens=max_tokens)
-    if gasto_del_mes(c, ahora) + estimado > TOPE_EUR:
+    if _supera_el_tope(gasto_del_mes(c, ahora), estimado):
         return Rechazo("tope", renueva)
     fila = c.execute(
         text("INSERT INTO gastos_generacion (usuario_id, tipo, modelo, unidades, estado, coste_estimado, creado_en) "
@@ -235,10 +248,12 @@ def _una_decima(valor: Decimal) -> float:
 
 
 def estado_de(conexion, usuario_id, ahora=None) -> dict:
-    """{usadas, limite, se_renueva}: units with one decimal, the reset date as ISO yyyy-mm-dd."""
+    """{usadas, limite, se_renueva, tope_agotado}: units with one decimal, the reset date as ISO
+    yyyy-mm-dd, and whether the global monthly cap leaves no room even for a cover letter."""
     return {"usadas": _una_decima(unidades_usadas(conexion, usuario_id, ahora)),
             "limite": _una_decima(LIMITE_UNIDADES),
-            "se_renueva": renovacion(ahora).isoformat()}
+            "se_renueva": renovacion(ahora).isoformat(),
+            "tope_agotado": tope_agotado(conexion, ahora)}
 
 
 def estado_de_usuaria(usuario_id, email: str, ahora=None) -> Optional[dict]:
