@@ -153,6 +153,7 @@ from llm import (  # noqa: F401
 # Los guardrails viven en `guardrails.py`. Se reexportan aqui para no cambiar la
 # superficie publica del modulo: los endpoints y los tests los siguen viendo en
 # `server`.
+import fuente_master
 import guardrails
 from guardrails import (  # noqa: F401
     DESCRIPCION_MINIMA,
@@ -276,6 +277,13 @@ def _nombre_archivo_cv(nombre: str, puesto: str) -> str:
         partes.append(puesto_slug)
     partes.append(str(datetime.now(timezone.utc).year))
     return "-".join(partes) + ".docx"
+
+
+def _resolver_master(usuario: dict, idioma: str, email: str):
+    """El master del usuario: Neon primero y Drive despues (ver fuente_master.py). Sin
+    DATABASE_URL es exactamente la lectura de Drive de siempre. El lector de Drive se
+    busca aqui, en cada llamada, para que siga siendo sustituible en los tests."""
+    return fuente_master.resolver_master(usuario, idioma, email, leer_drive=leer_cv_master_desde_drive)
 
 
 def _tiene_algun_master(usuario: dict) -> bool:
@@ -835,7 +843,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     idioma = idioma_in if idioma_in in ("en", "es") else idioma_de_oferta(puesto, descripcion, empresa)
     tiene_master_configurado = _tiene_algun_master(usuario)
     try:
-        master     = leer_cv_master_desde_drive(usuario, idioma)
+        master     = _resolver_master(usuario, idioma, email)
         cv_master  = master.texto
     except Exception as e:
         # get_drive_service() -> creds.refresh() puede fallar (token caducado)
@@ -1021,6 +1029,10 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         "cv_master_usado": bool(cv_master),
         "idioma":          idioma,
         "cv_master_url":   master.url,
+        # True = el master es de OTRO idioma que el del CV (solo si viene de la base de
+        # datos). Lo usara la capa de guardrails para no marcar como inventado lo que
+        # una traduccion cambia.
+        "master_traducido": master.master_traducido,
         # Vacio = todas las cifras del CV estan en el Master. Si trae algo, REVISAR
         # a mano antes de enviar: son datos que el modelo no pudo justificar.
         "cifras_no_respaldadas": cifras_sospechosas,
@@ -1090,7 +1102,7 @@ def generar_carta():
     idioma = idioma_in if idioma_in in ("en", "es") else idioma_de_oferta(puesto, descripcion, empresa)
     tiene_master = _tiene_algun_master(usuario)
     try:
-        master    = leer_cv_master_desde_drive(usuario, idioma)
+        master    = _resolver_master(usuario, idioma, email)
         cv_master = master.texto
     except Exception as e:
         # Mismo guard que /generar-cv: get_drive_service() -> creds.refresh() puede
@@ -1182,6 +1194,7 @@ def generar_carta():
         "consumo":         consumo_de(respuesta_llm),
         "email":           email,
         "cv_master_usado": bool(cv_master),
+        "master_traducido": master.master_traducido,
         # `jsonify` es de Flask y no sabe serializar un modelo Pydantic: sin este
         # `model_dump()` la respuesta revienta. La forma que sale por la red no
         # cambia, y eso lo vigila tests/test_aviso_guardrail.py.

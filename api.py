@@ -39,6 +39,8 @@ class GenerarCVResponse(BaseModel):
     cv_master_usado: bool
     idioma: str
     cv_master_url: str
+    # True = el master leido es de otro idioma que el del CV.
+    master_traducido: bool = False
     # GUARDRAILS. Van declarados aqui a proposito: `response_model` FILTRA todo campo
     # que no figure en el modelo, asi que un guardrail sin declarar se calcula, se
     # loguea y NUNCA llega a quien llama. Vacio = nada que revisar.
