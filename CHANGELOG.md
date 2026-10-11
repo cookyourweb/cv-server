@@ -63,6 +63,22 @@ touching the prompt f-string in `server.py`.
 
 ## Unreleased
 
+### Faster GET /yo: legacy Notion lookup no longer queries missing properties
+
+**Fixed**
+
+- `notion.py`: `buscar_usuario_por_email` used to query three alias properties
+  ("Emails alias", "Emails alternativos", "Email alternativo") that do not exist in the
+  Usuarios database. Each call returned HTTP 400, was logged as a WARNING, and added
+  seconds to every `GET /yo` (the panel calls it twice per sign-in).
+  - The alias properties are now read from the database schema (`GET /v1/databases/{id}`),
+    cached in memory for one hour; only properties that exist are queried.
+  - If the schema cannot be read, the candidate names are tried, but a 400 "Could not
+    find property" is remembered for the life of the process and logged once.
+  - The per-email result (found or not found) is cached for 60 s, so the two `/yo` calls
+    of one sign-in hit Notion once. Network and HTTP errors are never cached.
+  - Trade-off: an edit in Notion can take up to 60 s to be seen by this lookup.
+
 ### Extraction gates, spend ledger and kill switch (no model call yet)
 
 **Added**

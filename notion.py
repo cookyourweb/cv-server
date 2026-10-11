@@ -8,6 +8,8 @@ Extraido de `server.py` el 28-ago-2026.
 import logging
 import os
 import re
+import threading
+import time
 
 import requests
 
@@ -57,6 +59,60 @@ def campos_alias_candidatos() -> list:
             vistos.add(n.lower()); out.append(n)
     return out
 
+# --- Caches (per process, in memory) -------------------------------------------
+# The Usuarios schema rarely changes, so it is read once per hour. The per-email
+# result is kept for a minute: enough for the two GET /yo calls of one sign-in to hit
+# Notion once, short enough that an edit in Notion shows up almost immediately.
+TTL_ESQUEMA = 3600.0
+TTL_USUARIO = 60.0
+
+_candado = threading.Lock()
+_esquema_alias: dict = {}      # {"campos": [...], "hasta": monotonic deadline}
+_campos_ausentes: set = set()  # alias properties Notion answered 400 "not found" for
+_usuarios_cache: dict = {}     # email -> (monotonic deadline, profile or None)
+
+
+def reiniciar_caches() -> None:
+    """Empty every cache. Used by tests."""
+    with _candado:
+        _esquema_alias.clear()
+        _campos_ausentes.clear()
+        _usuarios_cache.clear()
+
+
+def _campos_alias_existentes() -> list:
+    """Alias properties to query: the ones the database really has.
+
+    Reads the schema once (GET /v1/databases/{id}) and keeps the properties that
+    look like an alias field. If the schema cannot be read (network, permissions) it
+    falls back to the candidate names minus the ones already known to be missing,
+    and the failure is NOT cached so the next call tries again.
+    """
+    ahora = time.monotonic()
+    with _candado:
+        if _esquema_alias and _esquema_alias["hasta"] > ahora:
+            return list(_esquema_alias["campos"])
+    try:
+        resp = requests.get(
+            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}",
+            headers=notion_headers(), timeout=15,
+        )
+        if resp.status_code != 200:
+            raise ValueError(f"HTTP {resp.status_code}")
+        nombres = list((resp.json().get("properties") or {}).keys())
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("Notion schema read failed, using candidate alias names: %s",
+                       type(e).__name__)
+        with _candado:
+            return [c for c in campos_alias_candidatos() if c not in _campos_ausentes]
+    campos = [n for n in nombres if _es_campo_de_alias(n)]
+    # Configured name first, so the order stays predictable.
+    campos.sort(key=lambda n: n != CAMPO_EMAILS_ALIAS)
+    with _candado:
+        _esquema_alias.update({"campos": campos, "hasta": ahora + TTL_ESQUEMA})
+    return list(campos)
+
+
 _SEPARADORES_EMAIL = re.compile(r"[,;\n\r]+")
 _ES_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -95,8 +151,17 @@ def usuario_tiene_email(props: dict, email: str) -> bool:
     return (email or "").strip().lower() in emails_de_usuario(props)
 
 
-def _consultar_usuario(filtro: dict, email: str, verificar: bool) -> dict | None:
-    """Una consulta a Users. Si verificar=True confirma el email exacto en Python."""
+def _consultar_usuario_ok(filtro: dict, email: str, verificar: bool) -> tuple:
+    """Una consulta a Users. Devuelve (pagina o None, ok).
+
+    `ok` is False when the call failed (network, HTTP error) so the caller can avoid
+    caching a result that should be retried. A 400 "property not found" is a
+    permanent answer: the property is remembered, logged once, and counts as ok.
+    """
+    campo = filtro.get("property")
+    with _candado:
+        if campo in _campos_ausentes:
+            return None, True
     try:
         resp = requests.post(
             f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
@@ -105,17 +170,28 @@ def _consultar_usuario(filtro: dict, email: str, verificar: bool) -> dict | None
             timeout=15,
         )
     except requests.RequestException as e:
-        logger.warning("Notion query fallo (%s): %s", filtro.get("property"), e)
-        return None
+        logger.warning("Notion query fallo (%s): %s", campo, e)
+        return None, False
+    if resp.status_code == 400 and "Could not find property" in (resp.text or ""):
+        with _candado:
+            nuevo = campo not in _campos_ausentes
+            _campos_ausentes.add(campo)
+        if nuevo:
+            logger.warning("Notion property %r does not exist in Usuarios; "
+                           "it will not be queried again in this process", campo)
+        return None, True
     if resp.status_code != 200:
-        # Un 400 aqui suele significar que el campo no existe todavia en la base.
         logger.warning("Notion query error %s (%s): %s",
-                       resp.status_code, filtro.get("property"), resp.text[:200])
-        return None
+                       resp.status_code, campo, resp.text[:200])
+        return None, False
     for page in resp.json().get("results", []):
         if not verificar or usuario_atiende(page.get("properties", {}), email):
-            return page
-    return None
+            return page, True
+    return None, True
+
+
+def _consultar_usuario(filtro: dict, email: str, verificar: bool) -> dict | None:
+    return _consultar_usuario_ok(filtro, email, verificar)[0]
 
 
 def usuario_atiende(props: dict, email: str) -> bool:
@@ -133,26 +209,49 @@ def usuario_atiende(props: dict, email: str) -> bool:
 
 
 def buscar_usuario_por_email(email: str) -> dict | None:
-    """Consulta Notion por email (principal o alias). Devuelve el perfil o None."""
+    """Consulta Notion por email (principal o alias). Devuelve el perfil o None.
+
+    The result (found or not found) is cached for `TTL_USUARIO` seconds. Failed
+    calls are never cached.
+    """
     if not NOTION_DB_USUARIOS:
         return None
+    clave = (email or "").strip().lower()
+    with _candado:
+        hit = _usuarios_cache.get(clave)
+        if hit and hit[0] > time.monotonic():
+            return hit[1]
+    perfil, ok = _buscar_usuario_sin_cache(email)
+    if ok:
+        with _candado:
+            _usuarios_cache[clave] = (time.monotonic() + TTL_USUARIO, perfil)
+    return perfil
+
+
+def _buscar_usuario_sin_cache(email: str) -> tuple:
+    """(perfil o None, ok). ok=False si alguna consulta fallo y no se debe cachear."""
     # verificar=True tambien en la pasada por Email exacto: hay que comprobar que el
     # registro este ACTIVO, cosa que el filtro de Notion no hace.
-    page = _consultar_usuario(
+    page, ok = _consultar_usuario_ok(
         {"property": "Email", "email": {"equals": email}}, email, verificar=True
     )
     if page is None:
         # Segunda pasada por los alias. `contains` es de subcadena, de ahi el
         # verificar=True: se confirma la coincidencia exacta en Python.
-        for campo in campos_alias_candidatos():
-            page = _consultar_usuario(
+        for campo in _campos_alias_existentes():
+            page, ok_alias = _consultar_usuario_ok(
                 {"property": campo, "rich_text": {"contains": email}},
                 email, verificar=True,
             )
+            ok = ok and ok_alias
             if page is not None:
                 break
     if page is None:
-        return None
+        return None, ok
+    return _perfil_de_pagina(page), True
+
+
+def _perfil_de_pagina(page: dict) -> dict:
     p = page.get("properties", {})
     return {
         "notion_id":          page.get("id", ""),
