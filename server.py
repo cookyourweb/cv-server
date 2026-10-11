@@ -1452,8 +1452,11 @@ def _estado_del_perfil(usuario_id, email: str) -> dict:
 def yo():
     """Quien es la usuaria que llama, segun su token de Google."""
     quien = g.identidad
+    # `cuota` only for a Neon user who is not exempt; legacy and exempt users do not get the field.
+    estado_de_cuota = cuota.estado_de_usuaria(g.usuario_id, quien.email)
     return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre,
-                    **_estado_del_perfil(g.usuario_id, quien.email)})
+                    **_estado_del_perfil(g.usuario_id, quien.email),
+                    **({} if estado_de_cuota is None else {"cuota": estado_de_cuota})})
 
 
 # A CV upload is capped at 2 MB (lectura_cv); the request limit is a little higher so an

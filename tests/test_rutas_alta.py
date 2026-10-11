@@ -37,6 +37,7 @@ RUTAS_PROPIAS = {
     ("POST", "/consentimientos"): CONSENTIMIENTO,
     ("DELETE", "/cuenta"): None,
     ("POST", "/extraccion"): None,
+    ("POST", "/interes"): {"tipo": "paquetes"},
     ("POST", "/cv"): None,
     ("GET", "/cv"): None,
     ("DELETE", "/cv/<idioma>"): None,
@@ -239,7 +240,7 @@ def _instantanea(persona):
     with base_de_datos.transaccion() as c:
         repo = RepositorioDeUsuaria(c, _usuario_id(persona))
         return {"perfil": repo.obtener_perfil(), "consentimiento": repo.tiene_consentimiento("enviar_cv_a_ia"),
-                "cvs": repo.listar_cvs(),
+                "cvs": repo.listar_cvs(), "intereses": repo.listar_intereses(),
                 "usuaria": c.execute(text("SELECT count(*) FROM usuarios WHERE id = :u"),
                                      {"u": _usuario_id(persona)}).scalar_one()}
 
@@ -270,13 +271,14 @@ def test_S1_6_reading_a_profile_that_is_not_yours_is_the_same_404_as_one_that_do
 
 # --- DELETE /cuenta: REQ-2.3 to REQ-2.5 -----------------------------------------------------------
 
-TABLAS_PROPIAS = ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos")
+TABLAS_PROPIAS = ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "intereses")
 
 
 def _poblar(cliente, persona):
     """Profile, consent, a stored CV master and one ledger row for `persona`."""
     _llamar(cliente, "PUT", "/perfil", persona, PERFIL)
     _llamar(cliente, "POST", "/consentimientos", persona, CONSENTIMIENTO)
+    assert _llamar(cliente, "POST", "/interes", persona, {"tipo": "academia", "organizacion": "Academia"}).status_code == 201
     with base_de_datos.transaccion() as c:
         uid = _usuario_id(persona)
         c.execute(text("INSERT INTO cv_master (usuario_id, idioma, formato, clave_version, nonce, cifrado, "

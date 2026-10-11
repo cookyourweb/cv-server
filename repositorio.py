@@ -8,7 +8,7 @@ A missing row is reported as None or False; the routes turn that into a 404 iden
 
 The connection (and its transaction) belongs to the caller: nothing here commits.
 """
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import text
@@ -58,6 +58,24 @@ class ConsentimientoEntrada(BaseModel):
         if version != VERSION_DE_CONSENTIMIENTO:
             raise ValueError("unknown consent version")
         return version
+
+
+def _vacio_es_nada(valor):
+    """Blank text counts as "not given" (the panel sends an empty field as a string)."""
+    if isinstance(valor, str):
+        return valor.strip() or None
+    return valor
+
+
+class InteresEntrada(BaseModel):
+    """The "tell me about packs / access through my academy" lead. Nothing else is accepted:
+    no message, no contact data (the account already has the email)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    tipo: Literal["paquetes", "academia"]
+    organizacion: Annotated[Optional[Annotated[str, StringConstraints(max_length=120)]],
+                            BeforeValidator(_vacio_es_nada)] = None
 
 
 _CAMPOS = ("rol", "anios_experiencia", "stack", "idiomas", "ubicacion", "modalidad",
@@ -154,18 +172,40 @@ class RepositorioDeUsuaria:
             {"u": self._usuario_id, "i": idioma})
         return resultado.rowcount == 1
 
+    # --- interest leads --------------------------------------------------------------------
+
+    def registrar_interes(self, tipo: str, organizacion: Optional[str]) -> Optional[str]:
+        """Record (or repeat) her interest of one kind; returns the organisation now stored.
+
+        One row per user and kind. Repeating it is harmless, and a repeat without an
+        organisation keeps the one she gave before.
+        """
+        return self._c.execute(
+            text("INSERT INTO intereses (usuario_id, tipo, organizacion) VALUES (:u, :t, :o) "
+                 "ON CONFLICT (usuario_id, tipo) DO UPDATE SET "
+                 "organizacion = coalesce(EXCLUDED.organizacion, intereses.organizacion) "
+                 "RETURNING organizacion"),
+            {"u": self._usuario_id, "t": tipo, "o": organizacion}).scalar_one()
+
+    def listar_intereses(self) -> list:
+        """Her interests as (tipo, organizacion) pairs, by kind."""
+        filas = self._c.execute(
+            text("SELECT tipo, organizacion FROM intereses WHERE usuario_id = :u ORDER BY tipo"),
+            {"u": self._usuario_id}).all()
+        return [(f.tipo, f.organizacion) for f in filas]
+
     # --- account deletion ----------------------------------------------------------------------
 
     def borrar_cuenta(self) -> bool:
         """Delete the user and everything she owns, in the caller's transaction.
 
         Each owned table is cleared explicitly and the user row last, so the result does
-        not depend only on the FK cascade settings. Ledger rows (`extracciones`) are not
-        deleted: the foreign key sets their `usuario_id` to NULL, which leaves an
-        anonymous aggregate that keeps the spend cap and the one-extraction rule honest
-        (REQ-2.4). Returns False when the user no longer exists.
+        not depend only on the FK cascade settings. Ledger rows (`extracciones` and
+        `gastos_generacion`) are not deleted: the foreign key sets their `usuario_id` to
+        NULL, which leaves an anonymous aggregate that keeps the spend caps (and the
+        one-extraction rule) honest (REQ-2.4). Returns False when the user no longer exists.
         """
-        for tabla in ("consentimientos", "cv_master", "perfil", "usuario_emails"):
+        for tabla in ("consentimientos", "cv_master", "perfil", "intereses", "usuario_emails"):
             self._c.execute(text(f"DELETE FROM {tabla} WHERE usuario_id = :u"), {"u": self._usuario_id})
         return self._eliminar_usuaria()
 

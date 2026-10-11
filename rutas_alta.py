@@ -1,4 +1,4 @@
-"""Owner-scoped routes of the sign-up flow: /perfil, /consentimientos, /cv, /extraccion and /cuenta.
+"""Owner-scoped routes of the sign-up flow: /perfil, /consentimientos, /cv, /extraccion, /interes and /cuenta.
 
 Every route runs behind `@con_usuaria`, which resolves the caller to `g.usuario_id`;
 the data comes only from `RepositorioDeUsuaria(conexion, g.usuario_id)`, so there is no
@@ -23,7 +23,7 @@ import privacidad
 import propuestas
 from cifrado import ErrorDeCifrado, cifrar, descifrar
 from lectura_cv import LIMITE_BYTES, ErrorDeLectura, leer_cv
-from repositorio import ConsentimientoEntrada, PerfilEntrada, RepositorioDeUsuaria
+from repositorio import ConsentimientoEntrada, InteresEntrada, PerfilEntrada, RepositorioDeUsuaria
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +185,17 @@ def crear_blueprint(con_usuaria, requiere_clave_maquina) -> Blueprint:
             return error
         repo.registrar_consentimiento(consentimiento.tipo, consentimiento.version)
         return jsonify({"tipo": consentimiento.tipo, "version": consentimiento.version}), 201
+
+    @alta.post("/interes")
+    @con_usuaria
+    @_con_repositorio
+    def registrar_interes(repo):
+        """Lead of the "tell me if there are packs / access through my academy" button (ADR-010)."""
+        interes, error = _leer(InteresEntrada)
+        if error:
+            return error
+        organizacion = repo.registrar_interes(interes.tipo, interes.organizacion)
+        return jsonify({"tipo": interes.tipo, "organizacion": organizacion}), 201
 
     @alta.errorhandler(413)
     def peticion_demasiado_grande(_error):

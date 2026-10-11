@@ -128,6 +128,9 @@ def _rellenar(c, uid):
               {"u": uid})
     c.execute(text("INSERT INTO extracciones (usuario_id, modelo, estado, estimado_eur) "
                    "VALUES (:u, 'prueba', 'completada', 0.04)"), {"u": uid})
+    RepositorioDeUsuaria(c, uid).registrar_interes("academia", "Academia Prueba")
+    c.execute(text("INSERT INTO gastos_generacion (usuario_id, tipo, modelo, unidades, estado, coste_estimado) "
+                   "VALUES (:u, 'cv', 'prueba', 0.7, 'completada', 0.02)"), {"u": uid})
 
 
 @pytest.mark.bd
@@ -226,10 +229,13 @@ def test_S2_3_deleting_the_account_clears_every_owned_row_and_keeps_the_anonymou
     uid = _usuaria(c)
     _rellenar(c, uid)
     assert RepositorioDeUsuaria(c, uid).borrar_cuenta() is True
-    for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos"):
+    for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "intereses"):
         assert _cuenta(c, tabla, uid) == 0, tabla
     huerfana = c.execute(text("SELECT usuario_id, estimado_eur FROM extracciones WHERE modelo = 'prueba'")).one()
     assert huerfana.usuario_id is None and float(huerfana.estimado_eur) == 0.04
+    # The generation ledger stays too, anonymous: deleting an account cannot reset the monthly cap.
+    gasto = c.execute(text("SELECT usuario_id, coste_estimado FROM gastos_generacion WHERE modelo = 'prueba'")).one()
+    assert gasto.usuario_id is None and float(gasto.coste_estimado) == 0.02
 
 
 @pytest.mark.bd
@@ -246,7 +252,8 @@ def test_S2_5_deleting_one_account_leaves_the_other_untouched(c):
     _rellenar(c, a)
     _rellenar(c, b)
     RepositorioDeUsuaria(c, a).borrar_cuenta()
-    for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "extracciones"):
+    for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "extracciones",
+                  "intereses", "gastos_generacion"):
         assert _cuenta(c, tabla, b) == 1, tabla
 
 
@@ -262,5 +269,6 @@ def test_S2_4_a_failure_midway_leaves_every_row_in_place(c, monkeypatch):
     with pytest.raises(OperationalError):
         with c.begin_nested():
             RepositorioDeUsuaria(c, uid).borrar_cuenta()
-    for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "extracciones"):
+    for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "extracciones",
+                  "intereses", "gastos_generacion"):
         assert _cuenta(c, tabla, uid) == 1, tabla
