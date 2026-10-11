@@ -130,6 +130,13 @@ class RepositorioDeUsuaria:
             {"u": self._usuario_id}).all()
         return [{"idioma": f.idioma, "formato": f.formato, "subido_en": f.subido_en.isoformat()} for f in filas]
 
+    def cv_mas_reciente(self):
+        """The encrypted row of her latest upload (idioma, clave_version, nonce, cifrado, caracteres), or None."""
+        return self._c.execute(
+            text("SELECT idioma, clave_version, nonce, cifrado, caracteres FROM cv_master "
+                 "WHERE usuario_id = :u ORDER BY subido_en DESC, idioma LIMIT 1"),
+            {"u": self._usuario_id}).first()
+
     def borrar_cv(self, idioma: str) -> bool:
         """Delete her master in `idioma`. False when she has none."""
         resultado = self._c.execute(

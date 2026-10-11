@@ -116,6 +116,22 @@ def test_the_cap_and_the_prices_are_configured_constants():
     assert extraccion.MARGEN > 1
 
 
+def test_the_real_cost_prices_the_reported_usage_and_rounds_up(monkeypatch):
+    monkeypatch.setattr(extraccion, "PRECIOS_PRIMARIO_EUR_POR_MTOK", (Decimal("3"), Decimal("15")))
+    monkeypatch.setattr(extraccion, "PRECIOS_RESPALDO_EUR_POR_MTOK", (Decimal("1"), Decimal("2")))
+    assert extraccion.coste_real_eur(1500, 300, primario=True) == Decimal("0.0090")
+    assert extraccion.coste_real_eur(1500, 300, primario=False) == Decimal("0.0021")
+    assert extraccion.coste_real_eur(1, 1, primario=True) == Decimal("0.0001")  # rounded up, never to zero
+
+
+def test_S4_15_the_maximum_prompt_with_the_maximum_output_costs_at_most_5_cents_at_the_primary_price():
+    import propuestas
+    peor = extraccion.estimar_primario_eur(propuestas.largo_del_prompt(10 ** 9))
+    assert peor <= Decimal("0.05")
+    assert extraccion.coste_real_eur(extraccion.MAX_CARACTERES_DE_PROMPT // 3 + 1,
+                                     extraccion.TOKENS_SALIDA_MAX, primario=True) <= Decimal("0.05")
+
+
 # --- (a) kill switch: S4.2 ----------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("valor", ["false", "FALSE", "0", "no", "off"])

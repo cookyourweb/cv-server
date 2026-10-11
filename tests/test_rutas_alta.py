@@ -36,6 +36,7 @@ RUTAS_PROPIAS = {
     ("PUT", "/perfil"): PERFIL,
     ("POST", "/consentimientos"): CONSENTIMIENTO,
     ("DELETE", "/cuenta"): None,
+    ("POST", "/extraccion"): None,
     ("POST", "/cv"): None,
     ("GET", "/cv"): None,
     ("DELETE", "/cv/<idioma>"): None,

@@ -14,8 +14,10 @@ import pytest
 from fabrica_de_cvs import CV_ES, docx_con_parrafos, pdf_con_texto, pdf_escaneado
 from sqlalchemy.exc import OperationalError
 from test_rutas_alta import _llamar, bd, cliente, migrado, par, personas  # noqa: F401
+from test_ruta_extraccion import CadenaFalsa, entorno, preparar  # noqa: F401
 
 import lectura_cv
+import llm
 import privacidad
 from repositorio import RepositorioDeUsuaria
 
@@ -91,6 +93,39 @@ def test_S3_9_a_database_failure_while_storing_never_logs_its_message_or_the_cv(
         r = _subir(cliente, personas["ana"], CON_CENTINELA)
     assert r.status_code == 503
     assert CENTINELA not in privacidad.volcar_registros(caplog.records) + r.get_data(as_text=True)
+
+
+# --- S3.9 on the extraction path: the CV, the model's answer and the provider's error ---------------------------
+
+EXTRACCIONES = {
+    "answer quoting the cv": lambda: CadenaFalsa(salida='[{"campo": "rol", "valor": "Developer", "cita": "%s"}]' % CENTINELA),
+    "provider error with the text": lambda: CadenaFalsa(error=RuntimeError(f"provider echoed {CENTINELA}")),
+    "malformed answer": lambda: CadenaFalsa(salida=f"not json {CENTINELA}"),
+    "bug inside the chain": lambda: CadenaFalsa(error=AttributeError(CENTINELA)),
+}
+
+
+@pytest.mark.parametrize("camino", sorted(EXTRACCIONES))
+def test_S3_9_the_extraction_never_logs_or_returns_the_cv_the_answer_or_the_error_text(
+        cliente, personas, caplog, monkeypatch, entorno, camino):  # noqa: F811
+    preparar(cliente, personas["ana"], texto=f"Developer. {CENTINELA}. Skills: Angular and TypeScript.")
+    monkeypatch.setattr(llm, "call_llm_calidad", EXTRACCIONES[camino]())
+    with caplog.at_level(logging.DEBUG):
+        r = cliente.post("/extraccion", headers=personas["ana"].cabeceras)
+    assert r.status_code == 200
+    assert CENTINELA not in privacidad.volcar_registros(caplog.records)
+    if camino != "answer quoting the cv":  # an accepted citation is what the panel shows for review
+        assert CENTINELA not in r.get_data(as_text=True) + str(r.headers)
+
+
+def test_S3_9_a_missing_keyring_during_the_extraction_logs_the_type_only(cliente, personas, caplog, monkeypatch,
+                                                                         entorno):  # noqa: F811
+    preparar(cliente, personas["ana"], texto=f"Developer. {CENTINELA}. Skills: Angular and TypeScript.")
+    monkeypatch.delenv("CV_CLAVES")
+    with caplog.at_level(logging.DEBUG):
+        r = cliente.post("/extraccion", headers=personas["ana"].cabeceras)
+    volcado = privacidad.volcar_registros(caplog.records)
+    assert r.status_code == 503 and CENTINELA not in volcado and "ErrorDeCifrado" in volcado
 
 
 # --- the canary itself must be able to see a leak -----------------------------------------------------------------

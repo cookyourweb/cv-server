@@ -25,7 +25,7 @@ anything else counts its estimate. A `fallida` row (the whole provider chain fai
 its estimate in the sum but does not use the user's attempt: the partial unique index of
 `extracciones` ignores it, so she can retry later.
 
-This module makes no model call. The estimate covers the worst case of the quality chain
+This module makes no model call (the route does, through `llm.call_llm_calidad`). The estimate covers the worst case of the quality chain
 (primary model and, when it fails, the fallback), see `estimar_eur`.
 """
 import os
@@ -57,8 +57,9 @@ TOPE_EUR = _decimal_del_entorno("TOPE_EXTRACCION_EUR", "5")
 
 # Prices in EUR per million tokens, (input, output). They are list prices in USD used 1:1
 # as EUR, which is already the safe side while the euro is worth more than the dollar,
-# plus MARGEN on top. TODO(C8): verify both against the providers' current price pages and
-# the model ids the quality chain really uses before enabling the switch.
+# plus MARGEN on top. BEFORE ENABLING THE SWITCH in production, verify both against the
+# providers' current price pages and the model ids the quality chain really uses
+# (llm.CV_MODEL and llm.GROQ_MODEL).
 PRECIOS_PRIMARIO_EUR_POR_MTOK = (
     _decimal_del_entorno("PRECIO_PRIMARIO_ENTRADA_EUR_POR_MTOK", "3"),
     _decimal_del_entorno("PRECIO_PRIMARIO_SALIDA_EUR_POR_MTOK", "15"),
@@ -106,6 +107,15 @@ def _a_precision_del_libro(importe: Decimal) -> Decimal:
 def estimar_primario_eur(largo_prompt: int) -> Decimal:
     """Upper bound of ONE call to the primary model (no margin)."""
     return _a_precision_del_libro(_coste_de_una_llamada(PRECIOS_PRIMARIO_EUR_POR_MTOK, largo_prompt))
+
+
+def coste_real_eur(tokens_entrada: int, tokens_salida: int, *, primario: bool) -> Decimal:
+    """Cost of a call from the usage the provider reported, at list prices (no margin).
+
+    `primario` picks the primary or the fallback price list. Rounded up to the ledger's precision.
+    """
+    precios = PRECIOS_PRIMARIO_EUR_POR_MTOK if primario else PRECIOS_RESPALDO_EUR_POR_MTOK
+    return _a_precision_del_libro((tokens_entrada * precios[0] + tokens_salida * precios[1]) / _CIEN_MIL)
 
 
 def estimar_eur(largo_prompt: int) -> Decimal:
@@ -203,8 +213,12 @@ def reservar(usuario_id, largo_prompt: int, *, modelo: str, ahora=None):
         return reservar_en(c, usuario_id, largo_prompt, modelo=modelo, ahora=ahora)
 
 
-def marcar_completada(reserva_id, coste_eur: Decimal, tokens_entrada: int, tokens_salida: int) -> bool:
-    """Close a reservation with the real cost. False if it was not an open reservation."""
+def marcar_completada(reserva_id, coste_eur: Decimal, tokens_entrada: int | None, tokens_salida: int | None) -> bool:
+    """Close a reservation with its cost. False if it was not an open reservation.
+
+    Tokens are None when the provider did not report its usage; the caller then passes the
+    estimate as the cost, so the month's sum never under-counts.
+    """
     with base_de_datos.transaccion() as c:
         return c.execute(
             text("UPDATE extracciones SET estado = 'completada', coste_eur = :c, tokens_entrada = :ti, "

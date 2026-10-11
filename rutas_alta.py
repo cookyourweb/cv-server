@@ -1,4 +1,4 @@
-"""Owner-scoped routes of the sign-up flow: /perfil, /consentimientos, /cv and /cuenta.
+"""Owner-scoped routes of the sign-up flow: /perfil, /consentimientos, /cv, /extraccion and /cuenta.
 
 Every route runs behind `@con_usuaria`, which resolves the caller to `g.usuario_id`;
 the data comes only from `RepositorioDeUsuaria(conexion, g.usuario_id)`, so there is no
@@ -18,8 +18,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 import base_de_datos
 import extraccion
+import llm
 import privacidad
-from cifrado import ErrorDeCifrado, cifrar
+import propuestas
+from cifrado import ErrorDeCifrado, cifrar, descifrar
 from lectura_cv import LIMITE_BYTES, ErrorDeLectura, leer_cv
 from repositorio import ConsentimientoEntrada, PerfilEntrada, RepositorioDeUsuaria
 
@@ -85,6 +87,62 @@ class AjusteDeExtraccion(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     activa: StrictBool
+
+
+def _manual(motivo: str):
+    return jsonify({"estado": "manual", "motivo": motivo}), 200
+
+
+def _coste_de(respuesta, modelo: str, reserva):
+    """(cost, tokens in, tokens out) of an answered call: the reported usage at list prices,
+    or the reservation's estimate when the provider did not report usage (never a made-up zero)."""
+    if respuesta.tokens_entrada is None or respuesta.tokens_salida is None:
+        return reserva.estimado_eur, None, None
+    coste = extraccion.coste_real_eur(respuesta.tokens_entrada, respuesta.tokens_salida,
+                                      primario=respuesta.modelo == modelo)
+    return coste, respuesta.tokens_entrada, respuesta.tokens_salida
+
+
+def _extraer(usuario_id):
+    """The extraction, step by step. No database transaction is open while the model is called."""
+    with base_de_datos.transaccion() as conexion:
+        repo = RepositorioDeUsuaria(conexion, usuario_id)
+        if not repo.tiene_consentimiento("enviar_cv_a_ia"):
+            return _respuesta(_SIN_CONSENTIMIENTO)
+        guardado = repo.cv_mas_reciente()
+    if guardado is None:
+        return _respuesta(_NO_ENCONTRADO)
+
+    # The model id comes from the server's configuration only, never from the request.
+    modelo = llm.CV_MODEL
+    reserva = extraccion.reservar(usuario_id, propuestas.largo_del_prompt(guardado.caracteres), modelo=modelo)
+    if isinstance(reserva, extraccion.Rechazo):
+        return _manual(reserva.motivo)
+
+    # From here the reservation is always closed: completed with its cost, or failed.
+    cerrada = False
+    try:
+        try:
+            texto = descifrar(guardado.clave_version, guardado.nonce, guardado.cifrado, usuario_id, guardado.idioma)
+        except ErrorDeCifrado as error:
+            privacidad.registrar_fallo(logger, "cv decryption unavailable", error)
+            return _respuesta(_NO_DISPONIBLE)
+        try:
+            respuesta = llm.call_llm_calidad(propuestas.construir_prompt(texto), model=modelo,
+                                             max_tokens=extraccion.TOKENS_SALIDA_MAX)
+        except Exception as error:  # the whole chain failed: she keeps her attempt (ADR-004 amendment)
+            privacidad.registrar_fallo(logger, "extraction provider chain failed", error)
+            return _manual("proveedor")
+        coste, tokens_entrada, tokens_salida = _coste_de(respuesta, modelo, reserva)
+        extraccion.marcar_completada(reserva.id, coste, tokens_entrada, tokens_salida)
+        cerrada = True
+        encontradas = propuestas.validar(respuesta.contenido, texto)
+    finally:
+        if not cerrada:
+            extraccion.marcar_fallida(reserva.id)
+    if not encontradas:
+        return _manual("indisponible")
+    return jsonify({"estado": "propuesta", "propuestas": encontradas}), 200
 
 
 def crear_blueprint(con_usuaria, requiere_clave_maquina) -> Blueprint:
@@ -175,6 +233,21 @@ def crear_blueprint(con_usuaria, requiere_clave_maquina) -> Blueprint:
             privacidad.registrar_fallo(logger, "database error setting the extraction switch", error)
             return _respuesta(_NO_DISPONIBLE)
         return jsonify({"activa": ajuste.activa}), 200
+
+    @alta.post("/extraccion")
+    @con_usuaria
+    def extraer_perfil():
+        """Owner-paid extraction of profile proposals from her stored CV (spec section 4).
+
+        The body is ignored on purpose: nothing in the request chooses the model, the CV or the limits.
+        """
+        if g.usuario_id is None or not base_de_datos.configurada():
+            return _respuesta(_NO_DISPONIBLE)
+        try:
+            return _extraer(g.usuario_id)
+        except (SQLAlchemyError, base_de_datos.ErrorDeBaseDeDatos) as error:
+            privacidad.registrar_fallo(logger, "database error in the extraction", error)
+            return _respuesta(_NO_DISPONIBLE)
 
     @alta.delete("/cuenta")
     @con_usuaria
