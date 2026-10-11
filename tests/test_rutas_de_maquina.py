@@ -27,6 +27,8 @@ PUBLICAS.add("/yo")
 # Rutas de la usuaria (rutas_alta.py): token de Google, @con_usuaria. Que ninguna nace
 # abierta lo comprueba tests/test_rutas_alta.py (sin token responden 401).
 PUBLICAS.update({"/perfil", "/consentimientos", "/cuenta", "/cv", "/cv/<idioma>", "/extraccion"})
+# Match routes (rutas_encaje.py): token de Google; tests/test_rutas_encaje.py comprueba el 401.
+PUBLICAS.update({"/ofertas/<oferta_id>/encaje", "/encajes"})
 DATOS = {"email": "a@b.com", "empresa": "ACME", "puesto": "Frontend", "descripcion": "React"}
 
 

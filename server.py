@@ -1430,6 +1430,10 @@ import rutas_alta  # noqa: E402
 
 app.register_blueprint(rutas_alta.crear_blueprint(con_usuaria, requiere_clave_maquina))
 
+import rutas_encaje  # noqa: E402
+
+app.register_blueprint(rutas_encaje.crear_blueprint(con_usuaria))
+
 
 # ══════════════════════════════════════════════
 if __name__ == "__main__":

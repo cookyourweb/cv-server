@@ -10,6 +10,7 @@ import os
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -449,3 +450,114 @@ def crear_oferta_en_notion(oferta: dict, idioma: str = "", usuario_notion_id: st
                          headers=notion_headers(), json=payload, timeout=15)
     resp.raise_for_status()
     return resp.json()
+
+
+# ══════════════════════════════════════════════
+# OFERTAS DE UNA USUARIA (C13, ADR-009)
+# ══════════════════════════════════════════════
+# An offer is hers only if its "Usuario" relation holds her Notion page id. Everything
+# else (no owner, another owner, another database, archived, missing, malformed id) is
+# the same answer, None, so the route can answer one identical 404. A Notion failure is
+# NOT "not found": it raises ErrorDeNotion and the route fails closed.
+
+MAX_HILOS_NOTION = 3   # Notion averages ~3 requests per second per integration
+_ESPERA_MAXIMA_429 = 2.0
+
+
+class ErrorDeNotion(Exception):
+    """Notion is unconfigured, unreachable or answered something unexpected.
+
+    Carries no detail on purpose: it must never reach a response or a log.
+    """
+
+
+def normalizar_id(valor) -> str | None:
+    """A Notion id as 32 lowercase hex characters, or None if it is not one."""
+    if not isinstance(valor, str):
+        return None
+    plano = valor.strip().replace("-", "").lower()
+    return plano if re.fullmatch(r"[0-9a-f]{32}", plano) else None
+
+
+def _texto_rico(prop: dict) -> str:
+    return "".join(t.get("plain_text", "") for t in (prop or {}).get("rich_text") or [])
+
+
+def _exigir_configuracion() -> str:
+    """The offers database id (plain), or ErrorDeNotion when Notion is not configured."""
+    base = normalizar_id(NOTION_DB_OFERTAS)
+    if not NOTION_TOKEN or base is None:
+        raise ErrorDeNotion()
+    return base
+
+
+def _pedir_pagina(pagina_id: str):
+    """GET one page. One retry on 429 (the only error that is worth waiting for)."""
+    for intento in range(2):
+        try:
+            resp = requests.get(f"https://api.notion.com/v1/pages/{pagina_id}",
+                                headers=notion_headers(), timeout=10)
+        except requests.RequestException:
+            raise ErrorDeNotion() from None
+        if resp.status_code != 429 or intento == 1:
+            return resp
+        try:
+            espera = float(resp.headers.get("Retry-After", 1))
+        except (TypeError, ValueError):
+            espera = 1.0
+        time.sleep(min(max(espera, 0.0), _ESPERA_MAXIMA_429))
+
+
+def leer_oferta_de_usuaria(oferta_id, usuario_notion_id) -> dict | None:
+    """The offer `oferta_id` if it belongs to `usuario_notion_id`, else None.
+
+    Raises ErrorDeNotion when Notion is not configured or fails.
+    """
+    base = _exigir_configuracion()
+    pagina_id, dueno = normalizar_id(oferta_id), normalizar_id(usuario_notion_id)
+    if pagina_id is None or dueno is None:
+        return None
+    resp = _pedir_pagina(pagina_id)
+    if resp.status_code in (400, 403, 404):
+        return None
+    if resp.status_code != 200:
+        raise ErrorDeNotion()
+    try:
+        pagina = resp.json()
+    except ValueError:
+        raise ErrorDeNotion() from None
+    if not isinstance(pagina, dict):
+        raise ErrorDeNotion()
+    if pagina.get("archived") or pagina.get("in_trash"):
+        return None
+    # The page must live in the offers database: a page elsewhere may carry a "Usuario"
+    # property too, and the id in the URL is chosen by the caller.
+    if normalizar_id((pagina.get("parent") or {}).get("database_id")) != base:
+        return None
+    props = pagina.get("properties") or {}
+    duenos = {normalizar_id(r.get("id")) for r in (props.get("Usuario") or {}).get("relation") or []
+              if isinstance(r, dict)}
+    if dueno not in duenos:
+        return None
+    return {
+        "puesto":      _texto_rico(props.get("Puesto")),
+        "descripcion": _texto_rico(props.get("Descripción")),
+        "tags":        [t.get("name", "") for t in (props.get("Tags") or {}).get("multi_select") or []],
+        "idioma":      ((props.get("Idioma") or {}).get("select") or {}).get("name", ""),
+    }
+
+
+def leer_ofertas_de_usuaria(ids, usuario_notion_id) -> dict:
+    """{plain id: offer} for the ids that are hers; the rest are silently absent.
+
+    Notion cannot filter a database query by page id, and a relation query would have to
+    page through ALL her offers, so each distinct id is fetched on its own, `MAX_HILOS_NOTION`
+    at a time (the route caps the list at 50). Any Notion failure fails the whole batch.
+    """
+    _exigir_configuracion()
+    unicos = list(dict.fromkeys(i for i in (normalizar_id(x) for x in ids) if i))
+    if not unicos:
+        return {}
+    with ThreadPoolExecutor(max_workers=MAX_HILOS_NOTION) as pool:
+        ofertas = list(pool.map(lambda i: leer_oferta_de_usuaria(i, usuario_notion_id), unicos))
+    return {i: o for i, o in zip(unicos, ofertas) if o is not None}
