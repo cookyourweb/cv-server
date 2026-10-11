@@ -1410,7 +1410,11 @@ def yo():
                     **_estado_del_perfil(g.usuario_id, quien.email)})
 
 
-# Rutas del alta (perfil, consentimientos, cuenta): viven en rutas_alta.py.
+# A CV upload is capped at 2 MB (lectura_cv); the request limit is a little higher so an
+# oversize body fails early, before it is read, and a normal multipart envelope still fits.
+app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024
+
+# Rutas del alta (perfil, consentimientos, cv, cuenta): viven en rutas_alta.py.
 import rutas_alta  # noqa: E402
 
 app.register_blueprint(rutas_alta.crear_blueprint(con_usuaria))

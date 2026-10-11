@@ -36,6 +36,9 @@ RUTAS_PROPIAS = {
     ("PUT", "/perfil"): PERFIL,
     ("POST", "/consentimientos"): CONSENTIMIENTO,
     ("DELETE", "/cuenta"): None,
+    ("POST", "/cv"): None,
+    ("GET", "/cv"): None,
+    ("DELETE", "/cv/<idioma>"): None,
 }
 CORREOS = [f"{n}@ejemplo.es" for n in ("ana", "bea", "carla")]
 
@@ -101,7 +104,7 @@ def personas(bd, par):
 
 
 def _llamar(cliente, metodo, ruta, persona, cuerpo=None):
-    return cliente.open(ruta, method=metodo, headers=persona.cabeceras, json=cuerpo)
+    return cliente.open(ruta.replace("<idioma>", "es"), method=metodo, headers=persona.cabeceras, json=cuerpo)
 
 
 def _usuario_id(persona):
@@ -227,6 +230,7 @@ def _instantanea(persona):
     with base_de_datos.transaccion() as c:
         repo = RepositorioDeUsuaria(c, _usuario_id(persona))
         return {"perfil": repo.obtener_perfil(), "consentimiento": repo.tiene_consentimiento("enviar_cv_a_ia"),
+                "cvs": repo.listar_cvs(),
                 "usuaria": c.execute(text("SELECT count(*) FROM usuarios WHERE id = :u"),
                                      {"u": _usuario_id(persona)}).scalar_one()}
 
@@ -235,6 +239,10 @@ def _instantanea(persona):
 def test_S1_6_one_user_calling_an_owner_route_never_changes_another_users_data(cliente, personas, metodo, ruta):
     _llamar(cliente, "PUT", "/perfil", personas["bea"], PERFIL)
     _llamar(cliente, "POST", "/consentimientos", personas["bea"], CONSENTIMIENTO)
+    with base_de_datos.transaccion() as c:  # Bea owns a stored master that nobody else may touch
+        c.execute(text("INSERT INTO cv_master (usuario_id, idioma, formato, clave_version, nonce, cifrado, "
+                       "caracteres) VALUES (:u, 'es', 'pdf', 1, decode(repeat('00', 12), 'hex'), '\\x01', 10)"),
+                  {"u": _usuario_id(personas["bea"])})
     antes = _instantanea(personas["bea"])
     _llamar(cliente, metodo, ruta, personas["ana"], RUTAS_PROPIAS[(metodo, ruta)])
     assert _instantanea(personas["bea"]) == antes

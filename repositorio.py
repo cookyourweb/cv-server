@@ -108,6 +108,35 @@ class RepositorioDeUsuaria:
                  "AND revocado_en IS NULL"),
             {"u": self._usuario_id, "t": tipo, "v": VERSION_DE_CONSENTIMIENTO}).first() is not None
 
+    # --- CV master (stored encrypted; the content never leaves this class in plaintext) ----------
+
+    def guardar_cv(self, idioma: str, formato: str, clave_version: int, nonce: bytes, cifrado: bytes,
+                   caracteres: int) -> None:
+        """Create or replace the master of one language."""
+        self._c.execute(text("""
+            INSERT INTO cv_master (usuario_id, idioma, formato, clave_version, nonce, cifrado, caracteres)
+            VALUES (:u, :idioma, :formato, :clave_version, :nonce, :cifrado, :caracteres)
+            ON CONFLICT (usuario_id, idioma) DO UPDATE SET
+                formato = EXCLUDED.formato, clave_version = EXCLUDED.clave_version,
+                nonce = EXCLUDED.nonce, cifrado = EXCLUDED.cifrado,
+                caracteres = EXCLUDED.caracteres, subido_en = now()"""),
+            {"u": self._usuario_id, "idioma": idioma, "formato": formato, "clave_version": clave_version,
+             "nonce": nonce, "cifrado": cifrado, "caracteres": caracteres})
+
+    def listar_cvs(self) -> list:
+        """Metadata of her masters. Never the content, not even encrypted."""
+        filas = self._c.execute(
+            text("SELECT idioma, formato, subido_en FROM cv_master WHERE usuario_id = :u ORDER BY idioma"),
+            {"u": self._usuario_id}).all()
+        return [{"idioma": f.idioma, "formato": f.formato, "subido_en": f.subido_en.isoformat()} for f in filas]
+
+    def borrar_cv(self, idioma: str) -> bool:
+        """Delete her master in `idioma`. False when she has none."""
+        resultado = self._c.execute(
+            text("DELETE FROM cv_master WHERE usuario_id = :u AND idioma = :i"),
+            {"u": self._usuario_id, "i": idioma})
+        return resultado.rowcount == 1
+
     # --- account deletion ----------------------------------------------------------------------
 
     def borrar_cuenta(self) -> bool:

@@ -1,4 +1,4 @@
-"""Owner-scoped routes of the sign-up flow: /perfil, /consentimientos and /cuenta.
+"""Owner-scoped routes of the sign-up flow: /perfil, /consentimientos, /cv and /cuenta.
 
 Every route runs behind `@con_usuaria`, which resolves the caller to `g.usuario_id`;
 the data comes only from `RepositorioDeUsuaria(conexion, g.usuario_id)`, so there is no
@@ -17,12 +17,32 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 import base_de_datos
+import privacidad
+from cifrado import ErrorDeCifrado, cifrar
+from lectura_cv import LIMITE_BYTES, ErrorDeLectura, leer_cv
 from repositorio import ConsentimientoEntrada, PerfilEntrada, RepositorioDeUsuaria
 
 logger = logging.getLogger(__name__)
 
 _NO_ENCONTRADO = ({"ok": False, "error": "no encontrado"}, 404)
 _NO_DISPONIBLE = ({"ok": False, "error": "servicio no disponible"}, 503)
+_SIN_CONSENTIMIENTO = ({"ok": False, "error": "consentimiento necesario"}, 403)
+
+# How a CV that cannot be used is reported: (status, fixed message). The panel maps the
+# status (413 size, 415 type, 422 unreadable); `motivo` lets it tell a scan from a corrupt file.
+_RECHAZOS_DE_CV = {
+    "tamano": (413, "archivo demasiado grande"),
+    "tipo": (415, "tipo de archivo no admitido"),
+    "ilegible": (422, "no se pudo leer el archivo"),
+    "largo": (422, "el archivo es demasiado largo"),
+    "sin_texto": (422, "el archivo no tiene texto"),
+}
+IDIOMAS = ("es", "en")
+
+
+def _rechazo_de_cv(motivo: str):
+    estado, mensaje = _RECHAZOS_DE_CV[motivo]
+    return _respuesta(({"ok": False, "error": mensaje, "motivo": motivo}, estado))
 
 
 def _respuesta(cuerpo_y_estado):
@@ -88,6 +108,46 @@ def crear_blueprint(con_usuaria) -> Blueprint:
             return error
         repo.registrar_consentimiento(consentimiento.tipo, consentimiento.version)
         return jsonify({"tipo": consentimiento.tipo, "version": consentimiento.version}), 201
+
+    @alta.errorhandler(413)
+    def peticion_demasiado_grande(_error):
+        # Flask refuses the body (MAX_CONTENT_LENGTH) before the upload is read.
+        return _rechazo_de_cv("tamano")
+
+    @alta.post("/cv")
+    @con_usuaria
+    @_con_repositorio
+    def subir_cv(repo):
+        # Consent first: a CV of someone who has not agreed to store it is not even parsed.
+        if not repo.tiene_consentimiento("almacenar_cv"):
+            return _respuesta(_SIN_CONSENTIMIENTO)
+        archivo = request.files.get("archivo")
+        if archivo is None:
+            return _respuesta(({"ok": False, "error": "falta el archivo"}, 422))
+        try:
+            leido = leer_cv(archivo.read(LIMITE_BYTES + 1))
+        except ErrorDeLectura as error:
+            return _rechazo_de_cv(error.codigo)
+        try:
+            version, nonce, protegido = cifrar(leido.texto, g.usuario_id, leido.idioma)
+        except ErrorDeCifrado as error:
+            privacidad.registrar_fallo(logger, "cv encryption unavailable", error)
+            return _respuesta(_NO_DISPONIBLE)
+        # Only the encrypted text is stored; the uploaded file itself is dropped here (REQ-3.4).
+        repo.guardar_cv(leido.idioma, leido.formato, version, nonce, protegido, leido.caracteres)
+        return jsonify({"idioma": leido.idioma, "formato": leido.formato, "caracteres": leido.caracteres}), 201
+
+    @alta.get("/cv")
+    @con_usuaria
+    @_con_repositorio
+    def listar_cvs(repo):
+        return jsonify(repo.listar_cvs()), 200
+
+    @alta.delete("/cv/<idioma>")
+    @con_usuaria
+    @_con_repositorio
+    def borrar_cv(repo, idioma):
+        return ("", 204) if idioma in IDIOMAS and repo.borrar_cv(idioma) else _respuesta(_NO_ENCONTRADO)
 
     @alta.delete("/cuenta")
     @con_usuaria
