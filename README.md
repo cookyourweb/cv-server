@@ -232,7 +232,7 @@ Two other known debts:
 |---|---|---|
 | `GET /` | Public | Invitation page (`templates/inicio.html`) |
 | `GET /health` | Public | Status, active models and deployed branch/commit |
-| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is, plus `cuota: {usadas, limite, se_renueva, tope_agotado}` for Neon users who are not exempt (units with one decimal; `tope_agotado` is true when the global monthly cap leaves no room even for a cover letter, [ADR-010](docs/ADR-010-owner-paid-generation-quota.md)) |
+| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is, plus `consentimientos: {almacenar_cv: bool, enviar_cv_a_ia: bool}` for a user in the database (true only for the CURRENT consent version, not revoked; omitted without a database or if it fails, so the panel must not treat "absent" as "false"), plus `cuota: {usadas, limite, se_renueva, tope_agotado}` for Neon users who are not exempt (units with one decimal; `tope_agotado` is true when the global monthly cap leaves no room even for a cover letter, [ADR-010](docs/ADR-010-owner-paid-generation-quota.md)) |
 | `GET /perfil` | Google token | The caller's profile (404 if none) |
 | `PUT /perfil` | Google token | Create or replace the profile (422 on invalid data) |
 | `POST /consentimientos` | Google token | Record a consent `{tipo, version}` (201, idempotent) |
@@ -333,7 +333,7 @@ no path or body field names another user, and the data layer
 (`RepositorioDeUsuaria(conexion, usuario_id)`) filters every statement by that id, so
 another user's data is indistinguishable from data that does not exist (404). Fields are
 snake_case (`anios_experiencia`, `salario_min`, `salario_moneda`); the consent types are
-`almacenar_cv` and `enviar_cv_a_ia` with version `v1`. Deleting the account removes the
+`almacenar_cv` and `enviar_cv_a_ia` with version `v2` (`repositorio.VERSION_DE_CONSENTIMIENTO`; a `v1` consent no longer authorises anything and `POST /consentimientos` answers 422 to it). Deleting the account removes the
 user, mailboxes, profile, CV master, consents and interest leads; the spend ledgers keep its rows with no
 user attached, so the monthly cap cannot be bypassed. Without `DATABASE_URL` these routes
 answer a generic `503`, and `/yo` and `/health` are unaffected.

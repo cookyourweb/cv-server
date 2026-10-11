@@ -18,7 +18,7 @@ from sqlalchemy.exc import OperationalError
 import base_de_datos
 import server as srv
 from autenticacion import ClavesPublicas, ConfiguracionOIDC
-from repositorio import RepositorioDeUsuaria
+from repositorio import VERSION_DE_CONSENTIMIENTO, RepositorioDeUsuaria
 from test_autenticacion import AUDIENCIA, EMISOR, Descargador, Reloj, _firmar, _jwks, _payload
 from test_migracion_0001 import _alembic
 
@@ -27,7 +27,7 @@ PERFIL = {
     "idiomas": ["es", "en"], "ubicacion": "Madrid", "modalidad": ["remoto", "hibrido"],
     "salario_min": 45000, "salario_moneda": "EUR",
 }
-CONSENTIMIENTO = {"tipo": "enviar_cv_a_ia", "version": "v1"}
+CONSENTIMIENTO = {"tipo": "enviar_cv_a_ia", "version": VERSION_DE_CONSENTIMIENTO}
 
 # Every route behind @con_usuaria that owns data. A new route in the blueprint must be
 # added here, which puts it under the cross-user (S1.6) and the no-token tests.
@@ -200,11 +200,11 @@ def test_validation_errors_never_echo_the_submitted_values(cliente, personas):
 def test_a_consent_is_created_with_201_and_stored_with_its_version(cliente, personas):
     r = _llamar(cliente, "POST", "/consentimientos", personas["ana"], CONSENTIMIENTO)
     assert r.status_code == 201
-    assert r.get_json()["tipo"] == "enviar_cv_a_ia" and r.get_json()["version"] == "v1"
+    assert r.get_json()["tipo"] == "enviar_cv_a_ia" and r.get_json()["version"] == VERSION_DE_CONSENTIMIENTO
     with base_de_datos.transaccion() as c:
         fila = c.execute(text("SELECT tipo, version, otorgado_en FROM consentimientos WHERE usuario_id = :u"),
                          {"u": _usuario_id(personas["ana"])}).one()
-    assert (fila.tipo, fila.version) == ("enviar_cv_a_ia", "v1") and fila.otorgado_en is not None
+    assert (fila.tipo, fila.version) == ("enviar_cv_a_ia", VERSION_DE_CONSENTIMIENTO) and fila.otorgado_en is not None
 
 
 def test_repeating_a_consent_is_idempotent(cliente, personas):
@@ -214,12 +214,12 @@ def test_repeating_a_consent_is_idempotent(cliente, personas):
 
 
 @pytest.mark.parametrize("cuerpo", [
-    {"tipo": "otro", "version": "v1"},
+    {"tipo": "otro", "version": VERSION_DE_CONSENTIMIENTO},
     {"tipo": "enviar_cv_a_ia", "version": "v0"},       # S2.2: an old version is not recorded as valid
     {"tipo": "enviar_cv_a_ia"},
-    {"version": "v1"},
-    {"tipo": "enviar_cv_a_ia", "version": "v1", "extra": True},
-    {"tipo": 7, "version": "v1"},
+    {"version": VERSION_DE_CONSENTIMIENTO},
+    {"tipo": "enviar_cv_a_ia", "version": VERSION_DE_CONSENTIMIENTO, "extra": True},
+    {"tipo": 7, "version": VERSION_DE_CONSENTIMIENTO},
     [], None,
 ])
 def test_an_invalid_consent_is_a_422_and_stores_nothing(cliente, personas, cuerpo):

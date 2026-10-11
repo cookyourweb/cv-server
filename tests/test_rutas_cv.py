@@ -17,8 +17,9 @@ import base_de_datos
 import cifrado
 import lectura_cv
 import server as srv
+from repositorio import VERSION_DE_CONSENTIMIENTO
 
-CONSENTIMIENTO_CV = {"tipo": "almacenar_cv", "version": "v1"}
+CONSENTIMIENTO_CV = {"tipo": "almacenar_cv", "version": VERSION_DE_CONSENTIMIENTO}
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +107,7 @@ def test_without_the_stored_consent_the_upload_is_a_403_and_nothing_is_read_or_s
 
 
 def test_the_consent_to_send_the_cv_to_an_ai_does_not_authorise_storing_it(cliente, personas):
-    _consentir(cliente, personas["ana"], {"tipo": "enviar_cv_a_ia", "version": "v1"})
+    _consentir(cliente, personas["ana"], {"tipo": "enviar_cv_a_ia", "version": VERSION_DE_CONSENTIMIENTO})
     assert _subir(cliente, personas["ana"], pdf_con_texto(CV_ES)).status_code == 403
 
 

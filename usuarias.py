@@ -121,6 +121,27 @@ def tiene_master(usuario_id, conexion=None) -> bool:
     return _existe("SELECT 1 FROM cv_master WHERE usuario_id = :u", usuario_id, conexion)
 
 
+def consentimientos_vigentes(usuario_id, conexion=None) -> dict:
+    """{tipo: bool} for each consent type: True only for the CURRENT version, not revoked.
+
+    It is what `/yo` publishes so the panel can send back to the consent step a user who only
+    has an older version (or none), even when she already has a profile.
+    """
+    from repositorio import TIPOS_DE_CONSENTIMIENTO, RepositorioDeUsuaria
+
+    def leer(c):
+        repo = RepositorioDeUsuaria(c, usuario_id)
+        return {tipo: repo.tiene_consentimiento(tipo) for tipo in TIPOS_DE_CONSENTIMIENTO}
+    try:
+        if conexion is not None:
+            return leer(conexion)
+        with base_de_datos.transaccion() as nueva:
+            return leer(nueva)
+    except (SQLAlchemyError, base_de_datos.ErrorDeBaseDeDatos) as error:
+        logger.error("database error reading consents: %s", type(error).__name__)
+        raise BaseDeDatosNoDisponible() from None
+
+
 def crear_con_usuaria(autenticar):
     """Build the `@con_usuaria` decorator around a request authenticator.
 
@@ -145,5 +166,5 @@ def crear_con_usuaria(autenticar):
     return con_usuaria
 
 
-__all__ = ["BaseDeDatosNoDisponible", "crear_con_usuaria", "resolver_o_crear",
+__all__ = ["BaseDeDatosNoDisponible", "consentimientos_vigentes", "crear_con_usuaria", "resolver_o_crear",
            "tiene_master", "tiene_perfil", "uuid"]

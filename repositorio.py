@@ -16,7 +16,9 @@ from sqlalchemy import text
 # The consent text names every provider the CV may reach (Anthropic and Groq). When it
 # changes in substance, bump the version: an older one stops authorising (REQ-2.2).
 # The panel keeps the same constant in src/app/alta/dominio.ts.
-VERSION_DE_CONSENTIMIENTO = "v1"
+# v2 (Oct 2026): the text now covers the generation of every CV and letter (not only the one-off
+# extraction), says how to delete the CV or withdraw the consent, and asks for being of age.
+VERSION_DE_CONSENTIMIENTO = "v2"
 TIPOS_DE_CONSENTIMIENTO = ("almacenar_cv", "enviar_cv_a_ia")
 
 _Texto = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]

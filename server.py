@@ -1451,6 +1451,18 @@ def _estado_del_perfil(usuario_id, email: str) -> dict:
     return estado
 
 
+def _consentimientos_de(usuario_id) -> dict:
+    """`consentimientos` de /yo: que consentimientos VIGENTES (version actual, sin revocar) tiene.
+    Se omite si no hay usuaria en la base de datos o si esta no responde: lo desconocido no se
+    afirma, y el panel no la devuelve al paso de consentimiento por un fallo nuestro."""
+    if usuario_id is None:
+        return {}
+    try:
+        return {"consentimientos": usuarias.consentimientos_vigentes(usuario_id)}
+    except usuarias.BaseDeDatosNoDisponible:
+        return {}
+
+
 @app.route("/yo", methods=["GET"])
 @con_usuaria
 def yo():
@@ -1460,6 +1472,7 @@ def yo():
     estado_de_cuota = cuota.estado_de_usuaria(g.usuario_id, quien.email)
     return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre,
                     **_estado_del_perfil(g.usuario_id, quien.email),
+                    **_consentimientos_de(g.usuario_id),
                     **({} if estado_de_cuota is None else {"cuota": estado_de_cuota})})
 
 

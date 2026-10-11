@@ -19,7 +19,7 @@ from test_ruta_extraccion import CadenaFalsa, entorno, preparar  # noqa: F401
 import lectura_cv
 import llm
 import privacidad
-from repositorio import RepositorioDeUsuaria
+from repositorio import VERSION_DE_CONSENTIMIENTO, RepositorioDeUsuaria
 
 CENTINELA = "CENTINELA-CV-PRIVADO-90210"
 NOMBRE = f"{CENTINELA}.pdf"
@@ -37,7 +37,7 @@ def _subir(cliente, persona, datos):
 
 
 def _conceder(cliente, persona):
-    _llamar(cliente, "POST", "/consentimientos", persona, {"tipo": "almacenar_cv", "version": "v1"})
+    _llamar(cliente, "POST", "/consentimientos", persona, {"tipo": "almacenar_cv", "version": VERSION_DE_CONSENTIMIENTO})
 
 
 CON_CENTINELA = pdf_con_texto(CV_ES + [CENTINELA])

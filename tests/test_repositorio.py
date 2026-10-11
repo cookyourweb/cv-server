@@ -81,7 +81,7 @@ def test_no_method_accepts_another_users_id():
 
 
 def test_the_consent_version_matches_the_panel_constant():
-    assert VERSION_DE_CONSENTIMIENTO == "v1"
+    assert VERSION_DE_CONSENTIMIENTO == "v2"
     assert set(TIPOS_DE_CONSENTIMIENTO) == {"almacenar_cv", "enviar_cv_a_ia"}
 
 
@@ -169,10 +169,10 @@ def test_one_user_never_sees_or_changes_another_users_profile(c):
 @pytest.mark.bd
 def test_consent_is_stored_with_its_version_and_a_timestamp(c):
     uid = _usuaria(c)
-    RepositorioDeUsuaria(c, uid).registrar_consentimiento("enviar_cv_a_ia", "v1")
+    RepositorioDeUsuaria(c, uid).registrar_consentimiento("enviar_cv_a_ia", VERSION_DE_CONSENTIMIENTO)
     fila = c.execute(text("SELECT tipo, version, otorgado_en, revocado_en FROM consentimientos "
                           "WHERE usuario_id = :u"), {"u": uid}).one()
-    assert (fila.tipo, fila.version) == ("enviar_cv_a_ia", "v1")
+    assert (fila.tipo, fila.version) == ("enviar_cv_a_ia", VERSION_DE_CONSENTIMIENTO)
     assert fila.otorgado_en is not None and fila.revocado_en is None
 
 
@@ -180,10 +180,10 @@ def test_consent_is_stored_with_its_version_and_a_timestamp(c):
 def test_recording_the_same_consent_twice_keeps_one_row(c):
     uid = _usuaria(c)
     repo = RepositorioDeUsuaria(c, uid)
-    repo.registrar_consentimiento("almacenar_cv", "v1")
+    repo.registrar_consentimiento("almacenar_cv", VERSION_DE_CONSENTIMIENTO)
     primera = c.execute(text("SELECT otorgado_en FROM consentimientos WHERE usuario_id = :u"),
                         {"u": uid}).scalar_one()
-    repo.registrar_consentimiento("almacenar_cv", "v1")
+    repo.registrar_consentimiento("almacenar_cv", VERSION_DE_CONSENTIMIENTO)
     assert _cuenta(c, "consentimientos", uid) == 1
     assert c.execute(text("SELECT otorgado_en FROM consentimientos WHERE usuario_id = :u"),
                      {"u": uid}).scalar_one() == primera

@@ -18,6 +18,7 @@ import llm
 import propuestas
 from cifrado import cifrar
 from llm import RespuestaLLM
+from repositorio import VERSION_DE_CONSENTIMIENTO
 
 pytestmark = pytest.mark.bd
 
@@ -238,7 +239,7 @@ def test_without_the_ai_consent_it_is_a_403_and_nothing_is_called_or_reserved(cl
 
 def test_a_consent_to_store_the_cv_is_not_a_consent_to_send_it_to_an_ai(cliente, personas, cadena):
     preparar(cliente, personas["ana"], consentimiento=False)
-    _llamar(cliente, "POST", "/consentimientos", personas["ana"], {"tipo": "almacenar_cv", "version": "v1"})
+    _llamar(cliente, "POST", "/consentimientos", personas["ana"], {"tipo": "almacenar_cv", "version": VERSION_DE_CONSENTIMIENTO})
     assert extraer(cliente, personas["ana"]).status_code == 403 and cadena.llamadas == []
 
 
