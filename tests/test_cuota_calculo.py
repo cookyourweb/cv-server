@@ -65,16 +65,16 @@ def test_a_naive_clock_is_refused():
 
 # --- the estimate ---------------------------------------------------------------------------------
 
-def test_the_estimate_bills_the_primary_and_the_whole_fallback_cascade_at_4096_tokens(monkeypatch):
+def test_the_estimate_bills_claude_and_groq_only_never_gemini(monkeypatch):
     monkeypatch.setattr(cuota, "PRECIOS_PRIMARIO_EUR_POR_MTOK", (Decimal("3"), Decimal("15")))
     monkeypatch.setattr(cuota, "PRECIOS_GROQ_EUR_POR_MTOK", (Decimal("1"), Decimal("2")))
-    monkeypatch.setattr(cuota, "PRECIOS_GEMINI_EUR_POR_MTOK", (Decimal("4"), Decimal("5")))
-    monkeypatch.setattr(cuota, "PRECIOS_CLAUDE_RESPALDO_EUR_POR_MTOK", (Decimal("6"), Decimal("7")))
+    # An absurd Gemini price would blow the estimate up if Gemini were still billed.
+    monkeypatch.setattr(cuota, "PRECIOS_GEMINI_EUR_POR_MTOK", (Decimal("4000"), Decimal("5000")), raising=False)
     monkeypatch.setattr(cuota, "MARGEN", Decimal("2"))
     entrada = 334  # ceil(1000 / 3)
     primario = (entrada * 3 + 1500 * 15)           # the call asked for 1500 output tokens
-    cascada = (entrada * 1 + 4096 * 2) + (entrada * 4 + 4096 * 5) + (entrada * 6 + 4096 * 7)  # always 4096
-    esperado = (Decimal(primario + cascada) / 1_000_000 * 2).quantize(Decimal("0.0001"), rounding="ROUND_CEILING")
+    groq = (entrada * 1 + 1500 * 2)                # Groq is asked for the same limit as Claude
+    esperado = (Decimal(primario + groq) / 1_000_000 * 2).quantize(Decimal("0.0001"), rounding="ROUND_CEILING")
     assert cuota.estimar_eur(1000, max_tokens=1500) == esperado
 
 

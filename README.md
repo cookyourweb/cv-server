@@ -448,7 +448,7 @@ missing one does not crash the service: the feature quietly degrades.
     `TOPE_GENERACION_EUR`: only if the defaults (8, 0.7, 0.3, 20 EUR) are not what you want.
   - [ ] `AVISO_GASTO_EMAIL`, `BREVO_API_KEY`, `BREVO_REMITENTE`: the 70 % alarm mail. Without
     all three no mail is sent (generation still works). The sender must be verified in Brevo.
-  - [ ] Verify the `PRECIO_*` constants (primary, Groq, `PRECIO_GEMINI_*`) against the providers'
+  - [ ] Verify the `PRECIO_*` constants (primary and Groq) against the providers'
     price pages, as for the extraction.
   - [ ] Set a monthly **spend limit on the Anthropic console** for the key behind `CLAUDE_API_KEY`:
     a second layer that does not depend on this code's estimate.

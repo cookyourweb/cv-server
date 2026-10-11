@@ -10,8 +10,8 @@ Invited users generate on the owner's AI keys, inside two limits:
 Both are checked BEFORE any model is called, in one transaction under a global advisory
 lock, so check-and-reserve is atomic: concurrent requests queue and each one sees the rows
 the previous ones committed. The reservation row holds a PESSIMISTIC estimate (prompt at 3
-characters per token plus the output limit, for the primary model AND the whole fallback
-cascade of `llm.call_llm_calidad`, times a margin). A crash after the reservation over-counts
+characters per token plus the output limit, for Claude AND its only fallback Groq, the chain of
+`llm.call_llm_invitada`, times a margin). A crash after the reservation over-counts
 and never under-counts.
 
 Closing the row:
@@ -68,17 +68,10 @@ UMBRAL_AVISO = _decimal_del_entorno("AVISO_GASTO_UMBRAL", "0.7")
 MARGEN = _decimal_del_entorno("MARGEN_GENERACION", "1.25")
 
 # EUR per million tokens, (input, output). The primary and Groq lists are the extraction's
-# (PRECIO_PRIMARIO_* / PRECIO_RESPALDO_*). Gemini has its own; the Claude fallback of the general
-# cascade is billed at the primary list (the safe side: it is Haiku by default).
+# (PRECIO_PRIMARIO_* / PRECIO_RESPALDO_*). There is no Gemini price: an invited user's generation
+# never reaches Gemini (`llm.call_llm_invitada`: Claude, then Groq).
 PRECIOS_PRIMARIO_EUR_POR_MTOK = extraccion.PRECIOS_PRIMARIO_EUR_POR_MTOK
 PRECIOS_GROQ_EUR_POR_MTOK = extraccion.PRECIOS_RESPALDO_EUR_POR_MTOK
-PRECIOS_GEMINI_EUR_POR_MTOK = (
-    _decimal_del_entorno("PRECIO_GEMINI_ENTRADA_EUR_POR_MTOK", "0.30"),
-    _decimal_del_entorno("PRECIO_GEMINI_SALIDA_EUR_POR_MTOK", "2.50"),
-)
-PRECIOS_CLAUDE_RESPALDO_EUR_POR_MTOK = extraccion.PRECIOS_PRIMARIO_EUR_POR_MTOK
-
-TOKENS_SALIDA_CASCADA = 4096     # llm.CascadaCasera asks every fallback for 4096 output tokens
 CARACTERES_POR_TOKEN = extraccion.CARACTERES_POR_TOKEN
 _CIEN_MIL = Decimal(1_000_000)
 _CLAVE_DE_BLOQUEO = 7_342_501_905  # fixed bigint key of the advisory lock "tope_generacion"
@@ -121,13 +114,11 @@ def _coste_de_una_llamada(precios, largo_prompt: int, tokens_salida: int) -> Dec
 def estimar_eur(largo_prompt: int, *, max_tokens: int) -> Decimal:
     """The pessimistic reservation for a prompt of `largo_prompt` characters.
 
-    The primary model (output limited to `max_tokens`) plus EVERY provider of the fallback
-    cascade (Groq, Gemini, Claude; each asked for 4096 output tokens), times the margin,
-    rounded up to the ledger's precision.
+    Claude (output limited to `max_tokens`) plus its only fallback, Groq (asked for the same
+    `max_tokens`), times the margin, rounded up to the ledger's precision.
     """
     peor = _coste_de_una_llamada(PRECIOS_PRIMARIO_EUR_POR_MTOK, largo_prompt, max_tokens)
-    for precios in (PRECIOS_GROQ_EUR_POR_MTOK, PRECIOS_GEMINI_EUR_POR_MTOK, PRECIOS_CLAUDE_RESPALDO_EUR_POR_MTOK):
-        peor += _coste_de_una_llamada(precios, largo_prompt, TOKENS_SALIDA_CASCADA)
+    peor += _coste_de_una_llamada(PRECIOS_GROQ_EUR_POR_MTOK, largo_prompt, max_tokens)
     return _a_precision_del_libro(peor * MARGEN)
 
 
@@ -362,16 +353,18 @@ def _cerrar(accion, *args) -> None:
 
 
 def generar(email: str, tipo: str, prompt: str, *, modelo: str, max_tokens: int,
-            llamar: Callable, ahora=None):
-    """Run `llamar()` (the model call) inside the quota and cap of the user behind `email`.
+            llamar: Callable, llamar_invitada: Optional[Callable] = None, ahora=None):
+    """Run the model call inside the quota and cap of the user behind `email`.
 
     Not subject (legacy, exempt, unknown mailbox): just `llamar()`, nothing counted, no
     exception altered. Subject: reserve first (`Rechazada` BEFORE the model on a refusal),
-    then close the row with the real cost, or as failed if `llamar` raised (re-raised as is).
+    then call `llamar_invitada` (Claude and Groq only; falls back to `llamar` when not given),
+    and close the row with the real cost, or as failed if it raised (re-raised as is).
     """
     usuario_id = _usuaria_sujeta(email)
     if usuario_id is None:
         return llamar()
+    llamar = llamar_invitada or llamar
     try:
         reserva = reservar(usuario_id, tipo, len(prompt), max_tokens=max_tokens, modelo=modelo, ahora=ahora)
     except (SQLAlchemyError, base_de_datos.ErrorDeBaseDeDatos) as error:

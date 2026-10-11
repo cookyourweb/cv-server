@@ -62,9 +62,21 @@ def entorno(monkeypatch, bd):  # noqa: F811
 
 @pytest.fixture
 def llm_falso(monkeypatch):
+    """The fake answers on BOTH chains (the owner's and the invited one): the tests below that
+    care about which chain ran use `cadenas` instead."""
     falso = LLMFalso()
     monkeypatch.setattr(srv, "call_llm_calidad", falso)
+    monkeypatch.setattr(srv, "call_llm_invitada", falso)
     return falso
+
+
+@pytest.fixture
+def cadenas(monkeypatch):
+    """One fake per chain, to tell which one a request used."""
+    duena, invitada = LLMFalso(), LLMFalso()
+    monkeypatch.setattr(srv, "call_llm_calidad", duena)
+    monkeypatch.setattr(srv, "call_llm_invitada", invitada)
+    return duena, invitada
 
 
 @pytest.fixture
@@ -166,6 +178,7 @@ def test_a_provider_failure_keeps_answering_503_gives_the_units_back_and_keeps_t
         cliente, ana, monkeypatch, ruta, esperado):
     falso = LLMFalso(error=RuntimeError("Todos los LLMs fallaron"))
     monkeypatch.setattr(srv, "call_llm_calidad", falso)
+    monkeypatch.setattr(srv, "call_llm_invitada", falso)
     estado, cuerpo = _post(ruta, ana)
     assert estado == esperado and cuerpo["ok"] is False and "Todos los LLMs" in cuerpo["error"]
     (fila,) = _libro(ana)
@@ -214,3 +227,49 @@ def test_without_database_url_the_routes_never_touch_the_database(personas, llm_
         assert _post("/generar-carta", personas["ana"])[0] == 200
         assert _post("/generar-cv", personas["ana"])[0] == 200
     assert len(llm_falso.llamadas) == 2
+
+
+# --- which provider chain wrote it --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("ruta", ["/generar-carta", "/generar-cv"])
+def test_an_invited_user_is_generated_with_claude_and_groq_only_never_the_general_cascade(ana, cadenas, ruta):
+    duena, invitada = cadenas
+    assert _post(ruta, ana)[0] == 200
+    assert duena.llamadas == [] and len(invitada.llamadas) == 1
+
+
+@pytest.mark.parametrize("ruta", ["/generar-carta", "/generar-cv"])
+def test_an_invited_user_never_reaches_gemini_even_when_claude_and_groq_fail(ana, monkeypatch, ruta):
+    import llm
+
+    def solo_groq(url, **kwargs):
+        assert "generativelanguage" not in url, "an invited user's CV reached Gemini"
+        raise RuntimeError("down")
+
+    def cae(*a, **k):
+        raise RuntimeError("down")
+
+    def prohibida(*a, **k):
+        pytest.fail("the general cascade must not run for an invited user")
+    monkeypatch.setattr(llm, "GEMINI_API_KEY", "gemini-de-prueba")
+    monkeypatch.setattr(llm, "call_claude", cae)
+    monkeypatch.setattr(llm.requests, "post", solo_groq)
+    monkeypatch.setattr(llm.CascadaCasera, "completar", prohibida)
+    monkeypatch.setattr(srv, "call_llm_calidad", prohibida)
+    estado, cuerpo = _post(ruta, ana)
+    assert estado == 503 and cuerpo["ok"] is False
+
+
+@pytest.mark.parametrize("ruta", ["/generar-carta", "/generar-cv"])
+def test_legacy_and_exempt_users_keep_the_owner_chain(personas, cadenas, ana, monkeypatch, ruta):
+    duena, invitada = cadenas
+
+    class Vero:
+        email = "vero-legado@example.com"
+    assert _post(ruta, Vero)[0] == 200                       # no Neon user
+    monkeypatch.setenv("CUOTA_EXENTAS", ana.email)
+    assert _post(ruta, ana)[0] == 200                        # exempt
+    monkeypatch.delenv("CUOTA_EXENTAS")
+    monkeypatch.setattr(cuota.base_de_datos, "configurada", lambda: False)
+    assert _post(ruta, ana)[0] == 200                        # no database at all
+    assert len(duena.llamadas) == 3 and invitada.llamadas == []

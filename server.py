@@ -147,6 +147,7 @@ from llm import (  # noqa: F401
     call_claude,
     call_llm,
     call_llm_calidad,
+    call_llm_invitada,
     get_anthropic_client,
 )
 
@@ -934,12 +935,14 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     )
 
     try:
-        # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad.
+        # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad. Una usuaria
+        # invitada (con cuenta en Neon) va por call_llm_invitada: Claude y Groq, nunca Gemini.
         # La cuota y el tope mensual se miran ANTES de llamar a ningun modelo (ADR-010);
         # para la duena y para el modo heredado `cuota.generar` es solo la llamada.
         respuesta_llm = cuota.generar(
             email, "cv", prompt, modelo=CV_MODEL, max_tokens=4096,
-            llamar=lambda: call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096))
+            llamar=lambda: call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096),
+            llamar_invitada=lambda: call_llm_invitada(prompt, model=CV_MODEL, max_tokens=4096))
         contenido_cv  = respuesta_llm.contenido
         logger.info("CONSUMO cv %s", consumo_de(respuesta_llm))
     except cuota.Rechazada as r:
@@ -1181,7 +1184,8 @@ def generar_carta():
     try:
         respuesta_llm = cuota.generar(
             email, "carta", prompt, modelo=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA,
-            llamar=lambda: call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA))
+            llamar=lambda: call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA),
+            llamar_invitada=lambda: call_llm_invitada(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA))
         carta         = respuesta_llm.contenido
         logger.info("CONSUMO carta %s", consumo_de(respuesta_llm))
     except cuota.Rechazada as r:
