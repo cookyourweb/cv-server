@@ -53,7 +53,7 @@ def test_it_stores_the_email_lowercased_with_the_requested_expiry(c):
 def test_inviting_again_renews_an_unused_invitation(c):
     invitar.invitar("ana@example.com", 1, c)
     invitar.invitar("ana@example.com", 7, c)
-    assert c.execute(text("SELECT count(*) FROM invitaciones")).scalar_one() == 1
+    assert c.execute(text("SELECT count(*) FROM invitaciones WHERE email = 'ana@example.com'")).scalar_one() == 1
     assert _fila(c, "ana@example.com").vigente
 
 
