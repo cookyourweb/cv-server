@@ -14,6 +14,10 @@ DESTRUCTIVO = "tests/test_migracion_0001.py::test_upgrade_downgrade_upgrade_is_c
 
 def _pytest(extra_env):
     entorno = {k: v for k, v in os.environ.items() if k != "ALLOW_DESTRUCTIVE_DB_TESTS"}
+    # A test database URL is always configured here, so the only possible skip
+    # reason is the missing opt-in. The URL is never used: the test is skipped
+    # at collection, before any connection.
+    entorno["DATABASE_URL_PRUEBAS"] = "postgresql://user:pass@127.0.0.1:1/never_used"
     entorno.update(extra_env)
     return subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider", DESTRUCTIVO],
