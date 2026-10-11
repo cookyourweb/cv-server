@@ -20,7 +20,7 @@ import base_de_datos
 import cifrado
 import fuente_master as fm
 from drive import MasterCV
-from repositorio import RepositorioDeUsuaria
+from repositorio import VERSION_DE_CONSENTIMIENTO, RepositorioDeUsuaria
 from test_migracion_0001 import _alembic
 
 CANARIO = "CANARIO-CV-5581-no-debe-salir-en-logs"
@@ -122,8 +122,13 @@ def test_an_unreachable_database_degrades_to_the_drive_flow(monkeypatch, caplog)
 class RepoFalso:
     usuario_id = "u-1"
 
-    def __init__(self, fila=None, error=None):
-        self.fila, self.error = fila, error
+    def __init__(self, fila=None, error=None, consentimiento=True):
+        self.fila, self.error, self.consentimiento = fila, error, consentimiento
+        self.consultas = []
+
+    def tiene_consentimiento(self, tipo):
+        self.consultas.append(tipo)
+        return self.consentimiento
 
     def obtener_cv(self, idioma):
         if self.error:
@@ -167,6 +172,47 @@ def test_a_successful_read_logs_no_content(claves, caplog):
     assert CANARIO not in volcar_registros(caplog.records)
 
 
+# --- AI consent gate (pure) ----------------------------------------------------------------
+
+def _fila(texto, idioma="es"):
+    version, nonce, cif = cifrado.cifrar(texto, "u-1", idioma)
+    return type("F", (), {"clave_version": version, "nonce": nonce, "cifrado": cif})()
+
+
+def test_a_master_is_read_when_the_ai_consent_is_active(claves):
+    repo = RepoFalso(_fila("con consentimiento"))
+    assert fm.MasterEnBase(repo).leer("es").texto == "con consentimiento"
+    assert repo.consultas == ["enviar_cv_a_ia"]
+
+
+def test_a_master_without_the_ai_consent_is_skipped_and_logs_only_a_reason(claves, caplog):
+    caplog.set_level(logging.DEBUG)
+    repo = RepoFalso(_fila(CANARIO), consentimiento=False)
+    assert fm.MasterEnBase(repo).leer("es") == fm.LecturaMaster("", "", "es")
+    from privacidad import volcar_registros
+    volcado = volcar_registros(caplog.records)
+    assert CANARIO not in volcado and "u-1" not in volcado and "consentimiento" in volcado
+
+
+def test_a_failing_consent_check_fails_closed(claves):
+    class Roto(RepoFalso):
+        def tiene_consentimiento(self, tipo):
+            raise RuntimeError(CANARIO)
+    assert fm.MasterEnBase(Roto(_fila(CANARIO))).leer("es").texto == ""
+
+
+def test_resolution_skips_neon_in_both_languages_without_consent_and_uses_drive(claves):
+    base = fm.MasterEnBase(RepoFalso(_fila("neon"), consentimiento=False))
+    r = fm.resolver_master({}, "es", base=base, leer_drive=drive_falso(es="drive es"))
+    assert (r.texto, r.master_traducido) == ("drive es", False)
+
+
+def test_the_translated_neon_source_is_gated_too(claves):
+    base = fm.MasterEnBase(RepoFalso(_fila("neon en", "en"), consentimiento=False))
+    r = fm.resolver_master({}, "es", base=base, leer_drive=drive_falso())
+    assert (r.texto, r.master_traducido) == ("", False)
+
+
 # --- real database ------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
@@ -200,8 +246,12 @@ def test_neon_round_trip_decrypts_the_stored_master(c, claves):
     version, nonce, cif = cifrado.cifrar("Frontend senior con Angular", uid, "es")
     repo.guardar_cv("es", "pdf", version, nonce, cif, 27)
     fuente = fm.MasterEnBase(repo)
+    assert fuente.leer("es").texto == ""  # stored but no AI consent yet
+    repo.registrar_consentimiento("enviar_cv_a_ia", VERSION_DE_CONSENTIMIENTO)
     assert fuente.leer("es") == fm.LecturaMaster("Frontend senior con Angular", "", "es")
     assert fuente.leer("en").texto == ""
+    c.execute(text("UPDATE consentimientos SET revocado_en = now() WHERE usuario_id = :u"), {"u": uid})
+    assert fuente.leer("es").texto == ""  # revoked
 
 
 @pytest.mark.bd
@@ -217,4 +267,5 @@ def test_a_row_swapped_to_another_user_does_not_decrypt(c, claves):
     a, b = _usuario(c, f"{uuid.uuid4().hex}@example.com"), _usuario(c, f"{uuid.uuid4().hex}@example.com")
     version, nonce, cif = cifrado.cifrar("secreto de A", a, "es")
     RepositorioDeUsuaria(c, b).guardar_cv("es", "pdf", version, nonce, cif, 12)
+    RepositorioDeUsuaria(c, b).registrar_consentimiento("enviar_cv_a_ia", VERSION_DE_CONSENTIMIENTO)
     assert fm.MasterEnBase(RepositorioDeUsuaria(c, b)).leer("es").texto == ""

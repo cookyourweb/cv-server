@@ -58,3 +58,43 @@ def test_a_neon_master_in_the_other_language_is_used_and_flagged(entorno, monkey
     status, cuerpo = _carta()
     assert status == 200 and cuerpo["master_traducido"] is True and cuerpo["cv_master_usado"] is True
     assert "Master de Neon EN" in entorno[0]
+
+
+def _base_con(consentimiento):
+    version_texto = "Master de Neon ES secreto"
+
+    class Repo:
+        usuario_id = "u-1"
+
+        def tiene_consentimiento(self, tipo):
+            return consentimiento
+
+        def obtener_cv(self, idioma):
+            import cifrado
+            v, n, c = cifrado.cifrar(version_texto, "u-1", idioma)
+            return type("F", (), {"clave_version": v, "nonce": n, "cifrado": c})()
+    return fm.MasterEnBase(Repo()), version_texto
+
+
+def _con_claves(monkeypatch):
+    import base64
+    import os
+    monkeypatch.setenv("CV_CLAVES", "1:" + base64.b64encode(os.urandom(32)).decode())
+    monkeypatch.setenv("CV_CLAVE_ACTIVA", "1")
+
+
+def test_a_neon_master_without_ai_consent_never_reaches_the_prompt(entorno, monkeypatch):
+    _con_claves(monkeypatch)
+    base, texto = _base_con(False)
+    monkeypatch.setattr(fm, "base_para_email", lambda email: base)
+    status, cuerpo = _carta()
+    assert status == 200 and cuerpo["cv_master_usado"] is False
+    assert texto not in entorno[0]
+
+
+def test_a_neon_master_with_ai_consent_reaches_the_prompt(entorno, monkeypatch):
+    _con_claves(monkeypatch)
+    base, texto = _base_con(True)
+    monkeypatch.setattr(fm, "base_para_email", lambda email: base)
+    status, _ = _carta()
+    assert status == 200 and texto in entorno[0]

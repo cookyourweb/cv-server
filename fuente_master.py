@@ -10,6 +10,9 @@ no ifs about where a master lives:
     Neon in the requested language -> Drive in that language -> Neon in the other
     language (`master_traducido=True`) -> empty
 
+AI consent: a Neon master is only returned while the user has an active `enviar_cv_a_ia`
+consent (both languages); otherwise the Neon sources are skipped like a missing master.
+
 Legacy mode: without DATABASE_URL, or for a mailbox with no Neon user, there is no Neon
 source and the result is exactly the Drive read, as before. A Neon failure (database down,
 row that does not authenticate) degrades to the next source and logs only the exception
@@ -66,6 +69,11 @@ class MasterEnBase:
     def leer(self, idioma: str) -> LecturaMaster:
         vacio = LecturaMaster("", "", idioma)
         try:
+            # A stored master goes to the model, so it needs the same consent /extraccion
+            # requires (active, current version). Fail closed on any error.
+            if not self._repo.tiene_consentimiento("enviar_cv_a_ia"):
+                logger.info("Master en base de datos omitido: falta el consentimiento enviar_cv_a_ia")
+                return vacio
             fila = self._repo.obtener_cv(idioma)
             if fila is None:
                 return vacio
@@ -99,6 +107,10 @@ class _RepoEfimero:
     def obtener_cv(self, idioma):
         with base_de_datos.transaccion() as c:
             return RepositorioDeUsuaria(c, self.usuario_id).obtener_cv(idioma)
+
+    def tiene_consentimiento(self, tipo):
+        with base_de_datos.transaccion() as c:
+            return RepositorioDeUsuaria(c, self.usuario_id).tiene_consentimiento(tipo)
 
 
 def usuario_id_por_email(conexion, email: str):
