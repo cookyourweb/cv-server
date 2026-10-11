@@ -196,6 +196,9 @@ Documented as ADRs in [`docs/`](docs/):
 - **[ADR-008](docs/ADR-008-external-encrypted-backup.md)**. Daily `pg_dump` of the database,
   encrypted with `age` to an offline public key, kept as a 30-day GitHub artifact because
   Neon's free restore window is only 6 hours.
+- **[ADR-009](docs/ADR-009-rule-based-match.md)**. The offer match is plain rules, no model,
+  and an offer is the caller's only if its Notion "Usuario" relation holds her page id;
+  anything else is one identical 404.
 
 > **Authentication is covered in ADR-003 of the `buscartrabajo` repo**
 > (`docs/adr/ADR-003-authentication.md`), which is not the ADR-003 above.
@@ -230,6 +233,8 @@ Two other known debts:
 | `GET /cv` | Google token | The caller's masters, metadata only (`idioma`, `formato`, `subido_en`) |
 | `DELETE /cv/{idioma}` | Google token | Delete the caller's master in `es` or `en` (204, 404) |
 | `POST /extraccion` | Google token | Owner-paid extraction of profile proposals from her stored CV, empty body. 200 `{estado: "propuesta", propuestas: [{campo, valor, cita}]}` or `{estado: "manual", motivo: desactivada\|ya_usada\|tope\|proveedor\|indisponible}`; 403 without the `enviar_cv_a_ia` consent, 404 without a stored CV |
+| `GET /ofertas/{id}/encaje` | Google token | Rule-based match of one of the caller's offers against her profile and master ([ADR-009](docs/ADR-009-rule-based-match.md)). 200 `{cubiertos, huecos, no_evaluables, alcanzable, cobertura}`; 404 (identical for not hers, nobody's and missing), 409 with neither profile nor master, 503 if Notion fails |
+| `POST /encajes` | Google token | Same for `{"ids": [...]}` (max 50, 51 is 422): `{encajes: [{id, ...}]}`; ids that are not hers are silently omitted |
 | `DELETE /cuenta` | Google token | Delete the account and its data in one transaction (204) |
 | `PUT /ajustes/extraccion` | Machine key | Kill switch of the owner-paid CV extraction, body `{"activa": bool}`; no redeploy needed |
 | `POST /registro` | Machine key | User sign-up |
