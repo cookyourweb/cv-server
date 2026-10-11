@@ -49,7 +49,7 @@ from real_jobs import buscar_ofertas_reales
 # ── Notion ────────────────────────────────────
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
-NOTION_DB_OFERTAS  = os.getenv("NOTION_DB_OFERTAS", "33d11515-f4b2-8176-947b-000bbafd1ca7")
+NOTION_DB_OFERTAS  = os.getenv("NOTION_DB_OFERTAS", "")
 
 # ── Webhooks n8n ──────────────────────────────
 # OJO (28ago2026): los paths `buscar-ahora` y `nuevo-usuario` NO EXISTEN en la

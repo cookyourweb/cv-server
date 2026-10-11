@@ -409,6 +409,19 @@ Then point `DATABASE_URL_PRUEBAS` or a local check at that branch and compare ro
 The CV masters stay encrypted inside the dump: you also need the application keyring
 (`CV_CLAVES`) to read them. Delete `restore.dump` afterwards.
 
+## Pre-production checklist
+
+Environment variables Render MUST have before deploying a change that needs them. A
+missing one does not crash the service: the feature quietly degrades.
+
+- [ ] `NOTION_DB_OFERTAS`: id of the Notion offers database. There is no default in the
+  code any more. Without it the offer lookups return nothing, `/crear-oferta` answers 502
+  and `GET /ofertas/{id}/encaje` and `POST /encajes` answer 503. **Set it on Render before
+  deploying the offer-match change (ADR-009).**
+- [ ] `NOTION_TOKEN` and `NOTION_DB_USUARIOS`: the owner of an offer is resolved through them.
+- [ ] `DATABASE_URL`, `CV_CLAVES`, `CV_CLAVE_ACTIVA`, `CORS_ORIGENES`: see "Database" and
+  "Invitation-only access".
+
 ## Tests
 
 ```bash

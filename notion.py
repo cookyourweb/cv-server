@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
-NOTION_DB_OFERTAS = os.getenv("NOTION_DB_OFERTAS", "33d11515-f4b2-8176-947b-000bbafd1ca7")
+NOTION_DB_OFERTAS = os.getenv("NOTION_DB_OFERTAS", "")
 
 def notion_headers():
     return {
@@ -413,6 +413,10 @@ def crear_oferta_en_notion(oferta: dict, idioma: str = "", usuario_notion_id: st
     Centraliza el mapeo oferta→Notion en código (en vez de la UI de n8n).
     `oferta` es el dict que devuelve /buscar-ofertas-reales (real_jobs.py).
     """
+    if not NOTION_DB_OFERTAS:
+        # Same family of error the caller already turns into a 502; no request is made.
+        raise requests.RequestException("NOTION_DB_OFERTAS no configurada")
+
     def _txt(v: str) -> dict:
         return {"rich_text": [{"text": {"content": (v or "")[:2000]}}]}
 
