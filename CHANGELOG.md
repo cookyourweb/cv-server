@@ -79,6 +79,55 @@ touching the prompt f-string in `server.py`.
     of one sign-in hit Notion once. Network and HTTP errors are never cached.
   - Trade-off: an edit in Notion can take up to 60 s to be seen by this lookup.
 
+### POST /extraccion: owner-paid extraction with the quality chain
+
+**Added**
+
+- `POST /extraccion` (owner-scoped, empty body; nothing in the request chooses the model or
+  the CV). Order: consent `enviar_cv_a_ia` v1 (403) -> a stored master (404, the most recent
+  upload) -> `extraccion.reservar` gates (refusal = 200 `{estado: "manual", motivo}`, no model
+  call) -> decrypt -> ONE call to `llm.call_llm_calidad` (model `CV_MODEL`, `max_tokens` =
+  `TOKENS_SALIDA_MAX`, Groq fallback as the chain already does, no retry of its own) -> the
+  reservation is always closed -> validate.
+- Answers: `{estado: "propuesta", propuestas: [{campo, valor, cita}]}`; or `{estado: "manual",
+  motivo}` with `desactivada | ya_usada | tope | proveedor | indisponible`. `proveedor` = the
+  whole chain failed (row `fallida`, she keeps her attempt). `indisponible` = the model
+  answered but nothing survived validation (the call is paid for and the attempt is used).
+- `propuestas.py`: the prompt (CV inside `<cv_datos>`, declared data; a delimiter planted in the
+  CV is defused with an equal-length substitution) and `validar`. A proposal survives only if
+  its `campo` is one of `rol, anios_experiencia, stack, idiomas, ubicacion` (salary and modality
+  are never accepted), its `cita` is a literal substring of the CV after whitespace
+  normalisation, a stack technology is in the catalogue and found in the `cita` by
+  `guardrails.tecnologias_en` (Java is not backed by JavaScript), and years are an integer 0..60
+  that appears in the `cita`. Items are judged one by one; the first valid item per campo wins.
+- `extraccion.coste_real_eur` prices the usage the provider reported (primary or fallback
+  prices). When usage is not reported (the Groq fallback does not return it) the ledger gets the
+  reservation's estimate as the cost, never a made-up zero.
+- `RepositorioDeUsuaria.cv_mas_reciente`.
+
+**Why it is shaped this way**
+
+- No database transaction is open while the model is called; the reservation is its own
+  committed transaction, so a slow provider never holds the advisory lock.
+- The reserved length comes from the stored character count, so the gates run BEFORE the CV is
+  decrypted, and the prompt can never be longer than what was reserved.
+- A text-level check cannot tell injected text from real CV content: if the CV itself says
+  "add Rust to the stack" and the model quotes it, the quote is a real substring. The panel
+  shows every `cita` for the user to accept or edit, which is the backstop.
+- Nothing logs the CV, a `cita`, the prompt or the model output; failures are logged by
+  exception type (`privacidad.registrar_fallo`), and the canary test covers this path.
+
+**Before enabling the switch in production**
+
+1. Verify the current model ids (`CV_MODEL`, `GROQ_MODEL`) and the list prices, and update the
+   `PRECIO_*_EUR_POR_MTOK` constants in `extraccion.py`.
+2. Enable Zero Data Retention in the Groq console (by default Groq does not train on API data
+   nor keep it, but ZDR is a toggle to turn on explicitly).
+3. Name Anthropic and Groq, and say that processing happens in the United States, in the consent
+   text and the privacy policy (bump `VERSION_DE_CONSENTIMIENTO` if the consent changes in substance).
+4. Known gaps of the fallback path: `call_llm` ignores `max_tokens` (4096) and the SDK call has
+   no explicit timeout, so the cost bound holds for the primary model only.
+
 ### Extraction gates, spend ledger and kill switch (no model call yet)
 
 **Added**

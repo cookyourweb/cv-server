@@ -216,6 +216,7 @@ Two other known debts:
 | `POST /cv` | Google token | Upload a CV (multipart field `archivo`, PDF or DOCX, 2 MB): stored encrypted, one master per language (201 `{idioma, formato, caracteres}`; 403 without the `almacenar_cv` consent, 413, 415, 422) |
 | `GET /cv` | Google token | The caller's masters, metadata only (`idioma`, `formato`, `subido_en`) |
 | `DELETE /cv/{idioma}` | Google token | Delete the caller's master in `es` or `en` (204, 404) |
+| `POST /extraccion` | Google token | Owner-paid extraction of profile proposals from her stored CV, empty body. 200 `{estado: "propuesta", propuestas: [{campo, valor, cita}]}` or `{estado: "manual", motivo: desactivada\|ya_usada\|tope\|proveedor\|indisponible}`; 403 without the `enviar_cv_a_ia` consent, 404 without a stored CV |
 | `DELETE /cuenta` | Google token | Delete the account and its data in one transaction (204) |
 | `PUT /ajustes/extraccion` | Machine key | Kill switch of the owner-paid CV extraction, body `{"activa": bool}`; no redeploy needed |
 | `POST /registro` | Machine key | User sign-up |
@@ -318,7 +319,17 @@ the file name is ever logged.
 in this order, when the switch is off (`EXTRACCION_ACTIVA=false` or the `ajustes` row), when the
 user already used her attempt, or when the month's spend plus a pessimistic estimate would pass
 5 EUR; the estimate covers the primary model and its fallback. A failed provider chain keeps the
-attempt but its estimate still counts toward the cap. The model call itself is not wired yet.
+attempt but its estimate still counts toward the cap.
+
+**Extraction call.** `POST /extraccion` runs those gates, then calls the quality chain
+(`llm.call_llm_calidad`, Claude with the Groq fallback) once. The CV travels inside a data
+block and the answer is validated by `propuestas.py`: every proposal needs a `cita` that is a
+literal quote of the CV, salary and modality are never accepted, and a stack technology must
+appear in its `cita`. The user reviews each proposal in the panel before anything is saved.
+
+Before enabling the switch in production: verify the current model ids and the `PRECIO_*`
+constants in `extraccion.py`, enable Zero Data Retention on the Groq account, and name Anthropic
+and Groq (processing in the United States) in the consent text and the privacy policy.
 
 ## Database
 
