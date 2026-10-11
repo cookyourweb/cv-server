@@ -89,4 +89,12 @@ def crear_blueprint(con_usuaria) -> Blueprint:
         repo.registrar_consentimiento(consentimiento.tipo, consentimiento.version)
         return jsonify({"tipo": consentimiento.tipo, "version": consentimiento.version}), 201
 
+    @alta.delete("/cuenta")
+    @con_usuaria
+    @_con_repositorio
+    def borrar_cuenta(repo):
+        # One transaction (opened by _con_repositorio): it commits only if every step
+        # succeeded, so a failure midway leaves the account exactly as it was (REQ-2.3).
+        return ("", 204) if repo.borrar_cuenta() else _respuesta(_NO_ENCONTRADO)
+
     return alta

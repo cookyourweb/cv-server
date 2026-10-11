@@ -35,6 +35,7 @@ RUTAS_PROPIAS = {
     ("GET", "/perfil"): None,
     ("PUT", "/perfil"): PERFIL,
     ("POST", "/consentimientos"): CONSENTIMIENTO,
+    ("DELETE", "/cuenta"): None,
 }
 CORREOS = [f"{n}@ejemplo.es" for n in ("ana", "bea", "carla")]
 
@@ -248,6 +249,100 @@ def test_S1_6_reading_a_profile_that_is_not_yours_is_the_same_404_as_one_that_do
     sin_datos = _llamar(cliente, "GET", "/perfil", personas["ana"])
     assert (con_datos_ajenos.status_code, con_datos_ajenos.get_json()) == (sin_datos.status_code, sin_datos.get_json())
     assert con_datos_ajenos.status_code == 404
+
+
+# --- DELETE /cuenta: REQ-2.3 to REQ-2.5 -----------------------------------------------------------
+
+TABLAS_PROPIAS = ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos")
+
+
+def _poblar(cliente, persona):
+    """Profile, consent, a stored CV master and one ledger row for `persona`."""
+    _llamar(cliente, "PUT", "/perfil", persona, PERFIL)
+    _llamar(cliente, "POST", "/consentimientos", persona, CONSENTIMIENTO)
+    with base_de_datos.transaccion() as c:
+        uid = _usuario_id(persona)
+        c.execute(text("INSERT INTO cv_master (usuario_id, idioma, formato, clave_version, nonce, cifrado, "
+                       "caracteres) VALUES (:u, 'es', 'pdf', 1, decode(repeat('00', 12), 'hex'), '\\x01', 10)"),
+                  {"u": uid})
+        c.execute(text("INSERT INTO extracciones (usuario_id, modelo, estado, estimado_eur) "
+                       "VALUES (:u, 'prueba-rutas', 'completada', 0.04)"), {"u": uid})
+
+
+def _huerfanas():
+    with base_de_datos.transaccion() as c:
+        return c.execute(text("SELECT count(*), coalesce(sum(estimado_eur), 0) FROM extracciones "
+                              "WHERE modelo = 'prueba-rutas' AND usuario_id IS NULL")).one()
+
+
+def test_S2_3_deleting_the_account_answers_204_and_removes_every_owned_row(cliente, personas):
+    _poblar(cliente, personas["ana"])
+    uid = _usuario_id(personas["ana"])
+    r = _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
+    assert r.status_code == 204 and r.get_data() == b""
+    with base_de_datos.transaccion() as c:
+        for tabla in TABLAS_PROPIAS:
+            columna = "id" if tabla == "usuarios" else "usuario_id"
+            assert c.execute(text(f"SELECT count(*) FROM {tabla} WHERE {columna} = :u"), {"u": uid}).scalar_one() == 0
+    cuantas, gasto = _huerfanas()
+    assert cuantas == 1 and float(gasto) == 0.04  # the anonymous aggregate stays (REQ-2.4)
+
+
+def test_S2_5_deleting_one_account_leaves_another_users_data_intact(cliente, personas):
+    _poblar(cliente, personas["ana"])
+    _poblar(cliente, personas["bea"])
+    _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
+    assert _filas("perfil", personas["bea"]) == 1 and _filas("cv_master", personas["bea"]) == 1
+    assert _filas("consentimientos", personas["bea"]) == 1
+    assert _llamar(cliente, "GET", "/perfil", personas["bea"]).get_json() == PERFIL
+
+
+def test_REQ_2_5_the_token_of_a_deleted_user_is_rejected_and_creates_nothing(cliente, personas):
+    _poblar(cliente, personas["ana"])
+    _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
+    for metodo, ruta in (("GET", "/perfil"), ("GET", "/yo"), ("DELETE", "/cuenta")):
+        assert _llamar(cliente, metodo, ruta, personas["ana"]).status_code == 403, ruta
+    with base_de_datos.transaccion() as c:
+        assert c.execute(text("SELECT count(*) FROM usuarios WHERE sub = :s"), {"s": personas["ana"].sub}).scalar_one() == 0
+
+
+def test_S2_7_a_re_invited_mailbox_is_a_new_user_and_the_old_spend_still_counts(cliente, personas):
+    _poblar(cliente, personas["ana"])
+    antiguo = _usuario_id(personas["ana"])
+    _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
+    with base_de_datos.transaccion() as c:
+        c.execute(text("UPDATE invitaciones SET usada_en = NULL, usada_por = NULL WHERE email = :e"),
+                  {"e": personas["ana"].email})
+    assert _llamar(cliente, "GET", "/yo", personas["ana"]).status_code == 200
+    assert _usuario_id(personas["ana"]) != antiguo
+    assert _filas("perfil", personas["ana"]) == 0
+    with base_de_datos.transaccion() as c:
+        propias = c.execute(text("SELECT count(*) FROM extracciones WHERE usuario_id = :u"),
+                            {"u": _usuario_id(personas["ana"])}).scalar_one()
+    assert propias == 0 and _huerfanas()[0] == 1
+
+
+def test_S2_4_a_failure_during_deletion_is_a_503_and_everything_remains(cliente, personas):
+    _poblar(cliente, personas["ana"])
+
+    def cae(self):
+        raise OperationalError("DELETE", {}, Exception("host secreto-db.internal refused"))
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(RepositorioDeUsuaria, "_eliminar_usuaria", cae)  # runs after the other tables were cleared
+        r = _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
+    assert r.status_code == 503 and "secreto-db" not in r.get_data(as_text=True)
+    for tabla in TABLAS_PROPIAS:
+        assert _filas(tabla, personas["ana"]) == 1, tabla
+    assert _huerfanas()[0] == 0
+    assert _llamar(cliente, "GET", "/perfil", personas["ana"]).get_json() == PERFIL
+
+
+def test_a_user_that_vanished_between_checks_is_the_generic_404(cliente, personas):
+    _llamar(cliente, "GET", "/yo", personas["ana"])
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(RepositorioDeUsuaria, "borrar_cuenta", lambda self: False)
+        r = _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
+    assert r.status_code == 404 and r.get_json() == {"ok": False, "error": "no encontrado"}
 
 
 # --- failures are generic -----------------------------------------------------------------------------
