@@ -102,12 +102,13 @@ would leave the user without a cover letter.
 
 When the master comes from the database in another language than the document (the
 response says `master_traducido: true`), detectors that compare literal text would raise
-false alarms: the words simply differ between languages. Every detector declares
-`independiente_del_idioma`. Language-independent ones keep running (`cifras_no_respaldadas`,
+false alarms: the words simply differ between languages. Every detector in the registry
+declares `independiente_del_idioma` (the input check `evaluar_descripcion_oferta` is not a detector and is outside the registry). Language-independent ones keep running (`cifras_no_respaldadas`,
 `tecnologias_no_respaldadas`, `inflacion`); the text-matching ones
-(`skills_no_respaldadas`, `experiencia_mal_atribuida`, whose years regex is Spanish) are
-skipped by `guardrails.revisar(..., traducido=True)` and listed in the `no_evaluables`
-field of `/generar-carta`, so that "no warning" is never read as "checked and clean". The
+(`skills_no_respaldadas`, `titular_fuera_de_contrato`, whose PERFIL BASE section names are
+Spanish, and `experiencia_mal_atribuida`, whose years regex is Spanish) are skipped by
+`guardrails.revisar(..., traducido=True)` and listed in the `no_evaluables` field of
+`/generar-carta` and `/generar-cv`, so that "no warning" is never read as "checked and clean". The
 default flow (Drive master, same language) is unchanged and `no_evaluables` is empty.
 
 ### The fifth guardrail came out of the second one's failure

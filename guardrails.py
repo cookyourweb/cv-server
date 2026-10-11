@@ -656,6 +656,8 @@ from pydantic import BaseModel, ConfigDict
 
 CV = "cv"
 CARTA = "carta"
+# The CV headline is checked on its own: the detector reads the headline, not the body.
+TITULAR = "titular"
 
 
 class Guardrail(Protocol):
@@ -726,6 +728,12 @@ GUARDRAILS = [
     # refactor es como se rompen las cosas en silencio. Anotado para decidirlo.
     _Detector("experiencia_mal_atribuida", frozenset({CARTA}), detectar_experiencia_mal_atribuida, independiente_del_idioma=False),
     _Detector("inflacion", frozenset({CV, CARTA}), detectar_inflacion, independiente_del_idioma=True),
+    # Reads the headline against the PERFIL BASE. Text-matching: it finds the section by
+    # its Spanish name ("Identidad profesional", "Identidades permitidas", "Variante
+    # permitida") and compares the headline's identities as literal strings with the
+    # master's. A master in another language names both differently, so it would
+    # either go silent or raise false alarms: translated mode skips it.
+    _Detector("titular_fuera_de_contrato", frozenset({TITULAR}), detectar_titular_fuera_de_contrato, independiente_del_idioma=False),
 ]
 
 

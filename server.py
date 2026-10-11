@@ -953,36 +953,25 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     #     una peticion, no una garantia. Se contrasta la salida contra el Master.
     #     NO se aborta: una cifra sospechosa puede ser legitima (reformulacion) y
     #     abortar dejaria a la usuaria sin CV. Se avisa para que ella lo revise.
-    cifras_sospechosas = detectar_cifras_no_respaldadas(contenido_cv, cv_master)
-    if cifras_sospechosas:
-        logger.warning(
-            "CIFRAS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
-            email, empresa, puesto, cifras_sospechosas,
-        )
-
-    #     Lo mismo con las tecnologias: la oferta pide una cosa y el modelo tiende a
-    #     devolverla como si la candidata la tuviera. Tampoco se aborta, se avisa.
-    tecnologias_sospechosas = detectar_tecnologias_no_respaldadas(contenido_cv, cv_master)
-    if tecnologias_sospechosas:
-        logger.warning(
-            "TECNOLOGIAS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
-            email, empresa, puesto, tecnologias_sospechosas,
-        )
-
-    #     Y la seccion de skills, elemento a elemento: es donde el modelo vuelca el
-    #     stack de la oferta y donde el catalogo de arriba es ciego a lo que no
-    #     tiene dado de alta, que es precisamente lo nuevo de cada oferta.
-    skills_sospechosas = detectar_skills_no_respaldadas(contenido_cv, cv_master)
-    if skills_sospechosas:
-        logger.warning(
-            "SKILLS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
-            email, empresa, puesto, skills_sospechosas,
-        )
+    #     Cifras, tecnologias y skills (elemento a elemento: es donde el modelo vuelca el
+    #     stack de la oferta y donde el catalogo es ciego a lo nuevo) salen del registro,
+    #     igual que en la carta. Con el master en otro idioma (`master_traducido`) los
+    #     que comparan texto literal se saltan y se publican en `no_evaluables`.
+    traducido = master.master_traducido
+    hallazgos_cv = {a.regla: a.hallazgos for a in
+                    guardrails.revisar(contenido_cv, cv_master, guardrails.CV, traducido=traducido)}
+    cifras_sospechosas = hallazgos_cv.get("cifras_no_respaldadas", [])
+    tecnologias_sospechosas = hallazgos_cv.get("tecnologias_no_respaldadas", [])
+    for regla, hallazgos in hallazgos_cv.items():
+        logger.warning("%s por el CV Master en el CV de %s para %s/%s: %s",
+                       regla.upper().replace("_", " "), email, empresa, puesto, hallazgos)
 
     # 5d. Guardrail del titular: que respete el contrato del PERFIL BASE. Es el unico
-    #     de los tres que mira la CABECERA, y viene de un fallo medido: los CV de la consultora de Europa del Este y
+    #     que mira la CABECERA, y viene de un fallo medido: los CV de la consultora de Europa del Este y
     #     la fintech de Londres usaron la Variante permitida sin cumplir su condicion.
-    titular_sospechoso = detectar_titular_fuera_de_contrato(titular, cv_master)
+    #     Compara texto literal con el master, asi que tambien se salta si esta traducido.
+    titular_sospechoso = [h for a in guardrails.revisar(titular, cv_master, guardrails.TITULAR,
+                                                        traducido=traducido) for h in a.hallazgos]
     if titular_sospechoso:
         logger.warning(
             "TITULAR FUERA DEL CONTRATO del PERFIL BASE en el CV de %s para %s/%s: %s",
@@ -1042,6 +1031,11 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         # Vacio = el titular respeta el contrato del PERFIL BASE. Si trae algo, el titular
         # cambio la identidad o su orden: revisarlo, es lo primero que lee un recruiter.
         "titular_fuera_de_contrato": titular_sospechoso,
+        # Guardrails that could not be evaluated because the master is in another language
+        # (translated mode). Empty in the default flow. Not empty means "no warning" above
+        # is NOT "checked and clean" for these.
+        "no_evaluables": (guardrails.no_evaluables(guardrails.CV, traducido)
+                          + guardrails.no_evaluables(guardrails.TITULAR, traducido)),
         # suficiente=False significa que la DESCRIPCION no daba material para adaptar:
         # el CV es generico aunque no haya ningun otro aviso. Es lo PRIMERO que hay que
         # mirar, porque los demas guardrails no detectan un CV correcto pero vacio.

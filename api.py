@@ -47,6 +47,8 @@ class GenerarCVResponse(BaseModel):
     cifras_no_respaldadas: list[str] = []
     tecnologias_no_respaldadas: list[str] = []
     titular_fuera_de_contrato: list[str] = []
+    # Guardrails skipped because the master is in another language (translated mode).
+    no_evaluables: list[str] = []
     descripcion_oferta: DescripcionOferta | None = None
     # Tokens que gasto la generacion (ADR-004: lo paga la clave de la usuaria).
     consumo: dict | None = None
