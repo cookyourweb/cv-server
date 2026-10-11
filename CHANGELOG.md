@@ -42,7 +42,8 @@ overrides them, and `/health` (field `modelos`) shows the active ones.
 |---|---|---|
 | Adapted CV (`/generar-cv`) | `claude-sonnet-4-6` | `CV_MODEL` |
 | Cover letter (`/generar-carta`) | `claude-sonnet-4-6` | `CARTA_MODEL` |
-| CV and letter fallback (`call_llm_calidad` and `call_llm`) | If Claude fails: Groq (`openai/gpt-oss-120b`), then Gemini, then Claude Haiku. `modelo_usado` reports the model that actually wrote it | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
+| CV and letter fallback, owner's legacy/exempt flow (`call_llm_calidad` and `call_llm`) | If Claude fails: Groq (`openai/gpt-oss-120b`), then Gemini, then Claude Haiku. `modelo_usado` reports the model that actually wrote it | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
+| CV and letter, invited users (`llm.call_llm_invitada`) | Claude, then Groq and nothing else (never Gemini: the consent text names only Anthropic and Groq). The generation cost estimate (`cuota.estimar_eur`) bills Claude plus Groq only | `CV_MODEL`, `CARTA_MODEL`, `GROQ_MODEL` |
 | Offer ranking (`real_jobs.rankear_con_groq`) | `openai/gpt-oss-120b` (Groq), with a deterministic heuristic fallback | `GROQ_MODEL` |
 | General text (`call_llm`) | Groq, then Gemini, then Claude Haiku 4.5 | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
 

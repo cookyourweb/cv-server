@@ -33,8 +33,11 @@ for their generations for now, with limits that make the worst month a known num
    only then calls the model. Order: quota, then cap.
 3. **Pessimistic reservation, honest close.** The reservation holds the worst case: the
    prompt at 3 characters per token plus the call's `max_tokens` at the primary price, PLUS
-   the whole fallback cascade of `call_llm_calidad` (Groq, Gemini, Claude, each at 4096
-   output tokens), times a 1.25 margin. A successful call closes with the real cost from the
+   its only fallback, Groq (invited users generate through `llm.call_llm_invitada`: Claude,
+   then Groq, never Gemini, because the consent text names only Anthropic and Groq), each
+   asked for the same `max_tokens`, times a 1.25 margin. The estimate bills Claude plus Groq
+   and nothing else (`cuota.estimar_eur`). The owner's legacy/exempt flow is not metered and
+   keeps `call_llm_calidad` and its wider cascade. A successful call closes with the real cost from the
    usage `llm.py` attaches (the estimate when the provider reported none). A crash leaves the
    row `reservada`, which over-counts and never under-counts.
 4. **Refunds in units, not in euros.** A failed generation (the call raised) gives the
@@ -79,8 +82,8 @@ for their generations for now, with limits that make the worst month a known num
 - A tailored CV is about 0.02 EUR and a letter about 0.01 EUR on Sonnet (order of magnitude,
   from the `consumo` the routes log), so a full quota is roughly 0.25 EUR per user per month.
   20 EUR covers about 80 users who use all of it; the alarm fires at 14 EUR.
-- The worst case of ONE reservation is a few tenths of a euro (primary plus the whole
-  fallback cascade, with margin). That is what a failed call keeps counting.
+- The worst case of ONE reservation is a few tenths of a euro (Claude plus its Groq
+  fallback, with margin). That is what a failed call keeps counting.
 
 ## Triggers to move to paid packs
 
