@@ -109,7 +109,7 @@ EXTRACCIONES = {
 def test_S3_9_the_extraction_never_logs_or_returns_the_cv_the_answer_or_the_error_text(
         cliente, personas, caplog, monkeypatch, entorno, camino):  # noqa: F811
     preparar(cliente, personas["ana"], texto=f"Developer. {CENTINELA}. Skills: Angular and TypeScript.")
-    monkeypatch.setattr(llm, "call_llm_calidad", EXTRACCIONES[camino]())
+    monkeypatch.setattr(llm, "call_llm_extraccion", EXTRACCIONES[camino]())
     with caplog.at_level(logging.DEBUG):
         r = cliente.post("/extraccion", headers=personas["ana"].cabeceras)
     assert r.status_code == 200
