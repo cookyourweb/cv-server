@@ -244,7 +244,7 @@ Two other known debts:
 | `POST /interes` | Google token | "Tell me about packs / access through my academy" lead, body `{tipo: "paquetes"\|"academia", organizacion?: string up to 120}`. One row per user and kind, idempotent (201 `{tipo, organizacion}`; 422 on anything else); deleted with the account |
 | `GET /ofertas/{id}/encaje` | Google token | Rule-based match of one of the caller's offers against her profile and master ([ADR-009](docs/ADR-009-rule-based-match.md)). 200 `{cubiertos, huecos, no_evaluables, alcanzable, cobertura}`; 404 (identical for not hers, nobody's and missing), 409 with neither profile nor master, 503 if Notion fails |
 | `POST /encajes` | Google token | Same for `{"ids": [...]}` (max 50, 51 is 422): `{"<id>": {alcanzable, cobertura}}` keyed by the id as sent (summary only); ids that are not hers are silently omitted, empty ids give `{}` |
-| `DELETE /cuenta` | Google token | Delete the account and its data in one transaction (204) |
+| `DELETE /cuenta` | Google token | Delete the account and its data in one transaction (204). Notion and Drive are NOT touched: see "What deleting an account removes and what it does not" |
 | `PUT /ajustes/extraccion` | Machine key | Kill switch of the owner-paid CV extraction, body `{"activa": bool}`; no redeploy needed |
 | `POST /registro` | Machine key | User sign-up |
 | `POST /generar-cv`, `POST /generar-carta` | Machine key | Generation for the user's email. For a Neon user they count against the quota and the cap: **429** `{ok: false, error, motivo: "cuota"\|"tope", se_renueva: "YYYY-MM-01"}` before any model is called, **503** `motivo: "indisponible"` if the ledger is down. The owner, `CUOTA_EXENTAS` and users with no Neon row (legacy) are never counted |
@@ -334,9 +334,43 @@ no path or body field names another user, and the data layer
 another user's data is indistinguishable from data that does not exist (404). Fields are
 snake_case (`anios_experiencia`, `salario_min`, `salario_moneda`); the consent types are
 `almacenar_cv` and `enviar_cv_a_ia` with version `v2` (`repositorio.VERSION_DE_CONSENTIMIENTO`; a `v1` consent no longer authorises anything and `POST /consentimientos` answers 422 to it). Deleting the account removes the
-user, mailboxes, profile, CV master, consents and interest leads; the spend ledgers keep its rows with no
+user, mailboxes, invitation rows, profile, CV master, consents and interest leads; the spend ledgers keep its rows with no
 user attached, so the monthly cap cannot be bypassed. Without `DATABASE_URL` these routes
 answer a generic `503`, and `/yo` and `/health` are unaffected.
+
+### What deleting an account removes and what it does not
+
+`DELETE /cuenta` answers `204` once the database transaction commits. It is all or nothing
+(a failure answers `503` and changes nothing).
+
+**Removed, in Neon, in that transaction:** the user row; every mailbox of hers (`usuario_emails`);
+her **invitation rows** (`invitaciones`, which keep the email in the clear: those of her mailboxes
+and those she consumed), so the address is not kept and the owner has to invite her again to let her
+back in; her profile; every stored CV, encrypted, in all languages; her consents (including the
+revoked ones); and her interest leads.
+
+**Kept, anonymous:** the spend ledgers `extracciones` and `gastos_generacion` keep their rows with
+`usuario_id` set to NULL (model, token counts, cost, timestamps). They hold no email, name, company
+or position (the tables have no such column; a test guards it) and they keep the monthly caps and the
+one-extraction rule honest. Aggregates must be computed from them only.
+
+**NOT removed, outside Neon (a manual job for the owner, nothing is automated yet):**
+
+| Where | What stays | How to find it |
+|---|---|---|
+| Notion, `Usuarios` database | Her page, if one was created (`POST /registro`): name, email, profile, target role, stack, salary, modality, city, LinkedIn, CV master URL and file id | Property `Email` equals her mailbox. The generation routes need this page to exist for an email |
+| Notion, `Ofertas` database | Every offer with her page in the `Usuario` relation, including `Link CV Drive` and `CV usado` (a file name with her name and the position) | Relation `Usuario` = her page id |
+| Google Drive, folder `FOLDER_CV_GENERADOS` | Every generated CV, `cv-<name>-<position>-<year>.docx`, readable by **anyone with the link** | The `Link CV Drive` values above (the file name carries her name slug) |
+| Google Drive, folder `FOLDER_CV_MASTERS` | Legacy masters of Notion users (the owner's flow). Invited users never put a master there: theirs lives encrypted in Neon | Her page's `CV Master URL` |
+| Neon / GitHub backups | The daily encrypted dump (30 days, see Backups) still contains her rows until it expires; Neon's own restore window is 6 hours | Nothing to do: they expire |
+| n8n and the mail provider | Execution history and sent mail of the search workflow may hold her address and profile (to be confirmed) | n8n executions, Brevo logs |
+| AI providers | Whatever Anthropic and Groq keep of the requests (Groq with zero data retention enabled, Anthropic to be confirmed) | Provider consoles |
+
+Order that works: before or right after `DELETE /cuenta`, read her Notion page and offers (the email in
+the page still identifies her), delete the Drive files from the `Link CV Drive` values, archive the offers
+and then her page. The logs of this service carry no email, company or position (an opaque per-process
+label at most, see `privacidad.etiqueta_opaca`). The "Tu cuenta" page of the panel should say the same:
+that the registry of spend stays anonymous and that copies expire in 30 days.
 
 **Withdrawing a consent.** `DELETE /consentimientos/{tipo}` stamps `revocado_en` on the active row of
 that type (every version still active). The contract the panel implements against:

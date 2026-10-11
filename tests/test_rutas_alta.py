@@ -308,6 +308,50 @@ def test_S2_3_deleting_the_account_answers_204_and_removes_every_owned_row(clien
     assert cuantas == 1 and float(gasto) == 0.04  # the anonymous aggregate stays (REQ-2.4)
 
 
+def _invitaciones(*correos):
+    with base_de_datos.transaccion() as c:
+        return c.execute(text("SELECT email FROM invitaciones WHERE email = ANY(:c) ORDER BY email"),
+                         {"c": list(correos)}).scalars().all()
+
+
+def test_S2_3b_deleting_the_account_also_deletes_her_invitation_so_the_email_is_not_kept(cliente, personas):
+    _poblar(cliente, personas["ana"])
+    assert _invitaciones(personas["ana"].email, personas["bea"].email) == [personas["ana"].email, personas["bea"].email]
+    assert _llamar(cliente, "DELETE", "/cuenta", personas["ana"]).status_code == 204
+    # Hers is gone (it was consumed by her: `usada_por` pointed at her); Bea's, unused, is untouched.
+    assert _invitaciones(personas["ana"].email, personas["bea"].email) == [personas["bea"].email]
+
+
+def test_S2_3c_every_mailbox_of_the_account_loses_its_invitation(cliente, personas):
+    """A second mailbox is attached through its own invitation; both go with the account."""
+    _poblar(cliente, personas["ana"])
+    uid = _usuario_id(personas["ana"])
+    segundo = "ana.segundo@ejemplo.es"
+    with base_de_datos.transaccion() as c:
+        c.execute(text("INSERT INTO invitaciones (email, caduca_en, usada_en, usada_por) "
+                       "VALUES (:e, now() + interval '7 days', now(), :u)"), {"e": segundo, "u": uid})
+        c.execute(text("INSERT INTO usuario_emails (email, usuario_id, principal) VALUES (:e, :u, false)"),
+                  {"e": segundo, "u": uid})
+    try:
+        assert _llamar(cliente, "DELETE", "/cuenta", personas["ana"]).status_code == 204
+        assert _invitaciones(personas["ana"].email, segundo) == []
+    finally:
+        with base_de_datos.transaccion() as c:
+            c.execute(text("DELETE FROM invitaciones WHERE email = :e"), {"e": segundo})
+
+
+def test_S2_3d_the_spend_aggregates_stay_anonymous_and_hold_no_email(cliente, personas):
+    _poblar(cliente, personas["ana"])
+    _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
+    with base_de_datos.transaccion() as c:
+        columnas = c.execute(text(
+            "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = current_schema() "
+            "AND table_name IN ('extracciones', 'gastos_generacion') AND (column_name ILIKE '%mail%' "
+            "OR column_name ILIKE '%correo%')")).all()
+    assert columnas == []                       # the ledgers cannot hold an email at all
+    assert _huerfanas()[0] == 1
+
+
 def test_S2_5_deleting_one_account_leaves_another_users_data_intact(cliente, personas):
     _poblar(cliente, personas["ana"])
     _poblar(cliente, personas["bea"])
@@ -330,8 +374,9 @@ def test_S2_7_a_re_invited_mailbox_is_a_new_user_and_the_old_spend_still_counts(
     _poblar(cliente, personas["ana"])
     antiguo = _usuario_id(personas["ana"])
     _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
-    with base_de_datos.transaccion() as c:
-        c.execute(text("UPDATE invitaciones SET usada_en = NULL, usada_por = NULL WHERE email = :e"),
+    assert _llamar(cliente, "GET", "/yo", personas["ana"]).status_code == 403   # the invitation went with the account
+    with base_de_datos.transaccion() as c:                                      # the owner invites her again
+        c.execute(text("INSERT INTO invitaciones (email, caduca_en) VALUES (:e, now() + interval '7 days')"),
                   {"e": personas["ana"].email})
     assert _llamar(cliente, "GET", "/yo", personas["ana"]).status_code == 200
     assert _usuario_id(personas["ana"]) != antiguo
@@ -353,6 +398,7 @@ def test_S2_4_a_failure_during_deletion_is_a_503_and_everything_remains(cliente,
     assert r.status_code == 503 and "secreto-db" not in r.get_data(as_text=True)
     for tabla in TABLAS_PROPIAS:
         assert _filas(tabla, personas["ana"]) == 1, tabla
+    assert _invitaciones(personas["ana"].email) == [personas["ana"].email]      # rolled back with the rest
     assert _huerfanas()[0] == 0
     assert _llamar(cliente, "GET", "/perfil", personas["ana"]).get_json() == PERFIL
 

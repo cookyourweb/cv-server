@@ -223,13 +223,20 @@ class RepositorioDeUsuaria:
         """Delete the user and everything she owns, in the caller's transaction.
 
         Each owned table is cleared explicitly and the user row last, so the result does
-        not depend only on the FK cascade settings. Ledger rows (`extracciones` and
+        not depend only on the FK cascade settings. Her invitations (they keep her email) are
+        deleted with her mailboxes. Ledger rows (`extracciones` and
         `gastos_generacion`) are not deleted: the foreign key sets their `usuario_id` to
         NULL, which leaves an anonymous aggregate that keeps the spend caps (and the
         one-extraction rule) honest (REQ-2.4). Returns False when the user no longer exists.
         """
-        for tabla in ("consentimientos", "cv_master", "perfil", "intereses", "usuario_emails"):
+        for tabla in ("consentimientos", "cv_master", "perfil", "intereses"):
             self._c.execute(text(f"DELETE FROM {tabla} WHERE usuario_id = :u"), {"u": self._usuario_id})
+        # Her invitations hold her mailbox in the clear: they go before the mailboxes do (the
+        # subquery needs them). Those she consumed (`usada_por`) go too.
+        self._c.execute(
+            text("DELETE FROM invitaciones WHERE usada_por = :u OR email IN "
+                 "(SELECT email FROM usuario_emails WHERE usuario_id = :u)"), {"u": self._usuario_id})
+        self._c.execute(text("DELETE FROM usuario_emails WHERE usuario_id = :u"), {"u": self._usuario_id})
         return self._eliminar_usuaria()
 
     def _eliminar_usuaria(self) -> bool:
