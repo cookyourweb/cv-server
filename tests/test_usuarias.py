@@ -32,6 +32,10 @@ def c(motor):
     """A connection whose work is rolled back at the end of the test."""
     with motor.connect() as conexion:
         transaccion = conexion.begin()
+        # The test branch is shared with manual trials. Start each test from empty
+        # tables inside this transaction; the rollback brings any trial rows back.
+        conexion.execute(text("DELETE FROM usuarios"))
+        conexion.execute(text("DELETE FROM invitaciones"))
         yield conexion
         transaccion.rollback()
 
