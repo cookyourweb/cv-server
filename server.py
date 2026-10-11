@@ -120,10 +120,12 @@ class CVError(Exception):
     El core (generar_cv_core, ...) la lanza; cada capa HTTP (Flask/FastAPI)
     la mapea a su formato de respuesta. Ver docs/ADR-001."""
 
-    def __init__(self, status: int, message: str):
+    def __init__(self, status: int, message: str, extra: dict | None = None):
         super().__init__(message)
         self.status = status
         self.message = message
+        # Extra fields of the JSON body (e.g. `motivo`, `se_renueva` of a quota refusal).
+        self.extra = extra or {}
 
 
 # ══════════════════════════════════════════════
@@ -153,6 +155,7 @@ from llm import (  # noqa: F401
 # Los guardrails viven en `guardrails.py`. Se reexportan aqui para no cambiar la
 # superficie publica del modulo: los endpoints y los tests los siguen viendo en
 # `server`.
+import cuota
 import fuente_master
 import guardrails
 from guardrails import (  # noqa: F401
@@ -389,6 +392,26 @@ def consumo_de(respuesta) -> dict:
         "tokens_entrada": respuesta.tokens_entrada,
         "tokens_salida":  respuesta.tokens_salida,
     }
+
+
+# How a refusal of the generation quota is reported. 429 for both limits (the request is valid and
+# the same one succeeds after `se_renueva`), 503 only when the ledger itself is down. n8n tells
+# them apart by `motivo`: "cuota" (her units), "tope" (the global monthly cap), "indisponible".
+_RECHAZOS_DE_CUOTA = {
+    "cuota": (429, "Has llegado al limite de solicitudes de este mes"),
+    "tope": (429, "La generacion esta en pausa hasta el mes que viene"),
+    "indisponible": (503, "servicio no disponible"),
+}
+
+
+def _rechazo_de_cuota(rechazada) -> tuple:
+    """(status, message, extra body fields) of a `cuota.Rechazada`."""
+    rechazo = rechazada.rechazo
+    estado, mensaje = _RECHAZOS_DE_CUOTA[rechazo.motivo]
+    extra = {"motivo": rechazo.motivo}
+    if rechazo.se_renueva is not None:
+        extra["se_renueva"] = rechazo.se_renueva.isoformat()
+    return estado, mensaje, extra
 
 
 def requiere_clave_maquina(vista):
@@ -911,10 +934,17 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     )
 
     try:
-        # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad
-        respuesta_llm = call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096)
+        # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad.
+        # La cuota y el tope mensual se miran ANTES de llamar a ningun modelo (ADR-010);
+        # para la duena y para el modo heredado `cuota.generar` es solo la llamada.
+        respuesta_llm = cuota.generar(
+            email, "cv", prompt, modelo=CV_MODEL, max_tokens=4096,
+            llamar=lambda: call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096))
         contenido_cv  = respuesta_llm.contenido
         logger.info("CONSUMO cv %s", consumo_de(respuesta_llm))
+    except cuota.Rechazada as r:
+        estado, mensaje, extra = _rechazo_de_cuota(r)
+        raise CVError(estado, mensaje, extra)
     except RuntimeError as e:
         raise CVError(503, str(e))
 
@@ -1057,7 +1087,7 @@ def generar_cv():
             idioma_in=(datos.get("idioma") or "").strip().lower(),
         )
     except CVError as e:
-        return jsonify({"ok": False, "error": e.message}), e.status
+        return jsonify({"ok": False, "error": e.message, **e.extra}), e.status
     return jsonify(result)
 
 
@@ -1149,9 +1179,14 @@ def generar_carta():
     )
 
     try:
-        respuesta_llm = call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500)
+        respuesta_llm = cuota.generar(
+            email, "carta", prompt, modelo=CARTA_MODEL, max_tokens=1500,
+            llamar=lambda: call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500))
         carta         = respuesta_llm.contenido
         logger.info("CONSUMO carta %s", consumo_de(respuesta_llm))
+    except cuota.Rechazada as r:
+        estado, mensaje, extra = _rechazo_de_cuota(r)
+        return jsonify({"ok": False, "error": mensaje, **extra}), estado
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503
 

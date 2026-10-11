@@ -141,3 +141,17 @@ def test_api_generar_cv_sin_clave_configurada_no_abre(monkeypatch):
         r = client.post("/generar-cv", json=_payload(), headers={"X-Clave-Maquina": ""})
     assert r.status_code == 401
     core.assert_not_called()
+
+
+def test_un_rechazo_de_cuota_conserva_motivo_y_fecha_en_fastapi():
+    error = server.CVError(429, "limite", {"motivo": "cuota", "se_renueva": "2026-11-01"})
+    with patch.object(api, "generar_cv_core", side_effect=error):
+        r = client.post("/generar-cv", json=_payload())
+    assert r.status_code == 429
+    assert r.json() == {"ok": False, "error": "limite", "motivo": "cuota", "se_renueva": "2026-11-01"}
+
+
+def test_un_error_sin_extra_mantiene_el_cuerpo_de_siempre():
+    with patch.object(api, "generar_cv_core", side_effect=server.CVError(404, "no esta")):
+        r = client.post("/generar-cv", json=_payload())
+    assert r.json() == {"ok": False, "error": "no esta"}

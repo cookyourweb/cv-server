@@ -73,5 +73,5 @@ def generar_cv(req: GenerarCVRequest):
             idioma_in=(req.idioma or ""),
         )
     except CVError as e:
-        return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message})
+        return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message, **e.extra})
     return result
