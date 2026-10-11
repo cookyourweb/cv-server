@@ -200,6 +200,10 @@ Documented as ADRs in [`docs/`](docs/):
   and an offer is the caller's only if its Notion "Usuario" relation holds her page id;
   anything else is one identical 404.
 
+- **[ADR-010](docs/ADR-010-owner-paid-generation-quota.md)**. Invited users generate CVs and
+  letters on the owner's keys: 8 applications per user and UTC month (CV 0.7 + letter 0.3) and a
+  20 EUR monthly cap, both reserved before any model is called; refusals are 429 with `motivo`.
+
 > **Authentication is covered in ADR-003 of the `buscartrabajo` repo**
 > (`docs/adr/ADR-003-authentication.md`), which is not the ADR-003 above.
 
@@ -225,7 +229,7 @@ Two other known debts:
 |---|---|---|
 | `GET /` | Public | Invitation page (`templates/inicio.html`) |
 | `GET /health` | Public | Status, active models and deployed branch/commit |
-| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is |
+| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is, plus `cuota: {usadas, limite, se_renueva}` for Neon users who are not exempt (units with one decimal, [ADR-010](docs/ADR-010-owner-paid-generation-quota.md)) |
 | `GET /perfil` | Google token | The caller's profile (404 if none) |
 | `PUT /perfil` | Google token | Create or replace the profile (422 on invalid data) |
 | `POST /consentimientos` | Google token | Record a consent `{tipo, version}` (201, idempotent) |
@@ -233,11 +237,13 @@ Two other known debts:
 | `GET /cv` | Google token | The caller's masters, metadata only (`idioma`, `formato`, `subido_en`) |
 | `DELETE /cv/{idioma}` | Google token | Delete the caller's master in `es` or `en` (204, 404) |
 | `POST /extraccion` | Google token | Owner-paid extraction of profile proposals from her stored CV, empty body. 200 `{estado: "propuesta", propuestas: [{campo, valor, cita}]}` or `{estado: "manual", motivo: desactivada\|ya_usada\|tope\|proveedor\|indisponible}`; 403 without the `enviar_cv_a_ia` consent, 404 without a stored CV |
+| `POST /interes` | Google token | "Tell me about packs / access through my academy" lead, body `{tipo: "paquetes"\|"academia", organizacion?: string up to 120}`. One row per user and kind, idempotent (201 `{tipo, organizacion}`; 422 on anything else); deleted with the account |
 | `GET /ofertas/{id}/encaje` | Google token | Rule-based match of one of the caller's offers against her profile and master ([ADR-009](docs/ADR-009-rule-based-match.md)). 200 `{cubiertos, huecos, no_evaluables, alcanzable, cobertura}`; 404 (identical for not hers, nobody's and missing), 409 with neither profile nor master, 503 if Notion fails |
 | `POST /encajes` | Google token | Same for `{"ids": [...]}` (max 50, 51 is 422): `{"<id>": {alcanzable, cobertura}}` keyed by the id as sent (summary only); ids that are not hers are silently omitted, empty ids give `{}` |
 | `DELETE /cuenta` | Google token | Delete the account and its data in one transaction (204) |
 | `PUT /ajustes/extraccion` | Machine key | Kill switch of the owner-paid CV extraction, body `{"activa": bool}`; no redeploy needed |
 | `POST /registro` | Machine key | User sign-up |
+| `POST /generar-cv`, `POST /generar-carta` | Machine key | Generation for the user's email. For a Neon user they count against the quota and the cap: **429** `{ok: false, error, motivo: "cuota"\|"tope", se_renueva: "YYYY-MM-01"}` before any model is called, **503** `motivo: "indisponible"` if the ledger is down. The owner, `CUOTA_EXENTAS` and users with no Neon row (legacy) are never counted |
 | `POST /generar-cv` | Machine key | CV tailored to a posting |
 | `POST /generar-carta` | Machine key | Cover letter tailored to a posting |
 | `GET /usuarios` | Machine key | User list |
@@ -297,7 +303,7 @@ has a Drive master, false only when both are definitely empty, omitted when the 
 or Notion cannot be reached) and `origen_master` (`drive`, `neon` or `null`).
 
 **CORS.** The browser routes of the panel (`/yo`, `/health`, `/perfil`,
-`/consentimientos`, `/cv`, `/extraccion`, `/cuenta`, `/encajes` and
+`/consentimientos`, `/cv`, `/extraccion`, `/interes`, `/cuenta`, `/encajes` and
 `/ofertas/<id>/encaje`) allow `GET, POST, PUT, DELETE` with `Authorization` and
 `Content-Type`, with exact origin matching against `CORS_ORIGENES`. Empty = no origins.
 Machine routes never get CORS.
@@ -318,13 +324,13 @@ The full design decision is in ADR-003 of the `buscartrabajo` repo.
 
 ### Owner-scoped routes
 
-`/perfil`, `/consentimientos`, `/cv` and `/cuenta` act only on the user resolved from the token:
+`/perfil`, `/consentimientos`, `/cv`, `/interes` and `/cuenta` act only on the user resolved from the token:
 no path or body field names another user, and the data layer
 (`RepositorioDeUsuaria(conexion, usuario_id)`) filters every statement by that id, so
 another user's data is indistinguishable from data that does not exist (404). Fields are
 snake_case (`anios_experiencia`, `salario_min`, `salario_moneda`); the consent types are
 `almacenar_cv` and `enviar_cv_a_ia` with version `v1`. Deleting the account removes the
-user, mailboxes, profile, CV master and consents; the spend ledger keeps its rows with no
+user, mailboxes, profile, CV master, consents and interest leads; the spend ledgers keep its rows with no
 user attached, so the monthly cap cannot be bypassed. Without `DATABASE_URL` these routes
 answer a generic `503`, and `/yo` and `/health` are unaffected.
 
@@ -434,6 +440,18 @@ missing one does not crash the service: the feature quietly degrades.
 - [ ] `NOTION_TOKEN` and `NOTION_DB_USUARIOS`: the owner of an offer is resolved through them.
 - [ ] `DATABASE_URL`, `CV_CLAVES`, `CV_CLAVE_ACTIVA`, `CORS_ORIGENES`: see "Database" and
   "Invitation-only access".
+- [ ] Generation quota and cap ([ADR-010](docs/ADR-010-owner-paid-generation-quota.md)), BEFORE
+  `DATABASE_URL` is set on Render and migration `0002_cuota` is applied:
+  - [ ] `CUOTA_EXENTAS`: the owner's mailbox(es), comma-separated. Without it a database outage
+    could refuse her own generation.
+  - [ ] `CUOTA_SOLICITUDES_MES`, `CUOTA_UNIDADES_CV`, `CUOTA_UNIDADES_CARTA`,
+    `TOPE_GENERACION_EUR`: only if the defaults (8, 0.7, 0.3, 20 EUR) are not what you want.
+  - [ ] `AVISO_GASTO_EMAIL`, `BREVO_API_KEY`, `BREVO_REMITENTE`: the 70 % alarm mail. Without
+    all three no mail is sent (generation still works). The sender must be verified in Brevo.
+  - [ ] Verify the `PRECIO_*` constants (primary, Groq, `PRECIO_GEMINI_*`) against the providers'
+    price pages, as for the extraction.
+  - [ ] Set a monthly **spend limit on the Anthropic console** for the key behind `CLAUDE_API_KEY`:
+    a second layer that does not depend on this code's estimate.
 
 ## Tests
 
