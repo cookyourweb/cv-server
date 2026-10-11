@@ -24,6 +24,12 @@ def _preparar(monkeypatch, par, invitadas=("ana@ejemplo.es",), descarga=None):
     monkeypatch.setattr(srv, "CLAVES", ClavesPublicas("https://jwks", descarga, reloj=Reloj()))
 
 
+@pytest.fixture(autouse=True)
+def _sin_notion(monkeypatch):
+    """/yo looks the legacy user up in Notion; these tests never call it."""
+    monkeypatch.setattr(srv, "buscar_usuario_por_email", lambda email: None)
+
+
 @pytest.fixture
 def cliente(monkeypatch, par):
     _preparar(monkeypatch, par)
@@ -38,7 +44,8 @@ def _bearer(par, **cambios):
 def test_token_valido_de_invitada_responde_200_con_su_identidad(cliente, par):
     r = cliente.get("/yo", headers=_bearer(par))
     assert r.status_code == 200
-    assert r.get_json() == {"sub": "42", "email": "ana@ejemplo.es", "nombre": "Ana"}
+    assert r.get_json() == {"sub": "42", "email": "ana@ejemplo.es", "nombre": "Ana",
+                            "origen_master": None}
 
 
 def test_sin_authorization_responde_401(cliente):
@@ -142,8 +149,8 @@ def test_preflight_de_yo_para_origen_permitido(cliente, con_cors):
     r = cliente.options("/yo", headers={"Origin": PANEL, "Access-Control-Request-Method": "GET"})
     assert r.status_code in (200, 204)
     assert r.headers["Access-Control-Allow-Origin"] == PANEL
-    assert r.headers["Access-Control-Allow-Methods"] == "GET, OPTIONS"
-    assert r.headers["Access-Control-Allow-Headers"] == "Authorization"
+    assert r.headers["Access-Control-Allow-Methods"] == "GET, POST, PUT, DELETE, OPTIONS"
+    assert r.headers["Access-Control-Allow-Headers"] == "Authorization, Content-Type"
 
 
 def test_las_rutas_de_maquina_y_usuarios_no_llevan_cors(cliente, con_cors, monkeypatch):

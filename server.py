@@ -1293,6 +1293,9 @@ from autenticacion import (  # noqa: E402
     ClavesPublicas, ConfiguracionOIDC, ErrorDeAutenticacion, NoInvitada,
     ProveedorNoDisponible, identificar,
 )
+import base_de_datos  # noqa: E402
+import usuarias  # noqa: E402
+from flask import g  # noqa: E402
 
 # Construir esto no descarga nada ni exige variables: el import nunca falla.
 CONFIG_OIDC = ConfiguracionOIDC.desde_entorno()
@@ -1306,35 +1309,105 @@ def origenes_desde_entorno(entorno=None) -> list:
 
 
 ORIGENES_PERMITIDOS = origenes_desde_entorno()
-RUTAS_CON_CORS = {"/yo", "/health"}
+
+# Rutas del navegador (panel) con CORS, por prefijo. Las rutas de maquina (n8n) no.
+_RUTAS_CON_CORS = re.compile(
+    r"^/(?:yo|health|perfil|consentimientos|cv|extraccion|cuenta|encajes)(?:/.*)?$"
+    r"|^/ofertas/[^/]+/encaje$"
+)
 
 
 @app.after_request
 def cabeceras_cors(respuesta):
-    """CORS solo en RUTAS_CON_CORS y solo para un origen que este EXACTAMENTE en la
+    """CORS solo en las rutas del panel y solo para un origen que este EXACTAMENTE en la
     lista. Nunca '*' ni credenciales: el token viaja en Authorization, no en cookies."""
     origen = request.headers.get("Origin")
-    if request.path in RUTAS_CON_CORS and origen and origen in ORIGENES_PERMITIDOS:
+    if origen and origen in ORIGENES_PERMITIDOS and _RUTAS_CON_CORS.match(request.path):
         respuesta.headers["Access-Control-Allow-Origin"] = origen
         respuesta.headers["Vary"] = "Origin"
         if request.method == "OPTIONS":
-            respuesta.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-            respuesta.headers["Access-Control-Allow-Headers"] = "Authorization"
+            respuesta.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            respuesta.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
     return respuesta
 
 
+def _respaldo_activo() -> bool:
+    """INVITADAS como respaldo de arranque con base de datos (INVITADAS_COMO_RESPALDO=1).
+
+    Se retirara cuando las invitaciones vivan solo en la tabla.
+    """
+    return os.getenv("INVITADAS_COMO_RESPALDO", "").strip() == "1"
+
+
+def _autenticar_peticion():
+    """Devuelve (identidad, usuario_id) de la peticion actual.
+
+    Sin DATABASE_URL (produccion hoy) decide la lista INVITADAS y no se toca ninguna
+    base de datos: usuario_id es None. Con DATABASE_URL deciden las invitaciones de la
+    tabla `invitaciones`.
+    """
+    resultado = {"usuario_id": None}
+
+    def autorizar(identidad) -> bool:
+        correo = identidad.email.strip().lower()
+        if not base_de_datos.configurada():
+            return correo in CONFIG_OIDC.invitadas
+        respaldo = CONFIG_OIDC.invitadas if _respaldo_activo() else frozenset()
+        try:
+            resultado["usuario_id"] = usuarias.resolver_o_crear(identidad, respaldo=respaldo)
+        except usuarias.BaseDeDatosNoDisponible:
+            if correo in respaldo:  # base de datos fria: la lista de arranque deja pasar
+                return True
+            raise
+        return resultado["usuario_id"] is not None
+
+    identidad = identificar(request.headers.get("Authorization"), CONFIG_OIDC, CLAVES, autorizar)
+    return identidad, resultado["usuario_id"]
+
+
+con_usuaria = usuarias.crear_con_usuaria(_autenticar_peticion)
+
+
+def _estado_del_perfil(usuario_id, email: str) -> dict:
+    """tiene_perfil y origen_master de /yo. Nunca lanza: lo desconocido se omite.
+
+    `tiene_perfil` es true si hay perfil en Neon o si el usuario heredado de Notion tiene
+    master en Drive (Vero). Solo es false cuando se sabe seguro que no hay ninguno; si la
+    base de datos o Notion no responden, se omite y el guard del panel deja pasar.
+    Sin base de datos nunca es false: sin ella no se puede dar el alta.
+    """
+    perfil = master = None  # None = desconocido
+    if usuario_id is not None:
+        try:
+            perfil = usuarias.tiene_perfil(usuario_id)
+            master = usuarias.tiene_master(usuario_id) if perfil else False
+        except usuarias.BaseDeDatosNoDisponible as error:
+            logger.warning("profile lookup unavailable in /yo: %s", type(error).__name__)
+    legado = None
+    if not perfil:
+        try:
+            legado = _tiene_algun_master(buscar_usuario_por_email(email) or {})
+        except Exception as error:
+            logger.warning("legacy lookup failed in /yo: %s", type(error).__name__)
+    if master:
+        origen = "neon"
+    else:
+        origen = "drive" if legado else None
+    estado = {"origen_master": origen}
+    if perfil or legado:
+        estado["tiene_perfil"] = True
+    elif perfil is False and legado is False:
+        estado["tiene_perfil"] = False
+    return estado
+
+
 @app.route("/yo", methods=["GET"])
+@con_usuaria
 def yo():
     """Quien es la usuaria que llama, segun su token de Google."""
-    try:
-        quien = identificar(request.headers.get("Authorization"), CONFIG_OIDC, CLAVES)
-    except ErrorDeAutenticacion:
-        return jsonify({"ok": False, "error": "no autenticada"}), 401
-    except NoInvitada:
-        return jsonify({"ok": False, "error": "acceso no permitido"}), 403
-    except ProveedorNoDisponible:
-        return jsonify({"ok": False, "error": "servicio no disponible"}), 503
-    return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre})
+    quien = g.identidad
+    return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre,
+                    **_estado_del_perfil(g.usuario_id, quien.email)})
 
 
 # ══════════════════════════════════════════════
