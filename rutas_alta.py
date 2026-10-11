@@ -128,8 +128,8 @@ def _extraer(usuario_id):
             privacidad.registrar_fallo(logger, "cv decryption unavailable", error)
             return _respuesta(_NO_DISPONIBLE)
         try:
-            respuesta = llm.call_llm_calidad(propuestas.construir_prompt(texto), model=modelo,
-                                             max_tokens=extraccion.TOKENS_SALIDA_MAX)
+            # Claude then Groq only: the chain the consent text names (never the general cascade).
+            respuesta = llm.call_llm_extraccion(propuestas.construir_prompt(texto), model=modelo)
         except Exception as error:  # the whole chain failed: she keeps her attempt (ADR-004 amendment)
             privacidad.registrar_fallo(logger, "extraction provider chain failed", error)
             return _manual("proveedor")

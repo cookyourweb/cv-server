@@ -25,8 +25,9 @@ anything else counts its estimate. A `fallida` row (the whole provider chain fai
 its estimate in the sum but does not use the user's attempt: the partial unique index of
 `extracciones` ignores it, so she can retry later.
 
-This module makes no model call (the route does, through `llm.call_llm_calidad`). The estimate covers the worst case of the quality chain
-(primary model and, when it fails, the fallback), see `estimar_eur`.
+This module makes no model call (the route does, through `llm.call_llm_extraccion`: Claude, then
+Groq, nothing else). The estimate covers the worst case of that chain (primary model and, when it
+fails, the fallback), see `estimar_eur`.
 """
 import os
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 import base_de_datos
+import llm
 
 
 def _decimal_del_entorno(nombre: str, defecto: str) -> Decimal:
@@ -70,7 +72,7 @@ PRECIOS_RESPALDO_EUR_POR_MTOK = (
 )
 MARGEN = _decimal_del_entorno("MARGEN_EXTRACCION", "1.25")
 
-TOKENS_SALIDA_MAX = 1200         # max_tokens of the call (C8 must send exactly this)
+TOKENS_SALIDA_MAX = llm.TOKENS_SALIDA_EXTRACCION  # max_tokens of the call: ONE constant, shared with llm.py
 CARACTERES_POR_TOKEN = 3         # pessimistic: Spanish/English text is nearer 4
 # Instructions plus CV text may not exceed this many characters (C8 cuts the CV to fit).
 # It bounds one call to 0.05 USD at the primary prices above (amendment, S4.15).

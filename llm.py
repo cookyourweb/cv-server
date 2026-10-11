@@ -313,3 +313,62 @@ def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096)
     except Exception as e:
         logger.warning("Claude falló (%s) — cayendo a Groq", describir_error(e))
         return call_llm(prompt)
+
+
+# ── Capa EXTRACCION: la del alta, pagada por la duena (ADR-004, enmienda) ──
+# El texto de consentimiento y la enmienda nombran SOLO a Anthropic y Groq. Por eso esta
+# cadena es propia: Claude y, si cae, Groq. Nunca Gemini y nunca `call_llm`. Una sola
+# constante para el tope de salida: la usa la llamada Y la estimacion de coste
+# (`extraccion.TOKENS_SALIDA_MAX`), para que no puedan separarse.
+TOKENS_SALIDA_EXTRACCION = 1200
+
+
+def _groq_extraccion(prompt: str) -> RespuestaLLM:
+    resp = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Content-Type":  "application/json",
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+        },
+        json={
+            "model":       GROQ_MODEL,
+            "messages":    [{"role": "user", "content": prompt}],
+            "max_tokens":  TOKENS_SALIDA_EXTRACCION,
+            "temperature": 0.7,
+        },
+    )
+    resp.raise_for_status()
+    cuerpo = resp.json()
+    uso = cuerpo.get("usage") or {}
+    return RespuestaLLM(cuerpo["choices"][0]["message"]["content"], GROQ_MODEL,
+                        uso.get("prompt_tokens"), uso.get("completion_tokens"))
+
+
+def _claude_extraccion(prompt: str, model: str) -> RespuestaLLM:
+    cliente = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    resp = cliente.messages.create(
+        model=model,
+        max_tokens=TOKENS_SALIDA_EXTRACCION,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    uso = getattr(resp, "usage", None)
+    return RespuestaLLM("".join(b.text for b in resp.content if b.type == "text"), model,
+                        getattr(uso, "input_tokens", None), getattr(uso, "output_tokens", None))
+
+
+def call_llm_extraccion(prompt: str, model: str = CV_MODEL) -> RespuestaLLM:
+    """Claude, luego Groq, y NADA mas. Solo para POST /extraccion; el CV y la carta no la usan.
+
+    Si fallan los dos lanza la excepcion de Groq: quien llama cierra la reserva.
+    """
+    try:
+        respuesta = _claude_extraccion(prompt, model)
+        logger.info("LLM extraccion: Claude OK (%s)", model)
+        return respuesta
+    except (NameError, AttributeError, TypeError, ImportError):
+        raise  # bug nuestro, no una caida del proveedor: no se esconde tras el fallback
+    except Exception as e:
+        logger.warning("Extraccion: Claude fallo (%s) — pasando a Groq", describir_error(e))
+    respuesta = _groq_extraccion(prompt)
+    logger.info("LLM extraccion: Groq OK (%s)", GROQ_MODEL)
+    return respuesta

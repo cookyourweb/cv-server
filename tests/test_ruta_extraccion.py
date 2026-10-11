@@ -1,6 +1,6 @@
 """POST /extraccion: the owner-paid extraction, end to end with a fake model chain (spec section 4).
 
-The chain (`llm.call_llm_calidad`) is always replaced: no test calls Anthropic or Groq. The
+The chain (`llm.call_llm_extraccion`) is always replaced: no test calls Anthropic or Groq. The
 database is a real PostgreSQL (DATABASE_URL_PRUEBAS). Ledger rows are told apart by a test-only
 model id, and the cap is raised so the shared database's month does not interfere.
 """
@@ -37,14 +37,14 @@ SALIDA_BUENA = (
 
 
 class CadenaFalsa:
-    """Stands for `llm.call_llm_calidad`: records every call, answers or fails as told."""
+    """Stands for `llm.call_llm_extraccion`: records every call, answers or fails as told."""
 
     def __init__(self, salida=SALIDA_BUENA, error=None, modelo=MODELO, tokens=(1500, 300)):
         self.salida, self.error, self.modelo, self.tokens = salida, error, modelo, tokens
         self.llamadas = []
 
-    def __call__(self, prompt, model=None, max_tokens=None):
-        self.llamadas.append({"prompt": prompt, "model": model, "max_tokens": max_tokens})
+    def __call__(self, prompt, model=None):
+        self.llamadas.append({"prompt": prompt, "model": model})
         if self.error is not None:
             raise self.error
         return RespuestaLLM(self.salida, self.modelo, *self.tokens)
@@ -70,7 +70,12 @@ def entorno(monkeypatch, bd):  # noqa: F811
 @pytest.fixture
 def cadena(monkeypatch):
     falsa = CadenaFalsa()
-    monkeypatch.setattr(llm, "call_llm_calidad", falsa)
+    monkeypatch.setattr(llm, "call_llm_extraccion", falsa)
+
+    def prohibida(*args, **kwargs):
+        raise AssertionError("/extraccion must not use the CV/letter chains")
+    monkeypatch.setattr(llm, "call_llm_calidad", prohibida)
+    monkeypatch.setattr(llm, "call_llm", prohibida)
     return falsa
 
 
@@ -117,11 +122,10 @@ def test_S4_1_a_valid_answer_becomes_proposals_and_the_ledger_has_the_real_cost(
     assert fila.estimado_eur == extraccion.estimar_eur(propuestas.largo_del_prompt(len(CV)))
 
 
-def test_the_chain_is_called_once_with_the_cv_in_a_data_block_and_the_output_cap(cliente, personas, cadena):
+def test_the_chain_is_called_once_with_the_cv_in_a_data_block(cliente, personas, cadena):
     preparar(cliente, personas["ana"])
     extraer(cliente, personas["ana"])
     (llamada,) = cadena.llamadas
-    assert llamada["max_tokens"] == extraccion.TOKENS_SALIDA_MAX
     assert "<cv_datos>\n" + CV + "\n</cv_datos>" in llamada["prompt"]
 
 
@@ -131,7 +135,7 @@ def test_S4_13_the_model_cannot_be_chosen_by_the_request(cliente, personas, cade
                 {"modelo": "claude-opus-evil", "model": "claude-opus-evil", "max_tokens": 99999})
     assert r.status_code == 200
     (llamada,) = cadena.llamadas
-    assert llamada["model"] == MODELO and llamada["max_tokens"] == extraccion.TOKENS_SALIDA_MAX
+    assert llamada["model"] == MODELO
     assert [f.modelo for f in libro()] == [MODELO]
 
 
