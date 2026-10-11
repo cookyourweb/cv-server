@@ -1,6 +1,6 @@
 """Capa LLM: quien escribe cada documento, en que orden se cae y con que backend.
 
-DOS cadenas, y confundirlas ha costado tiempo antes:
+TRES cadenas (la tercera, `call_llm_extraccion`, es solo del alta: Claude y Groq, nada mas), y confundirlas ha costado tiempo antes:
 
 - `call_llm`: Groq primario, luego Gemini, luego Claude. Uso general.
 - `call_llm_calidad`: **Claude primario**, con Groq de fallback. Es la que escribe
