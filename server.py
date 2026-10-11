@@ -1410,6 +1410,12 @@ def yo():
                     **_estado_del_perfil(g.usuario_id, quien.email)})
 
 
+# Rutas del alta (perfil, consentimientos, cuenta): viven en rutas_alta.py.
+import rutas_alta  # noqa: E402
+
+app.register_blueprint(rutas_alta.crear_blueprint(con_usuaria))
+
+
 # ══════════════════════════════════════════════
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
