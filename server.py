@@ -1179,7 +1179,8 @@ def generar_carta():
     # separadas por puntos, y una carta es prosa. Aplicarlo aqui daria ruido.
     # Este endpoint ya NO sabe cuantos guardrails hay ni cuales aplican: lo pide
     # y el registro decide. Anadir el septimo no toca esta linea.
-    avisos = guardrails.revisar(carta, cv_master, guardrails.CARTA)
+    avisos = guardrails.revisar(carta, cv_master, guardrails.CARTA,
+                                traducido=master.master_traducido)
     for aviso in avisos:
         logger.warning(
             "%s en la CARTA de %s para %s/%s: %s",
@@ -1199,6 +1200,9 @@ def generar_carta():
         # `model_dump()` la respuesta revienta. La forma que sale por la red no
         # cambia, y eso lo vigila tests/test_aviso_guardrail.py.
         "avisos":          [a.model_dump() for a in avisos],
+        # Guardrails skipped because the master is in another language. Empty in the
+        # normal flow; if not, "no avisos" for those rules means "not checked".
+        "no_evaluables":   guardrails.no_evaluables(guardrails.CARTA, master.master_traducido),
     })
 
 

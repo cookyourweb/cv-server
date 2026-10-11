@@ -98,6 +98,18 @@ produce noise.
 And they warn, they do not abort: a warning may be a legitimate rewording, and aborting
 would leave the user without a cover letter.
 
+### Translated-master mode
+
+When the master comes from the database in another language than the document (the
+response says `master_traducido: true`), detectors that compare literal text would raise
+false alarms: the words simply differ between languages. Every detector declares
+`independiente_del_idioma`. Language-independent ones keep running (`cifras_no_respaldadas`,
+`tecnologias_no_respaldadas`, `inflacion`); the text-matching ones
+(`skills_no_respaldadas`, `experiencia_mal_atribuida`, whose years regex is Spanish) are
+skipped by `guardrails.revisar(..., traducido=True)` and listed in the `no_evaluables`
+field of `/generar-carta`, so that "no warning" is never read as "checked and clean". The
+default flow (Drive master, same language) is unchanged and `no_evaluables` is empty.
+
 ### The fifth guardrail came out of the second one's failure
 
 `tecnologias_no_respaldadas` works from a catalog of 173 variants entered by hand. None
