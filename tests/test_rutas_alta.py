@@ -122,11 +122,19 @@ def _filas(tabla, persona):
 
 # --- inventory ---------------------------------------------------------------------------
 
+def _rutas_del_blueprint(de_maquina: bool):
+    return {(metodo, regla.rule)
+            for regla in srv.app.url_map.iter_rules() if regla.endpoint.startswith("alta.")
+            if getattr(srv.app.view_functions[regla.endpoint], "exige_clave_maquina", False) == de_maquina
+            for metodo in regla.methods - {"HEAD", "OPTIONS"}}
+
+
 def test_the_blueprint_routes_are_exactly_the_documented_owner_routes():
-    registradas = {(metodo, regla.rule)
-                   for regla in srv.app.url_map.iter_rules() if regla.endpoint.startswith("alta.")
-                   for metodo in regla.methods - {"HEAD", "OPTIONS"}}
-    assert registradas == set(RUTAS_PROPIAS)
+    assert _rutas_del_blueprint(de_maquina=False) == set(RUTAS_PROPIAS)
+
+
+def test_the_only_machine_route_of_the_blueprint_is_the_extraction_switch():
+    assert _rutas_del_blueprint(de_maquina=True) == {("PUT", "/ajustes/extraccion")}
 
 
 @pytest.mark.parametrize("metodo, ruta", sorted(RUTAS_PROPIAS))

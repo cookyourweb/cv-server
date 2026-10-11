@@ -1417,7 +1417,7 @@ app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024
 # Rutas del alta (perfil, consentimientos, cv, cuenta): viven en rutas_alta.py.
 import rutas_alta  # noqa: E402
 
-app.register_blueprint(rutas_alta.crear_blueprint(con_usuaria))
+app.register_blueprint(rutas_alta.crear_blueprint(con_usuaria, requiere_clave_maquina))
 
 
 # ══════════════════════════════════════════════

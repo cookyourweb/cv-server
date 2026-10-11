@@ -13,10 +13,11 @@ import logging
 from functools import wraps
 
 from flask import Blueprint, g, jsonify, request
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 import base_de_datos
+import extraccion
 import privacidad
 from cifrado import ErrorDeCifrado, cifrar
 from lectura_cv import LIMITE_BYTES, ErrorDeLectura, leer_cv
@@ -78,8 +79,17 @@ def _leer(modelo: type[BaseModel]):
         return None, _respuesta(({"ok": False, "error": "datos no validos", "campos": campos}, 422))
 
 
-def crear_blueprint(con_usuaria) -> Blueprint:
-    """Build the blueprint around the `@con_usuaria` decorator of the running app."""
+class AjusteDeExtraccion(BaseModel):
+    """Body of PUT /ajustes/extraccion."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    activa: StrictBool
+
+
+def crear_blueprint(con_usuaria, requiere_clave_maquina) -> Blueprint:
+    """Build the blueprint around the app's `@con_usuaria` (user routes) and
+    `@requiere_clave_maquina` (the one machine route) decorators."""
     alta = Blueprint("alta", __name__)
 
     @alta.get("/perfil")
@@ -148,6 +158,23 @@ def crear_blueprint(con_usuaria) -> Blueprint:
     @_con_repositorio
     def borrar_cv(repo, idioma):
         return ("", 204) if idioma in IDIOMAS and repo.borrar_cv(idioma) else _respuesta(_NO_ENCONTRADO)
+
+    @alta.put("/ajustes/extraccion")
+    @requiere_clave_maquina
+    def fijar_extraccion():
+        """Kill switch of the owner-paid extraction: flips the `ajustes` row, no redeploy."""
+        if not base_de_datos.configurada():
+            return _respuesta(_NO_DISPONIBLE)
+        ajuste, error = _leer(AjusteDeExtraccion)
+        if error:
+            return error
+        try:
+            with base_de_datos.transaccion() as conexion:
+                extraccion.fijar_interruptor(conexion, ajuste.activa)
+        except (SQLAlchemyError, base_de_datos.ErrorDeBaseDeDatos) as error:
+            privacidad.registrar_fallo(logger, "database error setting the extraction switch", error)
+            return _respuesta(_NO_DISPONIBLE)
+        return jsonify({"activa": ajuste.activa}), 200
 
     @alta.delete("/cuenta")
     @con_usuaria
