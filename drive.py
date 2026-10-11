@@ -13,6 +13,7 @@ import re
 from typing import NamedTuple
 
 import requests
+from docx import Document
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
