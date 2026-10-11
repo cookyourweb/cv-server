@@ -134,7 +134,8 @@ def test_REQ_6_5_the_master_never_appears_in_the_response(cliente, cabeceras, mu
         texto = r.get_data(as_text=True)
         assert "CANARIO-MASTER-7731" not in texto and "sede secreta" not in texto
         assert LINEA_LARGA not in texto          # a long master line is cut to a short snippet
-        assert "Desarrollo de servicios con Angular y TypeScript" in texto    # the short evidence IS there: the test can fail
+    assert "Desarrollo de servicios con Angular y TypeScript" in a.get_data(as_text=True)  # the GET carries short evidence: the test can fail
+    assert "Desarrollo de servicios" not in b.get_data(as_text=True)  # the batch carries no evidence at all
 
 
 @pytest.mark.parametrize("duenos_de_oferta", ["nadie", "otra", "no existe"])
@@ -252,15 +253,20 @@ def test_the_batch_returns_only_her_offers_and_never_reveals_the_rest(cliente, c
     r = cliente.post("/encajes", json={"ids": [O1, O2, O3, "basura"]}, headers=cabeceras)
     assert r.status_code == 200
     cuerpo = r.get_json()
-    assert [e["id"] for e in cuerpo["encajes"]] == [O1]
-    assert cuerpo["encajes"][0]["alcanzable"] is True
-    assert set(cuerpo) == {"encajes"}
+    assert list(cuerpo) == [O1]
+    assert cuerpo[O1]["alcanzable"] is True
 
 
-def test_the_batch_keeps_the_request_order(cliente, cabeceras, mundo):
+def test_the_batch_is_keyed_by_the_id_exactly_as_sent(cliente, cabeceras, mundo):
     mundo["ofertas"] = {O1: OFERTA, O2: OFERTA, O3: OFERTA}
     r = cliente.post("/encajes", json={"ids": [O3, O1, O2]}, headers=cabeceras)
-    assert [e["id"] for e in r.get_json()["encajes"]] == [O3, O1, O2]
+    assert set(r.get_json()) == {O1, O2, O3}
+
+
+def test_the_same_offer_in_two_spellings_is_answered_once_under_the_first(cliente, cabeceras, mundo):
+    plano = O1.replace("-", "")
+    r = cliente.post("/encajes", json={"ids": [plano, O1]}, headers=cabeceras)
+    assert list(r.get_json()) == [plano]
 
 
 def test_50_ids_are_accepted_and_51_are_422(cliente, cabeceras, mundo):
@@ -280,7 +286,7 @@ def test_a_malformed_body_is_422(cliente, cabeceras, cuerpo):
 
 def test_an_empty_list_is_an_empty_result_without_touching_the_master(cliente, cabeceras, mundo):
     r = cliente.post("/encajes", json={"ids": []}, headers=cabeceras)
-    assert r.status_code == 200 and r.get_json() == {"encajes": []}
+    assert r.status_code == 200 and r.get_json() == {}
     assert mundo["idiomas_master"] == []
 
 
@@ -293,5 +299,4 @@ def test_the_master_is_read_once_per_language_not_once_per_offer(cliente, cabece
 def test_the_response_is_plain_json_of_the_match_only(cliente, cabeceras, mundo):
     r = cliente.post("/encajes", json={"ids": [O1]}, headers=cabeceras)
     assert r.mimetype == "application/json"
-    assert set(json.loads(r.data)["encajes"][0]) == {"id", "cubiertos", "huecos", "no_evaluables",
-                                                      "alcanzable", "cobertura"}
+    assert set(json.loads(r.data)[O1]) == {"alcanzable", "cobertura"}

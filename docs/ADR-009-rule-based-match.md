@@ -33,8 +33,10 @@ signed-in user, so there was no rule for which offers she may see.
    (`test_REQ_6_3_match_never_reaches_the_generators`).
 3. **Two routes**, both behind the panel's Google token (`@con_usuaria`, 401 without it):
    `GET /ofertas/{id}/encaje` and `POST /encajes {"ids": [...]}` (at most 50 ids, 51 is
-   422). The batch answers `{"encajes": [{"id", "cubiertos", "huecos", "no_evaluables",
-   "alcanzable", "cobertura"}]}` in the order asked.
+   422). The batch answers a flat object keyed by the id exactly as the caller sent it,
+   `{"<id>": {"alcanzable", "cobertura"}}`: the summary only, with no requirements, gaps or
+   evidence on the wire. Ids that are not hers are omitted, `{"ids": []}` is `{}`, and if the
+   same offer is sent in two spellings it is answered once, under the first one.
 4. **Ownership rule.** An offer belongs to the caller only if its Notion "Usuario"
    relation contains the caller's Notion page id. That page is found by her verified email
    with the existing `buscar_usuario_por_email` (main address or alias, active users only).

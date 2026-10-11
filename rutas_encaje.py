@@ -143,16 +143,20 @@ def crear_blueprint(con_usuaria) -> Blueprint:
             ids = _ids_de_la_peticion()
             usuario, propias = _ofertas_propias(ids)
             if not propias:
-                return jsonify({"encajes": []}), 200
+                return jsonify({}), 200
             resultado = _evaluar(usuario, propias)
         except _Respuesta as r:
             return _responder(r.cuerpo_y_estado)
-        salida, vistos = [], set()
-        for id_pedido in ids:  # the caller's order and spelling; ids that are not hers vanish
+        # Keyed by the id exactly as the caller sent it (the panel looks results up by its own
+        # ids). Only the summary travels: no requirements, gaps or evidence on the wire.
+        # If one offer comes in two spellings, it is answered once, under the first spelling.
+        salida, vistos = {}, set()
+        for id_pedido in ids:  # ids that are not hers vanish
             clave = notion.normalizar_id(id_pedido)
             if clave in resultado and clave not in vistos:
                 vistos.add(clave)
-                salida.append({"id": id_pedido, **resultado[clave]})
-        return jsonify({"encajes": salida}), 200
+                salida[id_pedido] = {"alcanzable": resultado[clave]["alcanzable"],
+                                     "cobertura": resultado[clave]["cobertura"]}
+        return jsonify(salida), 200
 
     return encaje
