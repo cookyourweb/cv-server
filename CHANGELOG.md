@@ -63,6 +63,25 @@ touching the prompt f-string in `server.py`.
 
 ## Unreleased
 
+### External encrypted backup (ADR-008)
+
+**Added**
+
+- `.github/workflows/neon-backup.yml`: daily (and on demand) `pg_dump` with the official
+  `postgres:18` client, streamed into `age` so the plain dump never touches the disk. Only
+  the `.dump.age` file is uploaded, with 30-day retention. Secrets `NEON_BACKUP_URL` and
+  `AGE_PUBLIC_KEY`; a missing one fails the run with a clear message.
+- `docs/ADR-008-external-encrypted-backup.md` and a "Backups" section in the README with the
+  one-time setup and the restore procedure.
+- `tests/test_copia_neon.py` pins the workflow's safety properties (schedule, secrets only
+  through `${{ secrets.* }}`, nothing echoed, encrypted-only upload, 30-day retention).
+
+**Why**
+
+- Neon's free restore window is 6 hours. Artifacts of a public repository are downloadable by
+  any signed-in GitHub user, so the dump is encrypted to a public key whose private half stays
+  offline. Losing that private key makes the backups unreadable.
+
 ### Invitations in the database and an extended /yo
 
 **Added**

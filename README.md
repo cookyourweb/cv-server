@@ -180,6 +180,9 @@ Documented as ADRs in [`docs/`](docs/):
 - **[ADR-007](docs/ADR-007-cv-encryption-at-rest.md)**. CV masters are encrypted at rest
   by the application with AES-256-GCM and a keyring that never touches the database
   (`cifrado.py`). Each ciphertext is bound to its owner and language.
+- **[ADR-008](docs/ADR-008-external-encrypted-backup.md)**. Daily `pg_dump` of the database,
+  encrypted with `age` to an offline public key, kept as a 30-day GitHub artifact because
+  Neon's free restore window is only 6 hours.
 
 > **Authentication is covered in ADR-003 of the `buscartrabajo` repo**
 > (`docs/adr/ADR-003-authentication.md`), which is not the ADR-003 above.
@@ -321,6 +324,35 @@ ALLOW_DESTRUCTIVE_DB_TESTS=1 .venv/bin/python -m pytest -q -m bd
 ```
 
 Only do this against a disposable database.
+
+## Backups
+
+Neon's free plan only restores the last 6 hours, so `.github/workflows/neon-backup.yml`
+takes a daily `pg_dump` (Postgres 18 client), encrypts it with [age](https://github.com/FiloSottile/age)
+and uploads **only the encrypted file** as an artifact kept for 30 days. Artifacts of a
+public repository can be downloaded by any signed-in GitHub user, which is why a plain
+dump is never uploaded. Rationale: [ADR-008](docs/ADR-008-external-encrypted-backup.md).
+
+One-time setup (the workflow fails with a clear message until it is done):
+
+1. Create a key pair on your own machine: `age-keygen -o age-backup.key`. Keep the file
+   **offline** (two copies); it is the only way to read a backup. Never commit it.
+2. The command prints the public key (`age1...`). Add it as the repository secret
+   `AGE_PUBLIC_KEY` (Settings, Secrets and variables, Actions).
+3. Add the repository secret `NEON_BACKUP_URL`: a connection string for the database,
+   preferably of a read-only role (`pg_read_all_data`).
+4. Run the workflow once with "Run workflow" and check that an artifact appears.
+
+Restore, always on a scratch Neon branch (never on the live one):
+
+```bash
+age --decrypt -i age-backup.key neon-YYYYMMDDTHHMMSSZ.dump.age > restore.dump
+pg_restore --no-owner --no-privileges --dbname "$SCRATCH_BRANCH_URL" restore.dump
+```
+
+Then point `DATABASE_URL_PRUEBAS` or a local check at that branch and compare row counts.
+The CV masters stay encrypted inside the dump: you also need the application keyring
+(`CV_CLAVES`) to read them. Delete `restore.dump` afterwards.
 
 ## Tests
 
