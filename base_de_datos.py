@@ -49,6 +49,11 @@ def crear_motor(url: str):
     )
 
 
+def configurada() -> bool:
+    """True when DATABASE_URL is set. Reads the environment only; never connects."""
+    return bool(os.getenv("DATABASE_URL", "").strip())
+
+
 def motor():
     """Return the process-wide engine, creating it on first use."""
     global _motor
