@@ -127,3 +127,18 @@ def test_a_bug_of_ours_in_the_claude_step_is_not_hidden_by_the_fallback(http):
     with pytest.raises(AttributeError):
         llm.call_llm_extraccion("prompt", model="modelo-cv")
     assert http == []
+
+
+# --- W3: timeouts and no retries ---------------------------------------------------------------
+
+def test_W3_the_claude_client_has_a_30_second_timeout_and_no_retries(http):
+    llm.call_llm_extraccion("prompt", model="modelo-cv")
+    (kwargs,) = AnthropicFalso.construidos
+    assert kwargs["timeout"] == 30 and kwargs["max_retries"] == 0
+
+
+def test_W3_the_groq_call_has_a_30_second_timeout_and_is_made_once(http):
+    AnthropicFalso.error = RuntimeError("claude caido")
+    llm.call_llm_extraccion("prompt", model="modelo-cv")
+    (llamada,) = http
+    assert llamada["timeout"] == 30

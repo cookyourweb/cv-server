@@ -321,6 +321,7 @@ def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096)
 # constante para el tope de salida: la usa la llamada Y la estimacion de coste
 # (`extraccion.TOKENS_SALIDA_MAX`), para que no puedan separarse.
 TOKENS_SALIDA_EXTRACCION = 1200
+TIMEOUT_EXTRACCION_S = 30
 
 
 def _groq_extraccion(prompt: str) -> RespuestaLLM:
@@ -336,6 +337,7 @@ def _groq_extraccion(prompt: str) -> RespuestaLLM:
             "max_tokens":  TOKENS_SALIDA_EXTRACCION,
             "temperature": 0.7,
         },
+        timeout=TIMEOUT_EXTRACCION_S,
     )
     resp.raise_for_status()
     cuerpo = resp.json()
@@ -345,7 +347,9 @@ def _groq_extraccion(prompt: str) -> RespuestaLLM:
 
 
 def _claude_extraccion(prompt: str, model: str) -> RespuestaLLM:
-    cliente = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+    # Un solo intento por proveedor y 30 s como mucho: una peticion de la usuaria no espera
+    # reintentos (el SDK reintenta por defecto 2 veces) y el coste esta acotado a una llamada.
+    cliente = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=TIMEOUT_EXTRACCION_S, max_retries=0)
     resp = cliente.messages.create(
         model=model,
         max_tokens=TOKENS_SALIDA_EXTRACCION,
