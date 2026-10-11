@@ -69,6 +69,10 @@ class RepositorioDeUsuaria:
         self._c = conexion
         self._usuario_id = usuario_id
 
+    @property
+    def usuario_id(self):
+        return self._usuario_id
+
     # --- profile -------------------------------------------------------------------------
 
     def obtener_perfil(self):
@@ -136,6 +140,12 @@ class RepositorioDeUsuaria:
             text("SELECT idioma, clave_version, nonce, cifrado, caracteres FROM cv_master "
                  "WHERE usuario_id = :u ORDER BY subido_en DESC, idioma LIMIT 1"),
             {"u": self._usuario_id}).first()
+
+    def obtener_cv(self, idioma: str):
+        """The encrypted row of her master in `idioma` (clave_version, nonce, cifrado), or None."""
+        return self._c.execute(
+            text("SELECT clave_version, nonce, cifrado FROM cv_master WHERE usuario_id = :u AND idioma = :i"),
+            {"u": self._usuario_id, "i": idioma}).first()
 
     def borrar_cv(self, idioma: str) -> bool:
         """Delete her master in `idioma`. False when she has none."""
