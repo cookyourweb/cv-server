@@ -32,7 +32,10 @@ CV Master (Google Docs) ─────┘
 
 **Models.** In production, the CV and the cover letter are written by `claude-sonnet-4-6`.
 If Claude fails, it falls back to Groq (`openai/gpt-oss-120b`), then Gemini, then Claude
-Haiku (`call_llm_calidad` and `call_llm` in `llm.py`). Every response reports in
+Haiku (`call_llm_calidad` and `call_llm` in `llm.py`). That is the owner's chain only: for an
+invited user (one with an account in the database, not exempt from the quota) the chain is
+`call_llm_invitada`, Claude (general key) then Groq and nothing else, never Gemini, because the
+consent text names only Anthropic and Groq. Every response reports in
 `modelo_usado` (model used) the model that actually wrote it. The model is set by the
 `CV_MODEL` and `CARTA_MODEL` environment variables, not by the code; `GET /health` shows
 the active ones.
@@ -162,7 +165,7 @@ There is currently no delimiter or instruction filter on the posting.
 |---|---|---|
 | Cost per request | CV about 0.05 USD and cover letter about 0.013 USD with `claude-sonnet-4-6` (measured 2 Oct 2026, prompt of about 9,600 input tokens) | [ADR-002](docs/ADR-002-cv-model.md) |
 | Why this model | Cost measured with `count_tokens` and real Haiku failures | [ADR-002](docs/ADR-002-cv-model.md) |
-| Fallback chain | Claude, then Groq, then Gemini, then Claude Haiku; `modelo_usado` says which one wrote it | [`llm.py`](llm.py) |
+| Fallback chain | Owner: Claude, then Groq, then Gemini, then Claude Haiku. Invited users: Claude, then Groq only; `modelo_usado` says which one wrote it | [`llm.py`](llm.py) |
 | Evaluation | `evaluacion.py` is pure (it calls no model) and its tests run in the suite as a regression net. Real generation against the LLM is run by hand | [`evaluacion.py`](evaluacion.py), [`tests/test_evaluacion.py`](tests/test_evaluacion.py) |
 | Known failure modes | Posting description too short (generic CV, flagged in `descripcion_oferta`); role scope inflation, not detected; response written by a fallback model | [What the guardrails do NOT detect](#what-the-guardrails-do-not-detect) |
 | Prompt injection | Known risk, only partly mitigated | [Known risk](#known-risk-prompt-injection) |
@@ -356,7 +359,7 @@ constant the cost estimate uses), a 30 s timeout and no retries. Claude uses
 travels inside a data block and the answer is validated by `propuestas.py`: every proposal needs
 a `cita` that is a literal quote of the CV, salary and modality are never accepted, and a stack
 technology must appear in its `cita`. The user reviews each proposal in the panel before anything
-is saved. The CV and letter generators keep `call_llm_calidad` unchanged.
+is saved. The CV and letter generators of the owner's legacy flow keep `call_llm_calidad` unchanged; invited users use `llm.call_llm_invitada` (Claude with the general key, then Groq).
 
 Before enabling the switch in production: set `ANTHROPIC_CLAVE_ALTA` (its own Anthropic key with
 its own monthly limit), verify the current model ids and the `PRECIO_*` constants in
