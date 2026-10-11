@@ -106,6 +106,10 @@ def _coste_de(respuesta, modelo: str, reserva):
 def _extraer(usuario_id):
     """The extraction, step by step. No database transaction is open while the model is called."""
     with base_de_datos.transaccion() as conexion:
+        # The kill switch answers first of all: a switched-off extraction asks nothing of her
+        # (no consent, no CV). `reservar_en` asks again under the lock, with the same function.
+        if extraccion.desactivada(conexion):
+            return _manual("desactivada")
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         if not repo.tiene_consentimiento("enviar_cv_a_ia"):
             return _respuesta(_SIN_CONSENTIMIENTO)

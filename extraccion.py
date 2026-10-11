@@ -142,6 +142,15 @@ def _interruptor_encendido(c) -> bool:
     return valor is True  # absent, null, a string or false: off
 
 
+def desactivada(c) -> bool:
+    """True when the kill switch is off: the env hard-off (read before the database) or the row.
+
+    ONE definition for the route (which asks first of all, before consent and CV) and for
+    `reservar_en` (which asks again inside the lock), so the two can never disagree.
+    """
+    return _apagada_por_entorno() or not _interruptor_encendido(c)
+
+
 def fijar_interruptor(conexion, activa: bool) -> None:
     """Turn the kill switch row on or off (used by PUT /ajustes/extraccion)."""
     conexion.execute(
@@ -181,7 +190,7 @@ def reservar_en(c, usuario_id, largo_prompt: int, *, modelo: str, ahora=None):
     promptly after this returns.
     """
     ahora = _en_utc(ahora)
-    if _apagada_por_entorno() or not _interruptor_encendido(c):
+    if desactivada(c):
         return Rechazo("desactivada")
     if c.execute(text("SELECT 1 FROM extracciones WHERE usuario_id = :u AND estado <> 'fallida'"),
                  {"u": usuario_id}).first() is not None:

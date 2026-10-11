@@ -269,6 +269,34 @@ def test_S4_2_with_the_switch_off_the_chain_is_never_called_and_nothing_is_writt
     assert cadena.llamadas == [] and libro() == []
 
 
+def test_W1_the_switch_is_checked_before_the_consent(cliente, personas, cadena):
+    preparar(cliente, personas["ana"], consentimiento=False)
+    with base_de_datos.transaccion() as c:
+        extraccion.fijar_interruptor(c, False)
+    r = extraer(cliente, personas["ana"])
+    assert r.status_code == 200 and r.get_json() == {"estado": "manual", "motivo": "desactivada"}
+    assert cadena.llamadas == [] and libro() == []
+
+
+def test_W1_the_environment_hard_off_is_checked_before_the_consent(cliente, personas, cadena, monkeypatch):
+    preparar(cliente, personas["ana"], consentimiento=False)
+    monkeypatch.setenv("EXTRACCION_ACTIVA", "false")
+    r = extraer(cliente, personas["ana"])
+    assert r.status_code == 200 and r.get_json() == {"estado": "manual", "motivo": "desactivada"}
+
+
+def test_W1_the_switch_is_checked_before_the_cv(cliente, personas, cadena):
+    preparar(cliente, personas["ana"], texto=None)
+    with base_de_datos.transaccion() as c:
+        extraccion.fijar_interruptor(c, False)
+    assert extraer(cliente, personas["ana"]).get_json() == {"estado": "manual", "motivo": "desactivada"}
+
+
+def test_W1_with_the_switch_on_the_consent_gate_still_answers_403(cliente, personas, cadena):
+    preparar(cliente, personas["ana"], consentimiento=False)
+    assert extraer(cliente, personas["ana"]).status_code == 403
+
+
 def test_S4_3_a_second_extraction_is_refused_without_calling_the_chain(cliente, personas, cadena):
     preparar(cliente, personas["ana"])
     assert extraer(cliente, personas["ana"]).get_json()["estado"] == "propuesta"
