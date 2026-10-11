@@ -55,6 +55,7 @@ def entorno(monkeypatch, bd):  # noqa: F811
     monkeypatch.setenv("CV_CLAVES", "1:" + base64.b64encode(os.urandom(32)).decode())
     monkeypatch.setenv("CV_CLAVE_ACTIVA", "1")
     monkeypatch.delenv("EXTRACCION_ACTIVA", raising=False)
+    monkeypatch.setenv("ANTHROPIC_CLAVE_ALTA", "clave-alta-de-prueba")
     monkeypatch.setattr(llm, "CV_MODEL", MODELO)
     monkeypatch.setattr(extraccion, "TOPE_EUR", Decimal("100000"))
     with base_de_datos.transaccion() as c:
@@ -295,6 +296,18 @@ def test_W1_the_switch_is_checked_before_the_cv(cliente, personas, cadena):
 def test_W1_with_the_switch_on_the_consent_gate_still_answers_403(cliente, personas, cadena):
     preparar(cliente, personas["ana"], consentimiento=False)
     assert extraer(cliente, personas["ana"]).status_code == 403
+
+
+def test_S4_16_without_the_dedicated_key_it_is_manual_indisponible_and_nothing_is_reserved(
+        cliente, personas, cadena, monkeypatch):
+    preparar(cliente, personas["ana"])
+    monkeypatch.delenv("ANTHROPIC_CLAVE_ALTA")
+    monkeypatch.setattr(llm, "CLAUDE_API_KEY", "la-clave-general")  # the general key must not enable it
+    r = extraer(cliente, personas["ana"])
+    assert r.status_code == 200 and r.get_json() == {"estado": "manual", "motivo": "indisponible"}
+    assert cadena.llamadas == [] and libro() == []
+    monkeypatch.setenv("ANTHROPIC_CLAVE_ALTA", "clave-alta-de-prueba")  # her attempt was not used up
+    assert extraer(cliente, personas["ana"]).get_json()["estado"] == "propuesta"
 
 
 def test_S4_3_a_second_extraction_is_refused_without_calling_the_chain(cliente, personas, cadena):

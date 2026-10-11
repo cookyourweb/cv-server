@@ -117,6 +117,11 @@ def _extraer(usuario_id):
     if guardado is None:
         return _respuesta(_NO_ENCONTRADO)
 
+    # Fail closed: without the dedicated sign-up key the extraction is unavailable, before any
+    # reservation or provider call (the general CLAUDE_API_KEY never stands in for it).
+    if not llm.clave_de_extraccion_configurada():
+        return _manual("indisponible")
+
     # The model id comes from the server's configuration only, never from the request.
     modelo = llm.CV_MODEL
     reserva = extraccion.reservar(usuario_id, propuestas.largo_del_prompt(guardado.caracteres), modelo=modelo)

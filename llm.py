@@ -346,10 +346,23 @@ def _groq_extraccion(prompt: str) -> RespuestaLLM:
                         uso.get("prompt_tokens"), uso.get("completion_tokens"))
 
 
+def _clave_de_extraccion() -> str:
+    # Leida en cada llamada y SOLO de aqui: nunca `CLAUDE_API_KEY`. Es una clave propia, con
+    # su propio tope en la consola de Anthropic, para que el gasto del alta quede aislado.
+    return os.getenv("ANTHROPIC_CLAVE_ALTA", "").strip()
+
+
+def clave_de_extraccion_configurada() -> bool:
+    return bool(_clave_de_extraccion())
+
+
 def _claude_extraccion(prompt: str, model: str) -> RespuestaLLM:
+    clave = _clave_de_extraccion()
+    if not clave:
+        raise RuntimeError("ANTHROPIC_CLAVE_ALTA no configurada")
     # Un solo intento por proveedor y 30 s como mucho: una peticion de la usuaria no espera
     # reintentos (el SDK reintenta por defecto 2 veces) y el coste esta acotado a una llamada.
-    cliente = anthropic.Anthropic(api_key=CLAUDE_API_KEY, timeout=TIMEOUT_EXTRACCION_S, max_retries=0)
+    cliente = anthropic.Anthropic(api_key=clave, timeout=TIMEOUT_EXTRACCION_S, max_retries=0)
     resp = cliente.messages.create(
         model=model,
         max_tokens=TOKENS_SALIDA_EXTRACCION,
@@ -365,6 +378,9 @@ def call_llm_extraccion(prompt: str, model: str = CV_MODEL) -> RespuestaLLM:
 
     Si fallan los dos lanza la excepcion de Groq: quien llama cierra la reserva.
     """
+    if not clave_de_extraccion_configurada():
+        # Fail closed: sin la clave propia del alta no se llama a NINGUN proveedor.
+        raise RuntimeError("ANTHROPIC_CLAVE_ALTA no configurada")
     try:
         respuesta = _claude_extraccion(prompt, model)
         logger.info("LLM extraccion: Claude OK (%s)", model)

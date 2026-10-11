@@ -336,18 +336,26 @@ the file name is ever logged.
 **Extraction gates.** The owner pays for one extraction per user. `extraccion.py` refuses it,
 in this order, when the switch is off (`EXTRACCION_ACTIVA=false` or the `ajustes` row), when the
 user already used her attempt, or when the month's spend plus a pessimistic estimate would pass
-5 EUR; the estimate covers the primary model and its fallback. A failed provider chain keeps the
+5 EUR; the estimate covers the primary model and its fallback (Claude then Groq, 1200 output tokens each). A failed provider chain keeps the
 attempt but its estimate still counts toward the cap.
 
-**Extraction call.** `POST /extraccion` runs those gates, then calls the quality chain
-(`llm.call_llm_calidad`, Claude with the Groq fallback) once. The CV travels inside a data
-block and the answer is validated by `propuestas.py`: every proposal needs a `cita` that is a
-literal quote of the CV, salary and modality are never accepted, and a stack technology must
-appear in its `cita`. The user reviews each proposal in the panel before anything is saved.
+**Extraction call.** `POST /extraccion` checks the kill switch FIRST (before consent and CV, so
+a switched-off extraction asks nothing of the user), then the consent and the stored CV, then
+the dedicated key, then the spend gates, and calls `llm.call_llm_extraccion` once. That chain is
+its own: Claude (`CV_MODEL`) and, if it fails, Groq (`GROQ_MODEL`), nothing else (never Gemini, never
+the general cascade), both with `max_tokens` 1200 (`llm.TOKENS_SALIDA_EXTRACCION`, the same
+constant the cost estimate uses), a 30 s timeout and no retries. Claude uses
+`ANTHROPIC_CLAVE_ALTA` only, never `CLAUDE_API_KEY`; if it is empty the route answers
+`{estado: "manual", motivo: "indisponible"}` without reserving or calling any provider. The CV
+travels inside a data block and the answer is validated by `propuestas.py`: every proposal needs
+a `cita` that is a literal quote of the CV, salary and modality are never accepted, and a stack
+technology must appear in its `cita`. The user reviews each proposal in the panel before anything
+is saved. The CV and letter generators keep `call_llm_calidad` unchanged.
 
-Before enabling the switch in production: verify the current model ids and the `PRECIO_*`
-constants in `extraccion.py`, enable Zero Data Retention on the Groq account, and name Anthropic
-and Groq (processing in the United States) in the consent text and the privacy policy.
+Before enabling the switch in production: set `ANTHROPIC_CLAVE_ALTA` (its own Anthropic key with
+its own monthly limit), verify the current model ids and the `PRECIO_*` constants in
+`extraccion.py`, enable Zero Data Retention on the Groq account, and name Anthropic and Groq
+(processing in the United States) in the consent text and the privacy policy.
 
 ## Database
 

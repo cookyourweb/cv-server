@@ -48,7 +48,8 @@ class RespuestaHttp:
 def entorno(monkeypatch):
     AnthropicFalso.construidos, AnthropicFalso.llamadas, AnthropicFalso.error = [], [], None
     monkeypatch.setattr(llm.anthropic, "Anthropic", AnthropicFalso)
-    monkeypatch.setattr(llm, "CLAUDE_API_KEY", CLAVE_ALTA)
+    monkeypatch.setenv("ANTHROPIC_CLAVE_ALTA", CLAVE_ALTA)
+    monkeypatch.setattr(llm, "CLAUDE_API_KEY", "clave-general-de-prueba")
     monkeypatch.setattr(llm, "GROQ_API_KEY", "groq-de-prueba")
     monkeypatch.setattr(llm, "GEMINI_API_KEY", "gemini-de-prueba")
     monkeypatch.setattr(llm, "_anthropic_client", None)
@@ -142,3 +143,27 @@ def test_W3_the_groq_call_has_a_30_second_timeout_and_is_made_once(http):
     llm.call_llm_extraccion("prompt", model="modelo-cv")
     (llamada,) = http
     assert llamada["timeout"] == 30
+
+
+# --- W2 / S4.16: the dedicated key ---------------------------------------------------------------
+
+def test_S4_16_claude_is_called_with_the_dedicated_key_never_the_general_one(http):
+    llm.call_llm_extraccion("prompt", model="modelo-cv")
+    (kwargs,) = AnthropicFalso.construidos
+    assert kwargs["api_key"] == CLAVE_ALTA != llm.CLAUDE_API_KEY
+
+
+def test_S4_16_the_general_key_alone_does_not_enable_the_extraction(http, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_CLAVE_ALTA")
+    assert llm.clave_de_extraccion_configurada() is False
+    monkeypatch.setenv("ANTHROPIC_CLAVE_ALTA", "  ")
+    assert llm.clave_de_extraccion_configurada() is False
+    monkeypatch.setenv("ANTHROPIC_CLAVE_ALTA", CLAVE_ALTA)
+    assert llm.clave_de_extraccion_configurada() is True
+
+
+def test_S4_16_without_the_dedicated_key_no_provider_is_called(http, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_CLAVE_ALTA")
+    with pytest.raises(RuntimeError):
+        llm.call_llm_extraccion("prompt", model="modelo-cv")
+    assert AnthropicFalso.construidos == [] and http == []
