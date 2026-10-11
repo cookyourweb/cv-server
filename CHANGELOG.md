@@ -63,6 +63,63 @@ touching the prompt f-string in `server.py`.
 
 ## Unreleased
 
+### Extraction gates, spend ledger and kill switch (no model call yet)
+
+**Added**
+
+- `extraccion.py`: `reservar(usuario_id, largo_prompt, modelo=...)` runs three gates in a
+  fixed order and reports the first failure as the panel's `motivo`: `desactivada` (env
+  `EXTRACCION_ACTIVA=false`, read before any database access, then the
+  `ajustes.extraccion_activa` row, read on every request; a missing row counts as off),
+  `ya_usada` (the user has an extraction that is not `fallida`) and `tope` (the UTC month's
+  spend plus the estimate would pass `TOPE_EXTRACCION_EUR`, default 5). Passing inserts a
+  `reservada` row. `marcar_completada` stores the real cost; `marcar_fallida` keeps the
+  estimate in the month's sum and leaves the user's attempt free.
+- The month's sum is `sum(coalesce(coste_eur, estimado_eur))` over every row, anonymous ones
+  from deleted accounts included. Check-and-reserve runs in one transaction under a global
+  `pg_advisory_xact_lock`, so ten concurrent requests with room for one make one reservation.
+- Pessimistic estimate: `ceil(chars / 3)` input tokens plus `TOKENS_SALIDA_MAX` (1200) output
+  tokens, priced for the primary model AND the fallback (the quality chain can bill both),
+  times `MARGEN_EXTRACCION` (1.25), rounded up to the ledger's four decimals. The prompt is
+  capped (`MAX_CARACTERES_DE_PROMPT`) so one primary call stays under 0.05 USD.
+- `PUT /ajustes/extraccion` `{"activa": bool}` (machine key) flips the switch with no redeploy.
+  New variables in `.env.example`: `EXTRACCION_ACTIVA`, `TOPE_EXTRACCION_EUR`, the four
+  `PRECIO_*_EUR_POR_MTOK` and `MARGEN_EXTRACCION`.
+
+**Why it is shaped this way**
+
+- The reservation is written before the model is called and a crash leaves it in place, so
+  the cap can over-count but never under-count.
+- A failed provider chain keeps the user's attempt (the partial unique index ignores
+  `fallida`) but its estimate still counts: a call that may have been billed must not lower
+  the month's total.
+- The default prices are list prices in USD used 1:1 as EUR plus the margin. They MUST be
+  verified against the providers' price pages when the model call is added.
+
+### CV upload and encrypted master storage
+
+**Added**
+
+- `lectura_cv.py`: size is checked before parsing (2 MB), the type comes from the magic bytes
+  (`%PDF-`, or a ZIP with `word/document.xml`), PDFs are limited to 10 pages, a DOCX to 10 MB
+  uncompressed and 500 entries (zip bomb), and text under 300 characters (a scan) is refused.
+  Failures carry a fixed code and no message or chained exception. The language (es/en) is
+  detected from very common function words; a tie is Spanish.
+- `privacidad.py`: CV text and file names never reach a log or an exception message. The
+  parsing libraries' loggers are silenced, failures are logged by exception type only, and
+  `volcar_registros` is the canary helper behind S3.9.
+- `POST /cv` (multipart field `archivo`), `GET /cv` (metadata only) and `DELETE /cv/{idioma}`,
+  all owner-scoped. Upload requires the stored `almacenar_cv` consent (403), answers 413, 415 or
+  422 with a `motivo`, and stores only the AES-GCM encrypted text, one master per (user,
+  language). The uploaded file itself is never persisted. `MAX_CONTENT_LENGTH` is 3 MB so an
+  oversize request fails before it is read.
+- `pypdf==6.20.0` in `requirements.txt`.
+
+**Why it is shaped this way**
+
+- Consent is checked before the file is read, so a CV of someone who has not agreed to store
+  it is not even parsed.
+
 ### External encrypted backup (ADR-008)
 
 **Added**

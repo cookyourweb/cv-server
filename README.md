@@ -213,7 +213,11 @@ Two other known debts:
 | `GET /perfil` | Google token | The caller's profile (404 if none) |
 | `PUT /perfil` | Google token | Create or replace the profile (422 on invalid data) |
 | `POST /consentimientos` | Google token | Record a consent `{tipo, version}` (201, idempotent) |
+| `POST /cv` | Google token | Upload a CV (multipart field `archivo`, PDF or DOCX, 2 MB): stored encrypted, one master per language (201 `{idioma, formato, caracteres}`; 403 without the `almacenar_cv` consent, 413, 415, 422) |
+| `GET /cv` | Google token | The caller's masters, metadata only (`idioma`, `formato`, `subido_en`) |
+| `DELETE /cv/{idioma}` | Google token | Delete the caller's master in `es` or `en` (204, 404) |
 | `DELETE /cuenta` | Google token | Delete the account and its data in one transaction (204) |
+| `PUT /ajustes/extraccion` | Machine key | Kill switch of the owner-paid CV extraction, body `{"activa": bool}`; no redeploy needed |
 | `POST /registro` | Machine key | User sign-up |
 | `POST /generar-cv` | Machine key | CV tailored to a posting |
 | `POST /generar-carta` | Machine key | Cover letter tailored to a posting |
@@ -295,7 +299,7 @@ The full design decision is in ADR-003 of the `buscartrabajo` repo.
 
 ### Owner-scoped routes
 
-`/perfil`, `/consentimientos` and `/cuenta` act only on the user resolved from the token:
+`/perfil`, `/consentimientos`, `/cv` and `/cuenta` act only on the user resolved from the token:
 no path or body field names another user, and the data layer
 (`RepositorioDeUsuaria(conexion, usuario_id)`) filters every statement by that id, so
 another user's data is indistinguishable from data that does not exist (404). Fields are
@@ -304,6 +308,17 @@ snake_case (`anios_experiencia`, `salario_min`, `salario_moneda`); the consent t
 user, mailboxes, profile, CV master and consents; the spend ledger keeps its rows with no
 user attached, so the monthly cap cannot be bypassed. Without `DATABASE_URL` these routes
 answer a generic `503`, and `/yo` and `/health` are unaffected.
+
+**CV upload.** The type is read from the magic bytes, never from the name or the
+`Content-Type`; a scanned PDF (under 300 characters of text) is refused so the panel can
+offer the manual form. Only the encrypted text is stored (ADR-007), and neither the text nor
+the file name is ever logged.
+
+**Extraction gates.** The owner pays for one extraction per user. `extraccion.py` refuses it,
+in this order, when the switch is off (`EXTRACCION_ACTIVA=false` or the `ajustes` row), when the
+user already used her attempt, or when the month's spend plus a pessimistic estimate would pass
+5 EUR; the estimate covers the primary model and its fallback. A failed provider chain keeps the
+attempt but its estimate still counts toward the cap. The model call itself is not wired yet.
 
 ## Database
 
