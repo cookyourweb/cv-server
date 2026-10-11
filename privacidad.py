@@ -1,5 +1,8 @@
 """Privacy rules for CV content (REQ-3.5): it never reaches a log or an exception message.
 
+Generation logs (tests/test_registros_sin_datos_de_la_usuaria.py) carry no email, company or
+position either: at most `etiqueta_opaca(email)` and the count of findings.
+
 The rules, enforced by tests/test_privacidad_logs.py:
 - Code that handles a CV (lectura_cv, rutas_alta, extraccion) logs the exception TYPE and
   a fixed label, never the exception text, the file name or any part of the document.
@@ -10,7 +13,10 @@ The rules, enforced by tests/test_privacidad_logs.py:
 formatted exception, extra attributes) into one string so a test can assert that a
 sentinel planted in a CV never appears in it.
 """
+import hashlib
+import hmac
 import logging
+import secrets
 import traceback
 
 _BIBLIOTECAS = ("pypdf", "docx", "lxml", "PIL", "fontTools")
@@ -33,6 +39,21 @@ def tipo_de(error: BaseException) -> str:
 def registrar_fallo(logger: logging.Logger, etiqueta: str, error: BaseException) -> None:
     """Log a failure as `<label>: <ExceptionType>`; never the message or the traceback."""
     logger.error("%s: %s", etiqueta, tipo_de(error))
+
+
+# Per-process key: the label correlates the lines of one process (CV and letter of the same
+# mailbox) but cannot be reversed with a dictionary of emails, and it changes on every restart.
+_CLAVE_DE_ETIQUETAS = secrets.token_bytes(32)
+
+
+def etiqueta_opaca(valor: str) -> str:
+    """A short opaque label for a value that must not be logged (a mailbox).
+
+    Same value (case and surrounding spaces ignored), same label within a process; no way back
+    to the value. Log this instead of the email, the company or the position.
+    """
+    huella = hmac.new(_CLAVE_DE_ETIQUETAS, (valor or "").strip().lower().encode(), hashlib.sha256)
+    return huella.hexdigest()[:8]
 
 
 def volcar_registros(registros) -> str:

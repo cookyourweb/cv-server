@@ -157,6 +157,7 @@ from llm import (  # noqa: F401
 # superficie publica del modulo: los endpoints y los tests los siguen viendo en
 # `server`.
 import cuota
+import privacidad
 import fuente_master
 import guardrails
 from guardrails import (  # noqa: F401
@@ -516,7 +517,7 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
         if "No item to return was found" in (r.text or ""):
             logger.info(
                 "Búsqueda hecha para %s: sin ofertas nuevas (el dedup las tenia todas)",
-                usuario.get("email", ""),
+                privacidad.etiqueta_opaca(usuario.get("email", "")),
             )
             return Resultado(True, hay_novedades=False)
         logger.error(
@@ -525,7 +526,7 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
             r.status_code, WEBHOOK_BUSCAR_AHORA, (r.text or "")[:200],
         )
         return Resultado(False, hay_novedades=False)
-    logger.info("Búsqueda disparada para %s", usuario.get("email", ""))
+    logger.info("Búsqueda disparada para %s", privacidad.etiqueta_opaca(usuario.get("email", "")))
     return Resultado(True, hay_novedades=True)
 
 
@@ -873,7 +874,9 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         # get_drive_service() -> creds.refresh() puede fallar (token caducado)
         # ANTES del try interno de la lectura: sin este guard, sale un 500 HTML
         # opaco. Devolvemos el error REAL en JSON para poder diagnosticar.
-        logger.error("Drive auth/lectura falló en /generar-cv: %s", e)
+        # Solo el tipo: el mensaje de la libreria puede llevar datos de la usuaria. El
+        # mensaje completo sigue yendo en la respuesta 502 (la lee n8n), no al registro.
+        privacidad.registrar_fallo(logger, "Drive auth/lectura falló en /generar-cv", e)
         raise CVError(502, f"No se pudo autenticar/leer el CV master en Drive: {e}")
 
     # Guardrail: si hay un master configurado pero lo leído es ilegible
@@ -889,15 +892,15 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
 
     if tiene_master_configurado and not _es_legible(cv_master):
         logger.error("CV master ILEGIBLE para %s (largo=%d) — abortando para no inventar",
-                     email, len(cv_master or ""))
+                     privacidad.etiqueta_opaca(email), len(cv_master or ""))
         raise CVError(502, "No se pudo leer tu CV master desde Drive (archivo ilegible o sin acceso). "
                            "NO se generó un CV para evitar enviar datos inventados. "
                            "Revisá el archivo y los permisos en Drive.")
 
     if cv_master:
-        logger.info("CV master leído (%d chars) para %s", len(cv_master), email)
+        logger.info("CV master leído (%d chars) para %s", len(cv_master), privacidad.etiqueta_opaca(email))
     else:
-        logger.warning("CV master no encontrado para %s — usando solo perfil de Notion", email)
+        logger.warning("CV master no encontrado para %s — usando solo perfil de Notion", privacidad.etiqueta_opaca(email))
 
     # 3. Construir contexto del candidato
     ciudad = usuario.get("ciudad", "Madrid")
@@ -996,8 +999,10 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     cifras_sospechosas = hallazgos_cv.get("cifras_no_respaldadas", [])
     tecnologias_sospechosas = hallazgos_cv.get("tecnologias_no_respaldadas", [])
     for regla, hallazgos in hallazgos_cv.items():
-        logger.warning("%s por el CV Master en el CV de %s para %s/%s: %s",
-                       regla.upper().replace("_", " "), email, empresa, puesto, hallazgos)
+        # Regla y cuantos, nada mas: los hallazgos (cifras, tecnologias) salen de la
+        # respuesta JSON, que es donde los lee quien tiene que revisarlos.
+        logger.warning("%s por el CV Master en el CV de %s: %d hallazgo(s)",
+                       regla.upper().replace("_", " "), privacidad.etiqueta_opaca(email), len(hallazgos))
 
     # 5d. Guardrail del titular: que respete el contrato del PERFIL BASE. Es el unico
     #     que mira la CABECERA, y viene de un fallo medido: los CV de la consultora de Europa del Este y
@@ -1007,8 +1012,8 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
                                                         traducido=traducido) for h in a.hallazgos]
     if titular_sospechoso:
         logger.warning(
-            "TITULAR FUERA DEL CONTRATO del PERFIL BASE en el CV de %s para %s/%s: %s",
-            email, empresa, puesto, titular_sospechoso,
+            "TITULAR FUERA DEL CONTRATO del PERFIL BASE en el CV de %s: %d hallazgo(s)",
+            privacidad.etiqueta_opaca(email), len(titular_sospechoso),
         )
 
     # 5e. Guardrail de ENTRADA (los otros tres miran la salida): ¿habia material que
@@ -1018,8 +1023,8 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     descripcion_evaluada = evaluar_descripcion_oferta(descripcion)
     if not descripcion_evaluada["suficiente"]:
         logger.warning(
-            "DESCRIPCION INSUFICIENTE (%s chars) para %s/%s: %s",
-            descripcion_evaluada["chars"], empresa, puesto, descripcion_evaluada["aviso"],
+            "DESCRIPCION INSUFICIENTE (%s chars) en el CV de %s: %s",
+            descripcion_evaluada["chars"], privacidad.etiqueta_opaca(email), descripcion_evaluada["aviso"],
         )
 
     # 6. Generar DOCX con cabecera estructurada (titular adaptado por la oferta)
@@ -1030,7 +1035,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     try:
         link_drive = subir_cv_a_drive(docx_bytes, nombre_archivo)
     except Exception as e:
-        logger.error("Drive upload error: %s", e)
+        privacidad.registrar_fallo(logger, "Drive upload error", e)
         raise CVError(500, f"Error subiendo a Drive: {e}")
 
     # 8. Anotar el enlace en la ficha de Notion, ahora, no via n8n. Si la cadena
@@ -1137,7 +1142,7 @@ def generar_carta():
         # Sin esto sale un 500 HTML opaco y el fallo tarda en diagnosticarse: paso
         # el 24-jul-2026, con el GOOGLE_REFRESH_TOKEN caducado, y dejo la cadena de
         # n8n rota sin ningún mensaje util.
-        logger.error("Drive auth/lectura falló en /generar-carta: %s", e)
+        privacidad.registrar_fallo(logger, "Drive auth/lectura falló en /generar-carta", e)
         return jsonify({
             "ok": False,
             "error": f"No se pudo autenticar/leer el CV master en Drive: {e}",
@@ -1152,7 +1157,7 @@ def generar_carta():
         return imprimibles / len(t) >= 0.85
 
     if tiene_master and not _es_legible(cv_master):
-        logger.error("CV master ILEGIBLE para carta de %s — abortando", email)
+        logger.error("CV master ILEGIBLE para carta de %s — abortando", privacidad.etiqueta_opaca(email))
         return jsonify({
             "ok": False,
             "error": ("No se pudo leer tu CV master desde Drive. NO se generó la carta "
@@ -1216,9 +1221,9 @@ def generar_carta():
                                 traducido=master.master_traducido)
     for aviso in avisos:
         logger.warning(
-            "%s en la CARTA de %s para %s/%s: %s",
-            aviso.regla.upper().replace("_", " "), email, empresa, puesto,
-            aviso.hallazgos,
+            "%s en la CARTA de %s: %d hallazgo(s)",
+            aviso.regla.upper().replace("_", " "), privacidad.etiqueta_opaca(email),
+            len(aviso.hallazgos),
         )
 
     return jsonify({

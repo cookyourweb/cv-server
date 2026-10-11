@@ -342,12 +342,11 @@ def guardar_link_cv_en_notion(empresa: str, puesto: str, link_drive: str,
             timeout=15,
         )
         if resp.status_code != 200:
-            logger.warning("Notion: query oferta %s error %s", empresa, resp.status_code)
+            logger.warning("Notion: query oferta error %s", resp.status_code)
             return False
         results = resp.json().get("results", [])
         if not results:
-            logger.warning("Notion: no se encontro la oferta %s / %s para anotar el CV",
-                           empresa, puesto)
+            logger.warning("Notion: no se encontro la oferta para anotar el CV")
             return False
 
         page_id = results[0]["id"]
@@ -364,7 +363,7 @@ def guardar_link_cv_en_notion(empresa: str, puesto: str, link_drive: str,
             logger.warning("Notion: patch link CV error %s: %s",
                            patch.status_code, patch.text[:200])
             return False
-        logger.info("Notion: enlace del CV anotado en %s / %s", empresa, puesto)
+        logger.info("Notion: enlace del CV anotado")
         return True
     except requests.RequestException as e:
         logger.warning("Notion: no se pudo anotar el enlace del CV: %s", e)
