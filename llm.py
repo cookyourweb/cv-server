@@ -1,10 +1,13 @@
 """Capa LLM: quien escribe cada documento, en que orden se cae y con que backend.
 
-DOS cadenas, y confundirlas ha costado tiempo antes:
+CUATRO cadenas (`call_llm_extraccion` y `call_llm_invitada` son solo Claude y Groq, nada mas), y confundirlas ha costado tiempo antes:
 
 - `call_llm`: Groq primario, luego Gemini, luego Claude. Uso general.
 - `call_llm_calidad`: **Claude primario**, con Groq de fallback. Es la que escribe
-  el CV y la carta, o sea lo que sale hacia las empresas.
+  el CV y la carta, o sea lo que sale hacia las empresas. Solo para la duena y el modo heredado.
+- `call_llm_invitada`: Claude (clave general) y Groq. El CV y la carta de las usuarias con
+  cuenta en la base de datos: su consentimiento nombra solo a Anthropic y Groq, asi que
+  nunca Gemini. `server` la elige a traves de `cuota.generar`.
 
 DOS backends para la primera, elegidos con `LLM_BACKEND`:
 
@@ -313,3 +316,120 @@ def call_llm_calidad(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096)
     except Exception as e:
         logger.warning("Claude falló (%s) — cayendo a Groq", describir_error(e))
         return call_llm(prompt)
+
+
+# ── Capa EXTRACCION: la del alta, pagada por la duena (ADR-004, enmienda) ──
+# El texto de consentimiento y la enmienda nombran SOLO a Anthropic y Groq. Por eso esta
+# cadena es propia: Claude y, si cae, Groq. Nunca Gemini y nunca `call_llm`. Una sola
+# constante para el tope de salida: la usa la llamada Y la estimacion de coste
+# (`extraccion.TOKENS_SALIDA_MAX`), para que no puedan separarse.
+TOKENS_SALIDA_EXTRACCION = 1200
+TIMEOUT_EXTRACCION_S = 30
+
+
+def _groq_con_tope(prompt: str, max_tokens: int) -> RespuestaLLM:
+    """Una llamada a Groq con el tope de salida pedido. Compartida por la extraccion y por la
+    cadena de las invitadas: el mismo proveedor, el mismo formato, un solo sitio."""
+    resp = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Content-Type":  "application/json",
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+        },
+        json={
+            "model":       GROQ_MODEL,
+            "messages":    [{"role": "user", "content": prompt}],
+            "max_tokens":  max_tokens,
+            "temperature": 0.7,
+        },
+        timeout=TIMEOUT_EXTRACCION_S,
+    )
+    resp.raise_for_status()
+    cuerpo = resp.json()
+    uso = cuerpo.get("usage") or {}
+    return RespuestaLLM(cuerpo["choices"][0]["message"]["content"], GROQ_MODEL,
+                        uso.get("prompt_tokens"), uso.get("completion_tokens"))
+
+
+def _groq_extraccion(prompt: str) -> RespuestaLLM:
+    return _groq_con_tope(prompt, TOKENS_SALIDA_EXTRACCION)
+
+
+def _clave_de_extraccion() -> str:
+    # Leida en cada llamada y SOLO de aqui: nunca `CLAUDE_API_KEY`. Es una clave propia, con
+    # su propio tope en la consola de Anthropic, para que el gasto del alta quede aislado.
+    return os.getenv("ANTHROPIC_CLAVE_ALTA", "").strip()
+
+
+def clave_de_extraccion_configurada() -> bool:
+    return bool(_clave_de_extraccion())
+
+
+def _claude_extraccion(prompt: str, model: str) -> RespuestaLLM:
+    clave = _clave_de_extraccion()
+    if not clave:
+        raise RuntimeError("ANTHROPIC_CLAVE_ALTA no configurada")
+    # Un solo intento por proveedor y 30 s como mucho: una peticion de la usuaria no espera
+    # reintentos (el SDK reintenta por defecto 2 veces) y el coste esta acotado a una llamada.
+    cliente = anthropic.Anthropic(api_key=clave, timeout=TIMEOUT_EXTRACCION_S, max_retries=0)
+    resp = cliente.messages.create(
+        model=model,
+        max_tokens=TOKENS_SALIDA_EXTRACCION,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    uso = getattr(resp, "usage", None)
+    return RespuestaLLM("".join(b.text for b in resp.content if b.type == "text"), model,
+                        getattr(uso, "input_tokens", None), getattr(uso, "output_tokens", None))
+
+
+def call_llm_extraccion(prompt: str, model: str = CV_MODEL) -> RespuestaLLM:
+    """Claude, luego Groq, y NADA mas. Solo para POST /extraccion; el CV y la carta no la usan.
+
+    Si fallan los dos lanza la excepcion de Groq: quien llama cierra la reserva.
+    """
+    if not clave_de_extraccion_configurada():
+        # Fail closed: sin la clave propia del alta no se llama a NINGUN proveedor.
+        raise RuntimeError("ANTHROPIC_CLAVE_ALTA no configurada")
+    try:
+        respuesta = _claude_extraccion(prompt, model)
+        logger.info("LLM extraccion: Claude OK (%s)", model)
+        return respuesta
+    except (NameError, AttributeError, TypeError, ImportError):
+        raise  # bug nuestro, no una caida del proveedor: no se esconde tras el fallback
+    except Exception as e:
+        logger.warning("Extraccion: Claude fallo (%s) — pasando a Groq", describir_error(e))
+    respuesta = _groq_extraccion(prompt)
+    logger.info("LLM extraccion: Groq OK (%s)", GROQ_MODEL)
+    return respuesta
+
+
+# ── Capa INVITADAS: el CV y la carta de una usuaria con cuenta en la base de datos ──
+# El mismo texto de consentimiento (`enviar_cv_a_ia`) cubre la generacion, y nombra SOLO a
+# Anthropic y Groq. Por eso su CV nunca pasa por `call_llm_calidad` (cuyo fallback es la
+# cascada general: Groq, Gemini, Claude) ni por Gemini. A diferencia de la extraccion, aqui
+# se usa la clave general de Claude: `ANTHROPIC_CLAVE_ALTA` es solo del alta.
+def call_llm_invitada(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096) -> RespuestaLLM:
+    """Claude, luego Groq, y NADA mas. Para el CV y la carta de las usuarias invitadas.
+
+    Si fallan los dos lanza `RuntimeError` con un mensaje fijo (las rutas lo traducen a 503 y
+    el mensaje de un proveedor puede llevar la URL de la peticion).
+    """
+    try:
+        contenido = call_claude(prompt, model=model, max_tokens=max_tokens)
+        logger.info("LLM invitada: Claude OK (%s)", model)
+        return RespuestaLLM(
+            str(contenido), model,
+            getattr(contenido, "tokens_entrada", None),
+            getattr(contenido, "tokens_salida", None),
+        )
+    except (NameError, AttributeError, TypeError, ImportError):
+        raise  # bug nuestro, no una caida del proveedor: no se esconde tras el fallback
+    except Exception as e:
+        logger.warning("Invitada: Claude fallo (%s) — pasando a Groq", describir_error(e))
+    try:
+        respuesta = _groq_con_tope(prompt, max_tokens)
+    except Exception as e:
+        logger.error("Invitada: Groq fallo (%s)", describir_error(e))
+        raise RuntimeError("Todos los LLMs fallaron. Revisa las API keys y el estado de los servicios.") from None
+    logger.info("LLM invitada: Groq OK (%s)", GROQ_MODEL)
+    return respuesta

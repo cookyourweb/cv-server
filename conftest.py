@@ -53,3 +53,10 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture(scope="session")
 def url_de_pruebas() -> str:
     return _url_de_pruebas()
+
+
+@pytest.fixture(autouse=True)
+def _sin_base_de_datos_de_servicio(monkeypatch):
+    """No test may reach the service database by accident: the legacy (no database)
+    mode is the default, and a test that wants a database sets DATABASE_URL itself."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)

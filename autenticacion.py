@@ -174,14 +174,24 @@ def verificar_token(token: str, config: ConfiguracionOIDC, claves: ClavesPublica
     return Identidad(datos["iss"], str(datos.get("sub", "")), email, str(datos.get("name") or ""))
 
 
-def identificar(cabecera: str | None, config: ConfiguracionOIDC, claves: ClavesPublicas) -> Identidad:
-    """De la cabecera Authorization a una Identidad invitada, o el error que toque."""
+def identificar(cabecera: str | None, config: ConfiguracionOIDC, claves: ClavesPublicas,
+                autorizar: Callable[[Identidad], bool] | None = None) -> Identidad:
+    """De la cabecera Authorization a una Identidad invitada, o el error que toque.
+
+    Quien decide si la cuenta esta invitada es `autorizar(identidad)`, inyectado por el
+    servidor (invitaciones en la base de datos). Sin callback se usa la lista INVITADAS
+    de la configuracion: es el modo heredado, sin base de datos.
+    """
     if not config.completa():
         raise ProveedorNoDisponible("la autenticacion no esta configurada")
     partes = (cabecera or "").split(" ")
     if len(partes) != 2 or partes[0] != "Bearer" or not partes[1]:
         raise ErrorDeAutenticacion("falta la cabecera Authorization: Bearer")
     identidad = verificar_token(partes[1], config, claves)
-    if identidad.email.strip().lower() not in config.invitadas:
+    if autorizar is not None:
+        invitada = autorizar(identidad)
+    else:
+        invitada = identidad.email.strip().lower() in config.invitadas
+    if not invitada:
         raise NoInvitada("la cuenta no esta en la lista de invitadas")
     return identidad

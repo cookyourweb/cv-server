@@ -32,7 +32,10 @@ CV Master (Google Docs) ─────┘
 
 **Models.** In production, the CV and the cover letter are written by `claude-sonnet-4-6`.
 If Claude fails, it falls back to Groq (`openai/gpt-oss-120b`), then Gemini, then Claude
-Haiku (`call_llm_calidad` and `call_llm` in `llm.py`). Every response reports in
+Haiku (`call_llm_calidad` and `call_llm` in `llm.py`). That is the owner's chain only: for an
+invited user (one with an account in the database, not exempt from the quota) the chain is
+`call_llm_invitada`, Claude (general key) then Groq and nothing else, never Gemini, because the
+consent text names only Anthropic and Groq. Every response reports in
 `modelo_usado` (model used) the model that actually wrote it. The model is set by the
 `CV_MODEL` and `CARTA_MODEL` environment variables, not by the code; `GET /health` shows
 the active ones.
@@ -98,6 +101,19 @@ produce noise.
 And they warn, they do not abort: a warning may be a legitimate rewording, and aborting
 would leave the user without a cover letter.
 
+### Translated-master mode
+
+When the master comes from the database in another language than the document (the
+response says `master_traducido: true`), detectors that compare literal text would raise
+false alarms: the words simply differ between languages. Every detector in the registry
+declares `independiente_del_idioma` (the input check `evaluar_descripcion_oferta` is not a detector and is outside the registry). Language-independent ones keep running (`cifras_no_respaldadas`,
+`tecnologias_no_respaldadas`, `inflacion`); the text-matching ones
+(`skills_no_respaldadas`, `titular_fuera_de_contrato`, whose PERFIL BASE section names are
+Spanish, and `experiencia_mal_atribuida`, whose years regex is Spanish) are skipped by
+`guardrails.revisar(..., traducido=True)` and listed in the `no_evaluables` field of
+`/generar-carta` and `/generar-cv`, so that "no warning" is never read as "checked and clean". The
+default flow (Drive master, same language) is unchanged and `no_evaluables` is empty.
+
 ### The fifth guardrail came out of the second one's failure
 
 `tecnologias_no_respaldadas` works from a catalog of 173 variants entered by hand. None
@@ -149,7 +165,7 @@ There is currently no delimiter or instruction filter on the posting.
 |---|---|---|
 | Cost per request | CV about 0.05 USD and cover letter about 0.013 USD with `claude-sonnet-4-6` (measured 2 Oct 2026, prompt of about 9,600 input tokens) | [ADR-002](docs/ADR-002-cv-model.md) |
 | Why this model | Cost measured with `count_tokens` and real Haiku failures | [ADR-002](docs/ADR-002-cv-model.md) |
-| Fallback chain | Claude, then Groq, then Gemini, then Claude Haiku; `modelo_usado` says which one wrote it | [`llm.py`](llm.py) |
+| Fallback chain | Owner: Claude, then Groq, then Gemini, then Claude Haiku. Invited users: Claude, then Groq only; `modelo_usado` says which one wrote it | [`llm.py`](llm.py) |
 | Evaluation | `evaluacion.py` is pure (it calls no model) and its tests run in the suite as a regression net. Real generation against the LLM is run by hand | [`evaluacion.py`](evaluacion.py), [`tests/test_evaluacion.py`](tests/test_evaluacion.py) |
 | Known failure modes | Posting description too short (generic CV, flagged in `descripcion_oferta`); role scope inflation, not detected; response written by a fallback model | [What the guardrails do NOT detect](#what-the-guardrails-do-not-detect) |
 | Prompt injection | Known risk, only partly mitigated | [Known risk](#known-risk-prompt-injection) |
@@ -180,6 +196,16 @@ Documented as ADRs in [`docs/`](docs/):
 - **[ADR-007](docs/ADR-007-cv-encryption-at-rest.md)**. CV masters are encrypted at rest
   by the application with AES-256-GCM and a keyring that never touches the database
   (`cifrado.py`). Each ciphertext is bound to its owner and language.
+- **[ADR-008](docs/ADR-008-external-encrypted-backup.md)**. Daily `pg_dump` of the database,
+  encrypted with `age` to an offline public key, kept as a 30-day GitHub artifact because
+  Neon's free restore window is only 6 hours.
+- **[ADR-009](docs/ADR-009-rule-based-match.md)**. The offer match is plain rules, no model,
+  and an offer is the caller's only if its Notion "Usuario" relation holds her page id;
+  anything else is one identical 404.
+
+- **[ADR-010](docs/ADR-010-owner-paid-generation-quota.md)**. Invited users generate CVs and
+  letters on the owner's keys: 8 applications per user and UTC month (CV 0.7 + letter 0.3) and a
+  20 EUR monthly cap, both reserved before any model is called; refusals are 429 with `motivo`.
 
 > **Authentication is covered in ADR-003 of the `buscartrabajo` repo**
 > (`docs/adr/ADR-003-authentication.md`), which is not the ADR-003 above.
@@ -206,8 +232,22 @@ Two other known debts:
 |---|---|---|
 | `GET /` | Public | Invitation page (`templates/inicio.html`) |
 | `GET /health` | Public | Status, active models and deployed branch/commit |
-| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is |
+| `GET /yo` | Google token (`Authorization: Bearer`) | Who the user is, plus `consentimientos: {almacenar_cv: bool, enviar_cv_a_ia: bool}` for a user in the database (true only for the CURRENT consent version, not revoked; omitted without a database or if it fails, so the panel must not treat "absent" as "false"), plus `cuota: {usadas, limite, se_renueva, tope_agotado}` for Neon users who are not exempt (units with one decimal; `tope_agotado` is true when the global monthly cap leaves no room even for a cover letter, [ADR-010](docs/ADR-010-owner-paid-generation-quota.md)) |
+| `GET /perfil` | Google token | The caller's profile (404 if none) |
+| `PUT /perfil` | Google token | Create or replace the profile (422 on invalid data) |
+| `POST /consentimientos` | Google token | Record a consent `{tipo, version}` (201, idempotent) |
+| `DELETE /consentimientos/{tipo}` | Google token | Withdraw a consent (`tipo` is `almacenar_cv` or `enviar_cv_a_ia`): **204** with no body, also when it was already revoked or never given; **422** `{ok: false, error, campos: ["tipo"]}` for any other `tipo`. See "Withdrawing a consent" below |
+| `POST /cv` | Google token | Upload a CV (multipart field `archivo`, PDF or DOCX, 2 MB): stored encrypted, one master per language (201 `{idioma, formato, caracteres}`; 403 without the `almacenar_cv` consent, 413, 415, 422) |
+| `GET /cv` | Google token | The caller's masters, metadata only (`idioma`, `formato`, `subido_en`) |
+| `DELETE /cv/{idioma}` | Google token | Delete the caller's master in `es` or `en` (204, 404) |
+| `POST /extraccion` | Google token | Owner-paid extraction of profile proposals from her stored CV, empty body. 200 `{estado: "propuesta", propuestas: [{campo, valor, cita}]}` or `{estado: "manual", motivo: desactivada\|ya_usada\|tope\|proveedor\|indisponible}`; 403 without the `enviar_cv_a_ia` consent, 404 without a stored CV |
+| `POST /interes` | Google token | "Tell me about packs / access through my academy" lead, body `{tipo: "paquetes"\|"academia", organizacion?: string up to 120}`. One row per user and kind, idempotent (201 `{tipo, organizacion}`; 422 on anything else); deleted with the account |
+| `GET /ofertas/{id}/encaje` | Google token | Rule-based match of one of the caller's offers against her profile and master ([ADR-009](docs/ADR-009-rule-based-match.md)). 200 `{cubiertos, huecos, no_evaluables, alcanzable, cobertura}`; 404 (identical for not hers, nobody's and missing), 409 with neither profile nor master, 503 if Notion fails |
+| `POST /encajes` | Google token | Same for `{"ids": [...]}` (max 50, 51 is 422): `{"<id>": {alcanzable, cobertura}}` keyed by the id as sent (summary only); ids that are not hers are silently omitted, empty ids give `{}` |
+| `DELETE /cuenta` | Google token | Delete the account and its data in one transaction (204). Notion and Drive are NOT touched: see "What deleting an account removes and what it does not" |
+| `PUT /ajustes/extraccion` | Machine key | Kill switch of the owner-paid CV extraction, body `{"activa": bool}`; no redeploy needed |
 | `POST /registro` | Machine key | User sign-up |
+| `POST /generar-cv`, `POST /generar-carta` | Machine key | Generation for the user's email. For a Neon user they count against the quota and the cap: **429** `{ok: false, error, motivo: "cuota"\|"tope", se_renueva: "YYYY-MM-01"}` before any model is called, **503** `motivo: "indisponible"` if the ledger is down. The owner, `CUOTA_EXENTAS` and users with no Neon row (legacy) are never counted |
 | `POST /generar-cv` | Machine key | CV tailored to a posting |
 | `POST /generar-carta` | Machine key | Cover letter tailored to a posting |
 | `GET /usuarios` | Machine key | User list |
@@ -235,16 +275,42 @@ audience equal to `OIDC_AUDIENCIA`, expiry with 60 s of leeway, and `email_verif
 
 | Code | Meaning |
 |---|---|
-| 200 | `{sub, email, nombre}` |
+| 200 | `{sub, email, nombre, tiene_perfil?, origen_master}` |
 | 401 | Token missing or invalid |
 | 403 | Valid token, but the email is not invited |
 | 503 | Missing configuration or the public keys cannot be reached |
 
-**Invited users.** The list is the `INVITADAS` variable (comma-separated emails, empty =
-nobody gets in). It is temporary until there is a user database.
+**Invited users.** There are two modes, chosen by whether `DATABASE_URL` is set:
 
-**CORS.** Only `/yo` and `/health` allow it, with exact origin matching against
-`CORS_ORIGENES`. Empty = no origins.
+| Mode | Who decides | Database |
+|---|---|---|
+| Legacy (no `DATABASE_URL`) | the `INVITADAS` list (comma-separated emails, empty = nobody) | never touched |
+| Database (`DATABASE_URL` set) | the `invitaciones` table | used on sign-in |
+
+In database mode the identity is the Google `(iss, sub)` pair, not the email. On first
+sign-in an unused, unexpired invitation for the verified email creates the user and is
+consumed; a second invited mailbox of the same account is attached to the same user; a
+mailbox that already belongs to another user is never merged. `INVITADAS` is ignored
+unless `INVITADAS_COMO_RESPALDO=1`, a temporary bootstrap fallback that also lets the
+owner in while the database is cold. It will be removed once invitations live only in the
+table. `/health` never touches the database.
+
+Add an invitation with the helper (it needs `DATABASE_URL` in the environment and never
+prints it; `--dias` sets the expiry):
+
+```bash
+.venv/bin/python scripts/invitar.py ana@example.com --dias 14
+```
+
+`/yo` also returns `tiene_perfil` (true if Neon has a profile or the legacy Notion user
+has a Drive master, false only when both are definitely empty, omitted when the database
+or Notion cannot be reached) and `origen_master` (`drive`, `neon` or `null`).
+
+**CORS.** The browser routes of the panel (`/yo`, `/health`, `/perfil`,
+`/consentimientos`, `/cv`, `/extraccion`, `/interes`, `/cuenta`, `/encajes` and
+`/ofertas/<id>/encaje`) allow `GET, POST, PUT, DELETE` with `Authorization` and
+`Content-Type`, with exact origin matching against `CORS_ORIGENES`. Empty = no origins.
+Machine routes never get CORS.
 
 **The Google client ID is public on purpose.** It appears in the panel and protects
 nothing by itself: what protects is the audience check, which rejects tokens issued for
@@ -259,6 +325,93 @@ export CORS_ORIGENES=http://localhost:4200
 ```
 
 The full design decision is in ADR-003 of the `buscartrabajo` repo.
+
+### Owner-scoped routes
+
+`/perfil`, `/consentimientos` (including its `DELETE`), `/cv`, `/interes` and `/cuenta` act only on the user resolved from the token:
+no path or body field names another user, and the data layer
+(`RepositorioDeUsuaria(conexion, usuario_id)`) filters every statement by that id, so
+another user's data is indistinguishable from data that does not exist (404). Fields are
+snake_case (`anios_experiencia`, `salario_min`, `salario_moneda`); the consent types are
+`almacenar_cv` and `enviar_cv_a_ia` with version `v2` (`repositorio.VERSION_DE_CONSENTIMIENTO`; a `v1` consent no longer authorises anything and `POST /consentimientos` answers 422 to it). Deleting the account removes the
+user, mailboxes, invitation rows, profile, CV master, consents and interest leads; the spend ledgers keep its rows with no
+user attached, so the monthly cap cannot be bypassed. Without `DATABASE_URL` these routes
+answer a generic `503`, and `/yo` and `/health` are unaffected.
+
+**Withdrawing a consent.** `DELETE /consentimientos/{tipo}` stamps `revocado_en` on the active row of
+that type (every version still active). The contract the panel implements against:
+`204` with no body (idempotent: also when it was already revoked or never given; the first
+stamp is kept), `422 {ok: false, error: "datos no validos", campos: ["tipo"]}` for an unknown `tipo`.
+Effects: revoking `enviar_cv_a_ia` makes `POST /extraccion` answer `403` and stops the Neon
+master reaching any model (`fuente_master.MasterEnBase` checks the consent on every read), but the
+stored CV stays. Revoking `almacenar_cv` also deletes every stored CV of the user (all languages)
+in the same transaction (a failure leaves consent and CVs untouched, `503`), and `POST /cv`
+answers `403` until the consent is given again. Giving it again through `POST /consentimientos`
+re-activates the same row (`revocado_en` cleared, `otorgado_en` restarted): the table keeps one row per
+(user, type, version), so the history of an earlier grant or revocation of the same version is not kept.
+
+**CV upload.** The type is read from the magic bytes, never from the name or the
+`Content-Type`; a scanned PDF (under 300 characters of text) is refused so the panel can
+offer the manual form. Only the encrypted text is stored (ADR-007), and neither the text nor
+the file name is ever logged.
+
+**Extraction gates.** The owner pays for one extraction per user. `extraccion.py` refuses it,
+in this order, when the switch is off (`EXTRACCION_ACTIVA=false` or the `ajustes` row), when the
+user already used her attempt, or when the month's spend plus a pessimistic estimate would pass
+5 EUR; the estimate covers the primary model and its fallback (Claude then Groq, 1200 output tokens each). A failed provider chain keeps the
+attempt but its estimate still counts toward the cap.
+
+**Extraction call.** `POST /extraccion` checks the kill switch FIRST (before consent and CV, so
+a switched-off extraction asks nothing of the user), then the consent and the stored CV, then
+the dedicated key, then the spend gates, and calls `llm.call_llm_extraccion` once. That chain is
+its own: Claude (`CV_MODEL`) and, if it fails, Groq (`GROQ_MODEL`), nothing else (never Gemini, never
+the general cascade), both with `max_tokens` 1200 (`llm.TOKENS_SALIDA_EXTRACCION`, the same
+constant the cost estimate uses), a 30 s timeout and no retries. Claude uses
+`ANTHROPIC_CLAVE_ALTA` only, never `CLAUDE_API_KEY`; if it is empty the route answers
+`{estado: "manual", motivo: "indisponible"}` without reserving or calling any provider. The CV
+travels inside a data block and the answer is validated by `propuestas.py`: every proposal needs
+a `cita` that is a literal quote of the CV, salary and modality are never accepted, and a stack
+technology must appear in its `cita`. The user reviews each proposal in the panel before anything
+is saved. The CV and letter generators of the owner's legacy flow keep `call_llm_calidad` unchanged; invited users use `llm.call_llm_invitada` (Claude with the general key, then Groq).
+
+Before enabling the switch in production: set `ANTHROPIC_CLAVE_ALTA` (its own Anthropic key with
+its own monthly limit), verify the current model ids and the `PRECIO_*` constants in
+`extraccion.py`, enable Zero Data Retention on the Groq account, and name Anthropic and Groq
+(processing in the United States) in the consent text and the privacy policy.
+
+### What deleting an account removes and what it does not
+
+`DELETE /cuenta` answers `204` once the database transaction commits. It is all or nothing
+(a failure answers `503` and changes nothing).
+
+**Removed, in Neon, in that transaction:** the user row; every mailbox of hers (`usuario_emails`);
+her **invitation rows** (`invitaciones`, which keep the email in the clear: those of her mailboxes
+and those she consumed), so the address is not kept and the owner has to invite her again to let her
+back in; her profile; every stored CV, encrypted, in all languages; her consents (including the
+revoked ones); and her interest leads.
+
+**Kept, anonymous:** the spend ledgers `extracciones` and `gastos_generacion` keep their rows with
+`usuario_id` set to NULL (model, token counts, cost, timestamps). They hold no email, name, company
+or position (the tables have no such column; a test guards it) and they keep the monthly caps and the
+one-extraction rule honest. Aggregates must be computed from them only.
+
+**NOT removed, outside Neon (a manual job for the owner, nothing is automated yet):**
+
+| Where | What stays | How to find it |
+|---|---|---|
+| Notion, `Usuarios` database | Her page, if one was created (`POST /registro`): name, email, profile, target role, stack, salary, modality, city, LinkedIn, CV master URL and file id | Property `Email` equals her mailbox. The generation routes need this page to exist for an email |
+| Notion, `Ofertas` database | Every offer with her page in the `Usuario` relation, including `Link CV Drive` and `CV usado` (a file name with her name and the position) | Relation `Usuario` = her page id |
+| Google Drive, folder `FOLDER_CV_GENERADOS` | Every generated CV, `cv-<name>-<position>-<year>.docx`, readable by **anyone with the link** | The `Link CV Drive` values above (the file name carries her name slug) |
+| Google Drive, folder `FOLDER_CV_MASTERS` | Legacy masters of Notion users (the owner's flow). Invited users never put a master there: theirs lives encrypted in Neon | Her page's `CV Master URL` |
+| Neon / GitHub backups | The daily encrypted dump (30 days, see Backups) still contains her rows until it expires; Neon's own restore window is 6 hours | Nothing to do: they expire |
+| n8n and the mail provider | Execution history and sent mail of the search workflow may hold her address and profile (to be confirmed) | n8n executions, Brevo logs |
+| AI providers | Whatever Anthropic and Groq keep of the requests (Groq with zero data retention enabled, Anthropic to be confirmed) | Provider consoles |
+
+Order that works: before or right after `DELETE /cuenta`, read her Notion page and offers (the email in
+the page still identifies her), delete the Drive files from the `Link CV Drive` values, archive the offers
+and then her page. The logs of this service carry no email, company or position (an opaque per-process
+label at most, see `privacidad.etiqueta_opaca`). The "Tu cuenta" page of the panel should say the same:
+that the registry of spend stays anonymous and that copies expire in 30 days.
 
 ## Database
 
@@ -295,6 +448,60 @@ ALLOW_DESTRUCTIVE_DB_TESTS=1 .venv/bin/python -m pytest -q -m bd
 ```
 
 Only do this against a disposable database.
+
+## Backups
+
+Neon's free plan only restores the last 6 hours, so `.github/workflows/neon-backup.yml`
+takes a daily `pg_dump` (Postgres 18 client), encrypts it with [age](https://github.com/FiloSottile/age)
+and uploads **only the encrypted file** as an artifact kept for 30 days. Artifacts of a
+public repository can be downloaded by any signed-in GitHub user, which is why a plain
+dump is never uploaded. Rationale: [ADR-008](docs/ADR-008-external-encrypted-backup.md).
+
+One-time setup (the workflow fails with a clear message until it is done):
+
+1. Create a key pair on your own machine: `age-keygen -o age-backup.key`. Keep the file
+   **offline** (two copies); it is the only way to read a backup. Never commit it.
+2. The command prints the public key (`age1...`). Add it as the repository secret
+   `AGE_PUBLIC_KEY` (Settings, Secrets and variables, Actions).
+3. Add the repository secret `NEON_BACKUP_URL`: a connection string for the database,
+   preferably of a read-only role (`pg_read_all_data`).
+4. Run the workflow once with "Run workflow" and check that an artifact appears.
+
+Restore, always on a scratch Neon branch (never on the live one):
+
+```bash
+age --decrypt -i age-backup.key neon-YYYYMMDDTHHMMSSZ.dump.age > restore.dump
+pg_restore --no-owner --no-privileges --dbname "$SCRATCH_BRANCH_URL" restore.dump
+```
+
+Then point `DATABASE_URL_PRUEBAS` or a local check at that branch and compare row counts.
+The CV masters stay encrypted inside the dump: you also need the application keyring
+(`CV_CLAVES`) to read them. Delete `restore.dump` afterwards.
+
+## Pre-production checklist
+
+Environment variables Render MUST have before deploying a change that needs them. A
+missing one does not crash the service: the feature quietly degrades.
+
+- [ ] `NOTION_DB_OFERTAS`: id of the Notion offers database. There is no default in the
+  code any more. Without it the offer lookups return nothing, `/crear-oferta` answers 502
+  and `GET /ofertas/{id}/encaje` and `POST /encajes` answer 503. **Set it on Render before
+  deploying the offer-match change (ADR-009).**
+- [ ] `NOTION_TOKEN` and `NOTION_DB_USUARIOS`: the owner of an offer is resolved through them.
+- [ ] `DATABASE_URL`, `CV_CLAVES`, `CV_CLAVE_ACTIVA`, `CORS_ORIGENES`: see "Database" and
+  "Invitation-only access".
+- [ ] Generation quota and cap ([ADR-010](docs/ADR-010-owner-paid-generation-quota.md)), BEFORE
+  `DATABASE_URL` is set on Render and migration `0002_cuota` is applied:
+  - [ ] `CUOTA_EXENTAS`: the owner's mailbox(es), comma-separated. Without it a database outage
+    could refuse her own generation.
+  - [ ] `CUOTA_SOLICITUDES_MES`, `CUOTA_UNIDADES_CV`, `CUOTA_UNIDADES_CARTA`,
+    `TOPE_GENERACION_EUR`: only if the defaults (8, 0.7, 0.3, 20 EUR) are not what you want.
+  - [ ] `AVISO_GASTO_EMAIL`, `BREVO_API_KEY`, `BREVO_REMITENTE`: the 70 % alarm mail. Without
+    all three no mail is sent (generation still works). The sender must be verified in Brevo.
+  - [ ] Verify the `PRECIO_*` constants (primary and Groq) against the providers'
+    price pages, as for the extraction.
+  - [ ] Set a monthly **spend limit on the Anthropic console** for the key behind `CLAUDE_API_KEY`:
+    a second layer that does not depend on this code's estimate.
 
 ## Tests
 

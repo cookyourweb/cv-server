@@ -420,3 +420,29 @@ def test_el_codigo_no_lleva_ninguna_url_de_google_escrita():
         fuente = f.read()
     assert "googleapis" not in fuente
     assert "accounts.google" not in fuente
+
+
+# --- injected authorizer (invitations from the database) ---------------------------
+
+def test_an_injected_authorizer_decides_instead_of_the_env_list(par_a, claves):
+    vistas = []
+
+    def autorizar(identidad):
+        vistas.append(identidad)
+        return True
+
+    # ana is NOT in the env list: the callback alone admits her.
+    quien = identificar(_bearer(par_a), _config(invitadas=()), claves, autorizar)
+    assert quien.email == "ana@ejemplo.es" and vistas == [quien]
+
+
+def test_an_authorizer_that_refuses_raises_not_invited_even_if_the_env_list_has_her(par_a, claves):
+    with pytest.raises(NoInvitada):
+        identificar(_bearer(par_a), _config(), claves, lambda identidad: False)
+
+
+def test_the_authorizer_is_not_called_when_the_token_is_bad(claves):
+    llamadas = []
+    with pytest.raises(ErrorDeAutenticacion):
+        identificar("Bearer basura", _config(), claves, lambda i: llamadas.append(i) or True)
+    assert llamadas == []

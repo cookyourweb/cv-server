@@ -30,8 +30,10 @@ CV Master (Google Docs) ───┘
 ```
 
 **Modelos.** En producción, el CV y la carta los escribe `claude-sonnet-4-6`. Si Claude
-falla, cae a Groq (`openai/gpt-oss-120b`), luego Gemini y luego Claude Haiku
-(`call_llm_calidad` y `call_llm` en `llm.py`). Cada respuesta informa en `modelo_usado`
+falla, las usuarias invitadas pasan a Groq (`openai/gpt-oss-120b`) y nada más
+(`call_llm_invitada` en `llm.py`, nunca Gemini porque el texto de consentimiento solo nombra a
+Anthropic y Groq). El flujo heredado de la dueña conserva la cadena larga (Groq, Gemini y
+Claude Haiku en `call_llm_calidad`). El coste estimado de la cuota solo cuenta Claude y Groq. Cada respuesta informa en `modelo_usado`
 del modelo que la escribió de verdad. El modelo lo fijan las variables de entorno
 `CV_MODEL` y `CARTA_MODEL`, no el código; `GET /health` muestra los que están activos.
 
@@ -147,7 +149,7 @@ No hay hoy un delimitador ni un filtro de instrucciones sobre la oferta.
 |---|---|---|
 | Coste por petición | CV unos 0,05 USD y carta unos 0,013 USD con `claude-sonnet-4-6` (medición del 2-oct-2026, prompt de unos 9.600 tokens de entrada) | [ADR-002](docs/ADR-002-cv-model.md) |
 | Por qué este modelo | Coste medido con `count_tokens` y fallos reales de Haiku | [ADR-002](docs/ADR-002-cv-model.md) |
-| Cadena de respaldo | Claude, luego Groq, luego Gemini, luego Claude Haiku; `modelo_usado` dice cuál escribió | [`llm.py`](llm.py) |
+| Cadena de respaldo | Invitadas: Claude y luego Groq, nada más. Dueña (flujo heredado): Claude, Groq, Gemini y Claude Haiku. `modelo_usado` dice cuál escribió | [`llm.py`](llm.py) |
 | Evaluación | `evaluacion.py` es pura (no llama a ningún modelo) y sus tests corren en la suite como red contra regresiones. Generar de verdad contra el LLM se lanza a mano | [`evaluacion.py`](evaluacion.py), [`tests/test_evaluacion.py`](tests/test_evaluacion.py) |
 | Modos de fallo conocidos | Descripción de oferta demasiado corta (CV genérico, avisado en `descripcion_oferta`); inflación del alcance del rol, no detectada; respuesta escrita por un modelo de respaldo | [Lo que los guardrails NO detectan](#lo-que-los-guardrails-no-detectan) |
 | Inyección de instrucciones | Riesgo conocido, mitigado solo en parte | [Riesgo conocido](#riesgo-conocido-inyección-de-instrucciones) |

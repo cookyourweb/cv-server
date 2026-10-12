@@ -77,3 +77,13 @@ def test_an_explicit_sslmode_in_the_url_is_respected(monkeypatch, modo):
     kwargs = _kwargs_del_motor(monkeypatch, f"postgresql://u:p@host/db?sslmode={modo}")
     assert "sslmode" not in kwargs.get("connect_args", {})
     assert f"sslmode={modo}" in kwargs["_url"]
+
+
+@pytest.mark.parametrize("valor, esperado", [(None, False), ("", False), ("   ", False),
+                                             ("postgresql://u:p@h/db", True)])
+def test_the_database_counts_as_configured_only_with_a_non_blank_url(monkeypatch, valor, esperado):
+    if valor is None:
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+    else:
+        monkeypatch.setenv("DATABASE_URL", valor)
+    assert base_de_datos.configurada() is esperado

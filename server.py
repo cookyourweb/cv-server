@@ -49,7 +49,7 @@ from real_jobs import buscar_ofertas_reales
 # ── Notion ────────────────────────────────────
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
-NOTION_DB_OFERTAS  = os.getenv("NOTION_DB_OFERTAS", "33d11515-f4b2-8176-947b-000bbafd1ca7")
+NOTION_DB_OFERTAS  = os.getenv("NOTION_DB_OFERTAS", "")
 
 # ── Webhooks n8n ──────────────────────────────
 # OJO (28ago2026): los paths `buscar-ahora` y `nuevo-usuario` NO EXISTEN en la
@@ -120,10 +120,12 @@ class CVError(Exception):
     El core (generar_cv_core, ...) la lanza; cada capa HTTP (Flask/FastAPI)
     la mapea a su formato de respuesta. Ver docs/ADR-001."""
 
-    def __init__(self, status: int, message: str):
+    def __init__(self, status: int, message: str, extra: dict | None = None):
         super().__init__(message)
         self.status = status
         self.message = message
+        # Extra fields of the JSON body (e.g. `motivo`, `se_renueva` of a quota refusal).
+        self.extra = extra or {}
 
 
 # ══════════════════════════════════════════════
@@ -145,6 +147,7 @@ from llm import (  # noqa: F401
     call_claude,
     call_llm,
     call_llm_calidad,
+    call_llm_invitada,
     get_anthropic_client,
 )
 
@@ -153,6 +156,9 @@ from llm import (  # noqa: F401
 # Los guardrails viven en `guardrails.py`. Se reexportan aqui para no cambiar la
 # superficie publica del modulo: los endpoints y los tests los siguen viendo en
 # `server`.
+import cuota
+import privacidad
+import fuente_master
 import guardrails
 from guardrails import (  # noqa: F401
     DESCRIPCION_MINIMA,
@@ -278,6 +284,13 @@ def _nombre_archivo_cv(nombre: str, puesto: str) -> str:
     return "-".join(partes) + ".docx"
 
 
+def _resolver_master(usuario: dict, idioma: str, email: str):
+    """El master del usuario: Neon primero y Drive despues (ver fuente_master.py). Sin
+    DATABASE_URL es exactamente la lectura de Drive de siempre. El lector de Drive se
+    busca aqui, en cada llamada, para que siga siendo sustituible en los tests."""
+    return fuente_master.resolver_master(usuario, idioma, email, leer_drive=leer_cv_master_desde_drive)
+
+
 def _tiene_algun_master(usuario: dict) -> bool:
     """True si el usuario tiene configurado un master en cualquier idioma."""
     return bool(
@@ -383,6 +396,26 @@ def consumo_de(respuesta) -> dict:
     }
 
 
+# How a refusal of the generation quota is reported. 429 for both limits (the request is valid and
+# the same one succeeds after `se_renueva`), 503 only when the ledger itself is down. n8n tells
+# them apart by `motivo`: "cuota" (her units), "tope" (the global monthly cap), "indisponible".
+_RECHAZOS_DE_CUOTA = {
+    "cuota": (429, "Has llegado al limite de solicitudes de este mes"),
+    "tope": (429, "La generacion esta en pausa hasta el mes que viene"),
+    "indisponible": (503, "servicio no disponible"),
+}
+
+
+def _rechazo_de_cuota(rechazada) -> tuple:
+    """(status, message, extra body fields) of a `cuota.Rechazada`."""
+    rechazo = rechazada.rechazo
+    estado, mensaje = _RECHAZOS_DE_CUOTA[rechazo.motivo]
+    extra = {"motivo": rechazo.motivo}
+    if rechazo.se_renueva is not None:
+        extra["se_renueva"] = rechazo.se_renueva.isoformat()
+    return estado, mensaje, extra
+
+
 def requiere_clave_maquina(vista):
     """Solo deja pasar a quien trae la clave de maquina en X-Clave-Maquina."""
     @wraps(vista)
@@ -484,7 +517,7 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
         if "No item to return was found" in (r.text or ""):
             logger.info(
                 "Búsqueda hecha para %s: sin ofertas nuevas (el dedup las tenia todas)",
-                usuario.get("email", ""),
+                privacidad.etiqueta_opaca(usuario.get("email", "")),
             )
             return Resultado(True, hay_novedades=False)
         logger.error(
@@ -493,7 +526,7 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
             r.status_code, WEBHOOK_BUSCAR_AHORA, (r.text or "")[:200],
         )
         return Resultado(False, hay_novedades=False)
-    logger.info("Búsqueda disparada para %s", usuario.get("email", ""))
+    logger.info("Búsqueda disparada para %s", privacidad.etiqueta_opaca(usuario.get("email", "")))
     return Resultado(True, hay_novedades=True)
 
 
@@ -835,13 +868,15 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     idioma = idioma_in if idioma_in in ("en", "es") else idioma_de_oferta(puesto, descripcion, empresa)
     tiene_master_configurado = _tiene_algun_master(usuario)
     try:
-        master     = leer_cv_master_desde_drive(usuario, idioma)
+        master     = _resolver_master(usuario, idioma, email)
         cv_master  = master.texto
     except Exception as e:
         # get_drive_service() -> creds.refresh() puede fallar (token caducado)
         # ANTES del try interno de la lectura: sin este guard, sale un 500 HTML
         # opaco. Devolvemos el error REAL en JSON para poder diagnosticar.
-        logger.error("Drive auth/lectura falló en /generar-cv: %s", e)
+        # Solo el tipo: el mensaje de la libreria puede llevar datos de la usuaria. El
+        # mensaje completo sigue yendo en la respuesta 502 (la lee n8n), no al registro.
+        privacidad.registrar_fallo(logger, "Drive auth/lectura falló en /generar-cv", e)
         raise CVError(502, f"No se pudo autenticar/leer el CV master en Drive: {e}")
 
     # Guardrail: si hay un master configurado pero lo leído es ilegible
@@ -857,15 +892,15 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
 
     if tiene_master_configurado and not _es_legible(cv_master):
         logger.error("CV master ILEGIBLE para %s (largo=%d) — abortando para no inventar",
-                     email, len(cv_master or ""))
+                     privacidad.etiqueta_opaca(email), len(cv_master or ""))
         raise CVError(502, "No se pudo leer tu CV master desde Drive (archivo ilegible o sin acceso). "
                            "NO se generó un CV para evitar enviar datos inventados. "
                            "Revisá el archivo y los permisos en Drive.")
 
     if cv_master:
-        logger.info("CV master leído (%d chars) para %s", len(cv_master), email)
+        logger.info("CV master leído (%d chars) para %s", len(cv_master), privacidad.etiqueta_opaca(email))
     else:
-        logger.warning("CV master no encontrado para %s — usando solo perfil de Notion", email)
+        logger.warning("CV master no encontrado para %s — usando solo perfil de Notion", privacidad.etiqueta_opaca(email))
 
     # 3. Construir contexto del candidato
     ciudad = usuario.get("ciudad", "Madrid")
@@ -903,10 +938,19 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     )
 
     try:
-        # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad
-        respuesta_llm = call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096)
+        # Claude (calidad) primario; Groq de fallback dentro de call_llm_calidad. Una usuaria
+        # invitada (con cuenta en Neon) va por call_llm_invitada: Claude y Groq, nunca Gemini.
+        # La cuota y el tope mensual se miran ANTES de llamar a ningun modelo (ADR-010);
+        # para la duena y para el modo heredado `cuota.generar` es solo la llamada.
+        respuesta_llm = cuota.generar(
+            email, "cv", prompt, modelo=CV_MODEL, max_tokens=4096,
+            llamar=lambda: call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096),
+            llamar_invitada=lambda: call_llm_invitada(prompt, model=CV_MODEL, max_tokens=4096))
         contenido_cv  = respuesta_llm.contenido
         logger.info("CONSUMO cv %s", consumo_de(respuesta_llm))
+    except cuota.Rechazada as r:
+        estado, mensaje, extra = _rechazo_de_cuota(r)
+        raise CVError(estado, mensaje, extra)
     except RuntimeError as e:
         raise CVError(503, str(e))
 
@@ -945,40 +989,31 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     #     una peticion, no una garantia. Se contrasta la salida contra el Master.
     #     NO se aborta: una cifra sospechosa puede ser legitima (reformulacion) y
     #     abortar dejaria a la usuaria sin CV. Se avisa para que ella lo revise.
-    cifras_sospechosas = detectar_cifras_no_respaldadas(contenido_cv, cv_master)
-    if cifras_sospechosas:
-        logger.warning(
-            "CIFRAS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
-            email, empresa, puesto, cifras_sospechosas,
-        )
-
-    #     Lo mismo con las tecnologias: la oferta pide una cosa y el modelo tiende a
-    #     devolverla como si la candidata la tuviera. Tampoco se aborta, se avisa.
-    tecnologias_sospechosas = detectar_tecnologias_no_respaldadas(contenido_cv, cv_master)
-    if tecnologias_sospechosas:
-        logger.warning(
-            "TECNOLOGIAS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
-            email, empresa, puesto, tecnologias_sospechosas,
-        )
-
-    #     Y la seccion de skills, elemento a elemento: es donde el modelo vuelca el
-    #     stack de la oferta y donde el catalogo de arriba es ciego a lo que no
-    #     tiene dado de alta, que es precisamente lo nuevo de cada oferta.
-    skills_sospechosas = detectar_skills_no_respaldadas(contenido_cv, cv_master)
-    if skills_sospechosas:
-        logger.warning(
-            "SKILLS NO RESPALDADAS por el CV Master en el CV de %s para %s/%s: %s",
-            email, empresa, puesto, skills_sospechosas,
-        )
+    #     Cifras, tecnologias y skills (elemento a elemento: es donde el modelo vuelca el
+    #     stack de la oferta y donde el catalogo es ciego a lo nuevo) salen del registro,
+    #     igual que en la carta. Con el master en otro idioma (`master_traducido`) los
+    #     que comparan texto literal se saltan y se publican en `no_evaluables`.
+    traducido = master.master_traducido
+    hallazgos_cv = {a.regla: a.hallazgos for a in
+                    guardrails.revisar(contenido_cv, cv_master, guardrails.CV, traducido=traducido)}
+    cifras_sospechosas = hallazgos_cv.get("cifras_no_respaldadas", [])
+    tecnologias_sospechosas = hallazgos_cv.get("tecnologias_no_respaldadas", [])
+    for regla, hallazgos in hallazgos_cv.items():
+        # Regla y cuantos, nada mas: los hallazgos (cifras, tecnologias) salen de la
+        # respuesta JSON, que es donde los lee quien tiene que revisarlos.
+        logger.warning("%s por el CV Master en el CV de %s: %d hallazgo(s)",
+                       regla.upper().replace("_", " "), privacidad.etiqueta_opaca(email), len(hallazgos))
 
     # 5d. Guardrail del titular: que respete el contrato del PERFIL BASE. Es el unico
-    #     de los tres que mira la CABECERA, y viene de un fallo medido: los CV de la consultora de Europa del Este y
+    #     que mira la CABECERA, y viene de un fallo medido: los CV de la consultora de Europa del Este y
     #     la fintech de Londres usaron la Variante permitida sin cumplir su condicion.
-    titular_sospechoso = detectar_titular_fuera_de_contrato(titular, cv_master)
+    #     Compara texto literal con el master, asi que tambien se salta si esta traducido.
+    titular_sospechoso = [h for a in guardrails.revisar(titular, cv_master, guardrails.TITULAR,
+                                                        traducido=traducido) for h in a.hallazgos]
     if titular_sospechoso:
         logger.warning(
-            "TITULAR FUERA DEL CONTRATO del PERFIL BASE en el CV de %s para %s/%s: %s",
-            email, empresa, puesto, titular_sospechoso,
+            "TITULAR FUERA DEL CONTRATO del PERFIL BASE en el CV de %s: %d hallazgo(s)",
+            privacidad.etiqueta_opaca(email), len(titular_sospechoso),
         )
 
     # 5e. Guardrail de ENTRADA (los otros tres miran la salida): ¿habia material que
@@ -988,8 +1023,8 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     descripcion_evaluada = evaluar_descripcion_oferta(descripcion)
     if not descripcion_evaluada["suficiente"]:
         logger.warning(
-            "DESCRIPCION INSUFICIENTE (%s chars) para %s/%s: %s",
-            descripcion_evaluada["chars"], empresa, puesto, descripcion_evaluada["aviso"],
+            "DESCRIPCION INSUFICIENTE (%s chars) en el CV de %s: %s",
+            descripcion_evaluada["chars"], privacidad.etiqueta_opaca(email), descripcion_evaluada["aviso"],
         )
 
     # 6. Generar DOCX con cabecera estructurada (titular adaptado por la oferta)
@@ -1000,7 +1035,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     try:
         link_drive = subir_cv_a_drive(docx_bytes, nombre_archivo)
     except Exception as e:
-        logger.error("Drive upload error: %s", e)
+        privacidad.registrar_fallo(logger, "Drive upload error", e)
         raise CVError(500, f"Error subiendo a Drive: {e}")
 
     # 8. Anotar el enlace en la ficha de Notion, ahora, no via n8n. Si la cadena
@@ -1021,6 +1056,10 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         "cv_master_usado": bool(cv_master),
         "idioma":          idioma,
         "cv_master_url":   master.url,
+        # True = el master es de OTRO idioma que el del CV (solo si viene de la base de
+        # datos). Lo usara la capa de guardrails para no marcar como inventado lo que
+        # una traduccion cambia.
+        "master_traducido": master.master_traducido,
         # Vacio = todas las cifras del CV estan en el Master. Si trae algo, REVISAR
         # a mano antes de enviar: son datos que el modelo no pudo justificar.
         "cifras_no_respaldadas": cifras_sospechosas,
@@ -1030,6 +1069,11 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         # Vacio = el titular respeta el contrato del PERFIL BASE. Si trae algo, el titular
         # cambio la identidad o su orden: revisarlo, es lo primero que lee un recruiter.
         "titular_fuera_de_contrato": titular_sospechoso,
+        # Guardrails that could not be evaluated because the master is in another language
+        # (translated mode). Empty in the default flow. Not empty means "no warning" above
+        # is NOT "checked and clean" for these.
+        "no_evaluables": (guardrails.no_evaluables(guardrails.CV, traducido)
+                          + guardrails.no_evaluables(guardrails.TITULAR, traducido)),
         # suficiente=False significa que la DESCRIPCION no daba material para adaptar:
         # el CV es generico aunque no haya ningun otro aviso. Es lo PRIMERO que hay que
         # mirar, porque los demas guardrails no detectan un CV correcto pero vacio.
@@ -1051,7 +1095,7 @@ def generar_cv():
             idioma_in=(datos.get("idioma") or "").strip().lower(),
         )
     except CVError as e:
-        return jsonify({"ok": False, "error": e.message}), e.status
+        return jsonify({"ok": False, "error": e.message, **e.extra}), e.status
     return jsonify(result)
 
 
@@ -1090,7 +1134,7 @@ def generar_carta():
     idioma = idioma_in if idioma_in in ("en", "es") else idioma_de_oferta(puesto, descripcion, empresa)
     tiene_master = _tiene_algun_master(usuario)
     try:
-        master    = leer_cv_master_desde_drive(usuario, idioma)
+        master    = _resolver_master(usuario, idioma, email)
         cv_master = master.texto
     except Exception as e:
         # Mismo guard que /generar-cv: get_drive_service() -> creds.refresh() puede
@@ -1098,7 +1142,7 @@ def generar_carta():
         # Sin esto sale un 500 HTML opaco y el fallo tarda en diagnosticarse: paso
         # el 24-jul-2026, con el GOOGLE_REFRESH_TOKEN caducado, y dejo la cadena de
         # n8n rota sin ningún mensaje util.
-        logger.error("Drive auth/lectura falló en /generar-carta: %s", e)
+        privacidad.registrar_fallo(logger, "Drive auth/lectura falló en /generar-carta", e)
         return jsonify({
             "ok": False,
             "error": f"No se pudo autenticar/leer el CV master en Drive: {e}",
@@ -1113,7 +1157,7 @@ def generar_carta():
         return imprimibles / len(t) >= 0.85
 
     if tiene_master and not _es_legible(cv_master):
-        logger.error("CV master ILEGIBLE para carta de %s — abortando", email)
+        logger.error("CV master ILEGIBLE para carta de %s — abortando", privacidad.etiqueta_opaca(email))
         return jsonify({
             "ok": False,
             "error": ("No se pudo leer tu CV master desde Drive. NO se generó la carta "
@@ -1143,9 +1187,15 @@ def generar_carta():
     )
 
     try:
-        respuesta_llm = call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=1500)
+        respuesta_llm = cuota.generar(
+            email, "carta", prompt, modelo=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA,
+            llamar=lambda: call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA),
+            llamar_invitada=lambda: call_llm_invitada(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA))
         carta         = respuesta_llm.contenido
         logger.info("CONSUMO carta %s", consumo_de(respuesta_llm))
+    except cuota.Rechazada as r:
+        estado, mensaje, extra = _rechazo_de_cuota(r)
+        return jsonify({"ok": False, "error": mensaje, **extra}), estado
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 503
 
@@ -1167,12 +1217,13 @@ def generar_carta():
     # separadas por puntos, y una carta es prosa. Aplicarlo aqui daria ruido.
     # Este endpoint ya NO sabe cuantos guardrails hay ni cuales aplican: lo pide
     # y el registro decide. Anadir el septimo no toca esta linea.
-    avisos = guardrails.revisar(carta, cv_master, guardrails.CARTA)
+    avisos = guardrails.revisar(carta, cv_master, guardrails.CARTA,
+                                traducido=master.master_traducido)
     for aviso in avisos:
         logger.warning(
-            "%s en la CARTA de %s para %s/%s: %s",
-            aviso.regla.upper().replace("_", " "), email, empresa, puesto,
-            aviso.hallazgos,
+            "%s en la CARTA de %s: %d hallazgo(s)",
+            aviso.regla.upper().replace("_", " "), privacidad.etiqueta_opaca(email),
+            len(aviso.hallazgos),
         )
 
     return jsonify({
@@ -1182,10 +1233,14 @@ def generar_carta():
         "consumo":         consumo_de(respuesta_llm),
         "email":           email,
         "cv_master_usado": bool(cv_master),
+        "master_traducido": master.master_traducido,
         # `jsonify` es de Flask y no sabe serializar un modelo Pydantic: sin este
         # `model_dump()` la respuesta revienta. La forma que sale por la red no
         # cambia, y eso lo vigila tests/test_aviso_guardrail.py.
         "avisos":          [a.model_dump() for a in avisos],
+        # Guardrails skipped because the master is in another language. Empty in the
+        # normal flow; if not, "no avisos" for those rules means "not checked".
+        "no_evaluables":   guardrails.no_evaluables(guardrails.CARTA, master.master_traducido),
     })
 
 
@@ -1293,6 +1348,9 @@ from autenticacion import (  # noqa: E402
     ClavesPublicas, ConfiguracionOIDC, ErrorDeAutenticacion, NoInvitada,
     ProveedorNoDisponible, identificar,
 )
+import base_de_datos  # noqa: E402
+import usuarias  # noqa: E402
+from flask import g  # noqa: E402
 
 # Construir esto no descarga nada ni exige variables: el import nunca falla.
 CONFIG_OIDC = ConfiguracionOIDC.desde_entorno()
@@ -1306,35 +1364,135 @@ def origenes_desde_entorno(entorno=None) -> list:
 
 
 ORIGENES_PERMITIDOS = origenes_desde_entorno()
-RUTAS_CON_CORS = {"/yo", "/health"}
+
+# Rutas del navegador (panel) con CORS, por prefijo. Las rutas de maquina (n8n) no.
+_RUTAS_CON_CORS = re.compile(
+    r"^/(?:yo|health|perfil|consentimientos|cv|extraccion|cuenta|encajes)(?:/.*)?$"
+    r"|^/ofertas/[^/]+/encaje$"
+)
 
 
 @app.after_request
 def cabeceras_cors(respuesta):
-    """CORS solo en RUTAS_CON_CORS y solo para un origen que este EXACTAMENTE en la
+    """CORS solo en las rutas del panel y solo para un origen que este EXACTAMENTE en la
     lista. Nunca '*' ni credenciales: el token viaja en Authorization, no en cookies."""
     origen = request.headers.get("Origin")
-    if request.path in RUTAS_CON_CORS and origen and origen in ORIGENES_PERMITIDOS:
+    if origen and origen in ORIGENES_PERMITIDOS and _RUTAS_CON_CORS.match(request.path):
         respuesta.headers["Access-Control-Allow-Origin"] = origen
         respuesta.headers["Vary"] = "Origin"
         if request.method == "OPTIONS":
-            respuesta.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-            respuesta.headers["Access-Control-Allow-Headers"] = "Authorization"
+            respuesta.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            respuesta.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
     return respuesta
 
 
+def _respaldo_activo() -> bool:
+    """INVITADAS como respaldo de arranque con base de datos (INVITADAS_COMO_RESPALDO=1).
+
+    Se retirara cuando las invitaciones vivan solo en la tabla.
+    """
+    return os.getenv("INVITADAS_COMO_RESPALDO", "").strip() == "1"
+
+
+def _autenticar_peticion():
+    """Devuelve (identidad, usuario_id) de la peticion actual.
+
+    Sin DATABASE_URL (produccion hoy) decide la lista INVITADAS y no se toca ninguna
+    base de datos: usuario_id es None. Con DATABASE_URL deciden las invitaciones de la
+    tabla `invitaciones`.
+    """
+    resultado = {"usuario_id": None}
+
+    def autorizar(identidad) -> bool:
+        correo = identidad.email.strip().lower()
+        if not base_de_datos.configurada():
+            return correo in CONFIG_OIDC.invitadas
+        respaldo = CONFIG_OIDC.invitadas if _respaldo_activo() else frozenset()
+        try:
+            resultado["usuario_id"] = usuarias.resolver_o_crear(identidad, respaldo=respaldo)
+        except usuarias.BaseDeDatosNoDisponible:
+            if correo in respaldo:  # base de datos fria: la lista de arranque deja pasar
+                return True
+            raise
+        return resultado["usuario_id"] is not None
+
+    identidad = identificar(request.headers.get("Authorization"), CONFIG_OIDC, CLAVES, autorizar)
+    return identidad, resultado["usuario_id"]
+
+
+con_usuaria = usuarias.crear_con_usuaria(_autenticar_peticion)
+
+
+def _estado_del_perfil(usuario_id, email: str) -> dict:
+    """tiene_perfil y origen_master de /yo. Nunca lanza: lo desconocido se omite.
+
+    `tiene_perfil` es true si hay perfil en Neon o si el usuario heredado de Notion tiene
+    master en Drive (Vero). Solo es false cuando se sabe seguro que no hay ninguno; si la
+    base de datos o Notion no responden, se omite y el guard del panel deja pasar.
+    Sin base de datos nunca es false: sin ella no se puede dar el alta.
+    """
+    perfil = master = None  # None = desconocido
+    if usuario_id is not None:
+        try:
+            perfil = usuarias.tiene_perfil(usuario_id)
+            master = usuarias.tiene_master(usuario_id) if perfil else False
+        except usuarias.BaseDeDatosNoDisponible as error:
+            logger.warning("profile lookup unavailable in /yo: %s", type(error).__name__)
+    legado = None
+    if not perfil:
+        try:
+            legado = _tiene_algun_master(buscar_usuario_por_email(email) or {})
+        except Exception as error:
+            logger.warning("legacy lookup failed in /yo: %s", type(error).__name__)
+    if master:
+        origen = "neon"
+    else:
+        origen = "drive" if legado else None
+    estado = {"origen_master": origen}
+    if perfil or legado:
+        estado["tiene_perfil"] = True
+    elif perfil is False and legado is False:
+        estado["tiene_perfil"] = False
+    return estado
+
+
+def _consentimientos_de(usuario_id) -> dict:
+    """`consentimientos` de /yo: que consentimientos VIGENTES (version actual, sin revocar) tiene.
+    Se omite si no hay usuaria en la base de datos o si esta no responde: lo desconocido no se
+    afirma, y el panel no la devuelve al paso de consentimiento por un fallo nuestro."""
+    if usuario_id is None:
+        return {}
+    try:
+        return {"consentimientos": usuarias.consentimientos_vigentes(usuario_id)}
+    except usuarias.BaseDeDatosNoDisponible:
+        return {}
+
+
 @app.route("/yo", methods=["GET"])
+@con_usuaria
 def yo():
     """Quien es la usuaria que llama, segun su token de Google."""
-    try:
-        quien = identificar(request.headers.get("Authorization"), CONFIG_OIDC, CLAVES)
-    except ErrorDeAutenticacion:
-        return jsonify({"ok": False, "error": "no autenticada"}), 401
-    except NoInvitada:
-        return jsonify({"ok": False, "error": "acceso no permitido"}), 403
-    except ProveedorNoDisponible:
-        return jsonify({"ok": False, "error": "servicio no disponible"}), 503
-    return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre})
+    quien = g.identidad
+    # `cuota` only for a Neon user who is not exempt; legacy and exempt users do not get the field.
+    estado_de_cuota = cuota.estado_de_usuaria(g.usuario_id, quien.email)
+    return jsonify({"sub": quien.sub, "email": quien.email, "nombre": quien.nombre,
+                    **_estado_del_perfil(g.usuario_id, quien.email),
+                    **_consentimientos_de(g.usuario_id),
+                    **({} if estado_de_cuota is None else {"cuota": estado_de_cuota})})
+
+
+# A CV upload is capped at 2 MB (lectura_cv); the request limit is a little higher so an
+# oversize body fails early, before it is read, and a normal multipart envelope still fits.
+app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024
+
+# Rutas del alta (perfil, consentimientos, cv, cuenta): viven en rutas_alta.py.
+import rutas_alta  # noqa: E402
+
+app.register_blueprint(rutas_alta.crear_blueprint(con_usuaria, requiere_clave_maquina))
+
+import rutas_encaje  # noqa: E402
+
+app.register_blueprint(rutas_encaje.crear_blueprint(con_usuaria))
 
 
 # ══════════════════════════════════════════════

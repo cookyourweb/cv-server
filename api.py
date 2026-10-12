@@ -39,12 +39,16 @@ class GenerarCVResponse(BaseModel):
     cv_master_usado: bool
     idioma: str
     cv_master_url: str
+    # True = el master leido es de otro idioma que el del CV.
+    master_traducido: bool = False
     # GUARDRAILS. Van declarados aqui a proposito: `response_model` FILTRA todo campo
     # que no figure en el modelo, asi que un guardrail sin declarar se calcula, se
     # loguea y NUNCA llega a quien llama. Vacio = nada que revisar.
     cifras_no_respaldadas: list[str] = []
     tecnologias_no_respaldadas: list[str] = []
     titular_fuera_de_contrato: list[str] = []
+    # Guardrails skipped because the master is in another language (translated mode).
+    no_evaluables: list[str] = []
     descripcion_oferta: DescripcionOferta | None = None
     # Tokens que gasto la generacion (ADR-004: lo paga la clave de la usuaria).
     consumo: dict | None = None
@@ -69,5 +73,5 @@ def generar_cv(req: GenerarCVRequest):
             idioma_in=(req.idioma or ""),
         )
     except CVError as e:
-        return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message})
+        return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message, **e.extra})
     return result

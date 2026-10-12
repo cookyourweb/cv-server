@@ -42,7 +42,8 @@ overrides them, and `/health` (field `modelos`) shows the active ones.
 |---|---|---|
 | Adapted CV (`/generar-cv`) | `claude-sonnet-4-6` | `CV_MODEL` |
 | Cover letter (`/generar-carta`) | `claude-sonnet-4-6` | `CARTA_MODEL` |
-| CV and letter fallback (`call_llm_calidad` and `call_llm`) | If Claude fails: Groq (`openai/gpt-oss-120b`), then Gemini, then Claude Haiku. `modelo_usado` reports the model that actually wrote it | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
+| CV and letter fallback, owner's legacy/exempt flow (`call_llm_calidad` and `call_llm`) | If Claude fails: Groq (`openai/gpt-oss-120b`), then Gemini, then Claude Haiku. `modelo_usado` reports the model that actually wrote it | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
+| CV and letter, invited users (`llm.call_llm_invitada`) | Claude, then Groq and nothing else (never Gemini: the consent text names only Anthropic and Groq). The generation cost estimate (`cuota.estimar_eur`) bills Claude plus Groq only | `CV_MODEL`, `CARTA_MODEL`, `GROQ_MODEL` |
 | Offer ranking (`real_jobs.rankear_con_groq`) | `openai/gpt-oss-120b` (Groq), with a deterministic heuristic fallback | `GROQ_MODEL` |
 | General text (`call_llm`) | Groq, then Gemini, then Claude Haiku 4.5 | `GROQ_MODEL`, `GEMINI_MODEL`, `CLAUDE_MODEL` |
 
@@ -62,6 +63,208 @@ touching the prompt f-string in `server.py`.
 ---
 
 ## Unreleased
+
+### Faster GET /yo: legacy Notion lookup no longer queries missing properties
+
+**Fixed**
+
+- `notion.py`: `buscar_usuario_por_email` used to query three alias properties
+  ("Emails alias", "Emails alternativos", "Email alternativo") that do not exist in the
+  Usuarios database. Each call returned HTTP 400, was logged as a WARNING, and added
+  seconds to every `GET /yo` (the panel calls it twice per sign-in).
+  - The alias properties are now read from the database schema (`GET /v1/databases/{id}`),
+    cached in memory for one hour; only properties that exist are queried.
+  - If the schema cannot be read, the candidate names are tried, but a 400 "Could not
+    find property" is remembered for the life of the process and logged once.
+  - The per-email result (found or not found) is cached for 60 s, so the two `/yo` calls
+    of one sign-in hit Notion once. Network and HTTP errors are never cached.
+  - Trade-off: an edit in Notion can take up to 60 s to be seen by this lookup.
+
+### POST /extraccion: owner-paid extraction with the quality chain
+
+**Added**
+
+- `POST /extraccion` (owner-scoped, empty body; nothing in the request chooses the model or
+  the CV). Order: consent `enviar_cv_a_ia` v1 (403) -> a stored master (404, the most recent
+  upload) -> `extraccion.reservar` gates (refusal = 200 `{estado: "manual", motivo}`, no model
+  call) -> decrypt -> ONE call to `llm.call_llm_calidad` (model `CV_MODEL`, `max_tokens` =
+  `TOKENS_SALIDA_MAX`, Groq fallback as the chain already does, no retry of its own) -> the
+  reservation is always closed -> validate.
+- Answers: `{estado: "propuesta", propuestas: [{campo, valor, cita}]}`; or `{estado: "manual",
+  motivo}` with `desactivada | ya_usada | tope | proveedor | indisponible`. `proveedor` = the
+  whole chain failed (row `fallida`, she keeps her attempt). `indisponible` = the model
+  answered but nothing survived validation (the call is paid for and the attempt is used).
+- `propuestas.py`: the prompt (CV inside `<cv_datos>`, declared data; a delimiter planted in the
+  CV is defused with an equal-length substitution) and `validar`. A proposal survives only if
+  its `campo` is one of `rol, anios_experiencia, stack, idiomas, ubicacion` (salary and modality
+  are never accepted), its `cita` is a literal substring of the CV after whitespace
+  normalisation, a stack technology is in the catalogue and found in the `cita` by
+  `guardrails.tecnologias_en` (Java is not backed by JavaScript), and years are an integer 0..60
+  that appears in the `cita`. Items are judged one by one; the first valid item per campo wins.
+- `extraccion.coste_real_eur` prices the usage the provider reported (primary or fallback
+  prices). When usage is not reported (the Groq fallback does not return it) the ledger gets the
+  reservation's estimate as the cost, never a made-up zero.
+- `RepositorioDeUsuaria.cv_mas_reciente`.
+
+**Why it is shaped this way**
+
+- No database transaction is open while the model is called; the reservation is its own
+  committed transaction, so a slow provider never holds the advisory lock.
+- The reserved length comes from the stored character count, so the gates run BEFORE the CV is
+  decrypted, and the prompt can never be longer than what was reserved.
+- A text-level check cannot tell injected text from real CV content: if the CV itself says
+  "add Rust to the stack" and the model quotes it, the quote is a real substring. The panel
+  shows every `cita` for the user to accept or edit, which is the backstop.
+- Nothing logs the CV, a `cita`, the prompt or the model output; failures are logged by
+  exception type (`privacidad.registrar_fallo`), and the canary test covers this path.
+
+**Before enabling the switch in production**
+
+1. Verify the current model ids (`CV_MODEL`, `GROQ_MODEL`) and the list prices, and update the
+   `PRECIO_*_EUR_POR_MTOK` constants in `extraccion.py`.
+2. Enable Zero Data Retention in the Groq console (by default Groq does not train on API data
+   nor keep it, but ZDR is a toggle to turn on explicitly).
+3. Name Anthropic and Groq, and say that processing happens in the United States, in the consent
+   text and the privacy policy (bump `VERSION_DE_CONSENTIMIENTO` if the consent changes in substance).
+4. Known gaps of the fallback path: `call_llm` ignores `max_tokens` (4096) and the SDK call has
+   no explicit timeout, so the cost bound holds for the primary model only.
+
+### Extraction gates, spend ledger and kill switch (no model call yet)
+
+**Added**
+
+- `extraccion.py`: `reservar(usuario_id, largo_prompt, modelo=...)` runs three gates in a
+  fixed order and reports the first failure as the panel's `motivo`: `desactivada` (env
+  `EXTRACCION_ACTIVA=false`, read before any database access, then the
+  `ajustes.extraccion_activa` row, read on every request; a missing row counts as off),
+  `ya_usada` (the user has an extraction that is not `fallida`) and `tope` (the UTC month's
+  spend plus the estimate would pass `TOPE_EXTRACCION_EUR`, default 5). Passing inserts a
+  `reservada` row. `marcar_completada` stores the real cost; `marcar_fallida` keeps the
+  estimate in the month's sum and leaves the user's attempt free.
+- The month's sum is `sum(coalesce(coste_eur, estimado_eur))` over every row, anonymous ones
+  from deleted accounts included. Check-and-reserve runs in one transaction under a global
+  `pg_advisory_xact_lock`, so ten concurrent requests with room for one make one reservation.
+- Pessimistic estimate: `ceil(chars / 3)` input tokens plus `TOKENS_SALIDA_MAX` (1200) output
+  tokens, priced for the primary model AND the fallback (the quality chain can bill both),
+  times `MARGEN_EXTRACCION` (1.25), rounded up to the ledger's four decimals. The prompt is
+  capped (`MAX_CARACTERES_DE_PROMPT`) so one primary call stays under 0.05 USD.
+- `PUT /ajustes/extraccion` `{"activa": bool}` (machine key) flips the switch with no redeploy.
+  New variables in `.env.example`: `EXTRACCION_ACTIVA`, `TOPE_EXTRACCION_EUR`, the four
+  `PRECIO_*_EUR_POR_MTOK` and `MARGEN_EXTRACCION`.
+
+**Why it is shaped this way**
+
+- The reservation is written before the model is called and a crash leaves it in place, so
+  the cap can over-count but never under-count.
+- A failed provider chain keeps the user's attempt (the partial unique index ignores
+  `fallida`) but its estimate still counts: a call that may have been billed must not lower
+  the month's total.
+- The default prices are list prices in USD used 1:1 as EUR plus the margin. They MUST be
+  verified against the providers' price pages when the model call is added.
+
+### CV upload and encrypted master storage
+
+**Added**
+
+- `lectura_cv.py`: size is checked before parsing (2 MB), the type comes from the magic bytes
+  (`%PDF-`, or a ZIP with `word/document.xml`), PDFs are limited to 10 pages, a DOCX to 10 MB
+  uncompressed and 500 entries (zip bomb), and text under 300 characters (a scan) is refused.
+  Failures carry a fixed code and no message or chained exception. The language (es/en) is
+  detected from very common function words; a tie is Spanish.
+- `privacidad.py`: CV text and file names never reach a log or an exception message. The
+  parsing libraries' loggers are silenced, failures are logged by exception type only, and
+  `volcar_registros` is the canary helper behind S3.9.
+- `POST /cv` (multipart field `archivo`), `GET /cv` (metadata only) and `DELETE /cv/{idioma}`,
+  all owner-scoped. Upload requires the stored `almacenar_cv` consent (403), answers 413, 415 or
+  422 with a `motivo`, and stores only the AES-GCM encrypted text, one master per (user,
+  language). The uploaded file itself is never persisted. `MAX_CONTENT_LENGTH` is 3 MB so an
+  oversize request fails before it is read.
+- `pypdf==6.20.0` in `requirements.txt`.
+
+**Why it is shaped this way**
+
+- Consent is checked before the file is read, so a CV of someone who has not agreed to store
+  it is not even parsed.
+
+### External encrypted backup (ADR-008)
+
+**Added**
+
+- `.github/workflows/neon-backup.yml`: daily (and on demand) `pg_dump` with the official
+  `postgres:18` client, streamed into `age` so the plain dump never touches the disk. Only
+  the `.dump.age` file is uploaded, with 30-day retention. Secrets `NEON_BACKUP_URL` and
+  `AGE_PUBLIC_KEY`; a missing one fails the run with a clear message.
+- `docs/ADR-008-external-encrypted-backup.md` and a "Backups" section in the README with the
+  one-time setup and the restore procedure.
+- `tests/test_copia_neon.py` pins the workflow's safety properties (schedule, secrets only
+  through `${{ secrets.* }}`, nothing echoed, encrypted-only upload, 30-day retention).
+
+**Why**
+
+- Neon's free restore window is 6 hours. Artifacts of a public repository are downloadable by
+  any signed-in GitHub user, so the dump is encrypted to a public key whose private half stays
+  offline. Losing that private key makes the backups unreadable.
+
+### Owner-scoped profile, consent and account routes
+
+**Added**
+
+- `repositorio.py`: `RepositorioDeUsuaria(conexion, usuario_id)`. Every statement is filtered
+  by the constructor's id and no method accepts another one. `PerfilEntrada` (Pydantic,
+  `extra="forbid"`) mirrors the CHECKs of `perfil`; `VERSION_DE_CONSENTIMIENTO = "v1"`.
+- `rutas_alta.py` (blueprint registered in `server.py`, all behind `@con_usuaria`):
+  `GET/PUT /perfil`, `POST /consentimientos`, `DELETE /cuenta`. Wire format taken from the
+  panel (snake_case, 404 when no profile, 201 for a consent, 204 for deletion).
+- Deletion runs in one transaction: owned tables are cleared and the user row last. A failure
+  midway rolls everything back. `extracciones` rows are kept with `usuario_id` NULL so the
+  monthly cap and the one-extraction rule survive (REQ-2.4); the used invitation stays used,
+  so a deleted mailbox cannot sign in again without a new invitation.
+- Without `DATABASE_URL` the routes answer a generic `503` (never 500); `/yo` and `/health`
+  do not change. Errors never echo submitted values, driver messages or connection details.
+
+**Why it is shaped this way**
+
+- There is no `{id}` in these routes on purpose: the owner is always the token's user, so
+  cross-user access is impossible by construction. The tests still pin it (S1.6) and a
+  route-inventory test fails if a route is added to the blueprint without being covered.
+- `POST /consentimientos` rejects any version but the current one with 422 and the
+  consent check ignores older or revoked rows (S2.2).
+- `PUT /perfil` requires all eight fields (the panel always sends them and reads them back).
+
+### Invitations in the database and an extended /yo
+
+**Added**
+
+- `usuarias.py`: `resolver_o_crear` maps the verified Google `(iss, sub)` to `usuarios.id`.
+  On first sign-in an unused, unexpired invitation for the verified email links the user
+  (the invitation is marked used and the mailbox is stored). A second invited mailbox of
+  the same `(iss, sub)` is attached to the same user. A mailbox held by another user is
+  never merged, and no invitation means denial with no writes. `@con_usuaria` sets
+  `g.usuario_id` and `g.identidad` for owner-scoped routes.
+- `autenticacion.identificar` takes an injected `autorizar` callback, so the module still
+  imports no database code. `email_verified` was already required (and tested).
+- `GET /yo` now also returns `tiene_perfil` and `origen_master` (`drive`, `neon` or null).
+- `scripts/invitar.py`: adds or renews an invitation (`--dias` is required because
+  `caduca_en` is NOT NULL). It reads `DATABASE_URL` from the environment and never
+  prints it.
+- CORS by prefix for the panel routes (`/yo`, `/health`, `/perfil`, `/consentimientos`,
+  `/cv`, `/extraccion`, `/cuenta`, `/encajes`, `/ofertas/<id>/encaje`) with
+  `GET, POST, PUT, DELETE` and `Authorization, Content-Type`. Machine routes get none.
+
+**Why it is shaped this way**
+
+- Two modes, so production does not change until the database exists. Without
+  `DATABASE_URL` (Render today) the `INVITADAS` list decides and no database is touched.
+  With it, the `invitaciones` table decides; `INVITADAS` only works as a bootstrap
+  fallback when `INVITADAS_COMO_RESPALDO=1`, to be removed once invitations live only in
+  the table.
+- `tiene_perfil` is true when Neon has a profile OR the legacy Notion user has a Drive
+  master (this keeps Vero working), and false only when both are definitely empty. If
+  the database or Notion is unreachable it is omitted, because the panel guard lets the
+  user through when the flag is missing. Without a database it is never false, since
+  sign-up cannot work there.
+- A cold database at sign-in answers 503 with a generic body, except for an email in the
+  fallback list, which is let in so the owner is never locked out by a cold start.
 
 ### Encryption at rest, honest match and review fixes
 

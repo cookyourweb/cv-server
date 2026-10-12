@@ -649,13 +649,15 @@ def detectar_inflacion(texto: str, master_texto: str) -> list:
 # solo y cada guardrail declara a que documentos se aplica: quien llama pide
 # `guardrails_para("carta")` y no necesita saber cuantos hay ni cuales.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
 CV = "cv"
 CARTA = "carta"
+# The CV headline is checked on its own: the detector reads the headline, not the body.
+TITULAR = "titular"
 
 
 class Guardrail(Protocol):
@@ -688,6 +690,7 @@ class Guardrail(Protocol):
 
     nombre: str
     aplica_a: frozenset
+    independiente_del_idioma: bool
     def revisar(self, texto: str, master: str) -> list: ...
 
 
@@ -701,6 +704,13 @@ class _Detector:
     nombre: str
     aplica_a: frozenset
     funcion: Callable[[str, str], list]
+    # True: compares numbers, catalogued technologies or bilingual concepts, so it
+    # gives the same answer whatever language the master is written in. False: it
+    # compares literal words of the document against the master, and against a
+    # master in another language it would raise false alarms (translated mode
+    # skips it and reports it as `no_evaluables`). Declared per detector, on
+    # purpose: there is no sensible default.
+    independiente_del_idioma: bool = field(kw_only=True)
 
     def revisar(self, texto: str, master: str) -> list:
         return self.funcion(texto, master)
@@ -710,14 +720,20 @@ class _Detector:
 # de si mismo. `skills_no_respaldadas` no se aplica a la carta a proposito: lee
 # lineas de skills separadas por puntos, y una carta es prosa.
 GUARDRAILS = [
-    _Detector("cifras_no_respaldadas", frozenset({CV, CARTA}), detectar_cifras_no_respaldadas),
-    _Detector("tecnologias_no_respaldadas", frozenset({CV, CARTA}), detectar_tecnologias_no_respaldadas),
-    _Detector("skills_no_respaldadas", frozenset({CV}), detectar_skills_no_respaldadas),
+    _Detector("cifras_no_respaldadas", frozenset({CV, CARTA}), detectar_cifras_no_respaldadas, independiente_del_idioma=True),
+    _Detector("tecnologias_no_respaldadas", frozenset({CV, CARTA}), detectar_tecnologias_no_respaldadas, independiente_del_idioma=True),
+    _Detector("skills_no_respaldadas", frozenset({CV}), detectar_skills_no_respaldadas, independiente_del_idioma=False),
     # OJO: hoy solo se aplica a la carta. En el CV nunca se llego a aplicar, y
     # ese hueco se conserva aqui a proposito: cambiar comportamiento dentro de un
     # refactor es como se rompen las cosas en silencio. Anotado para decidirlo.
-    _Detector("experiencia_mal_atribuida", frozenset({CARTA}), detectar_experiencia_mal_atribuida),
-    _Detector("inflacion", frozenset({CV, CARTA}), detectar_inflacion),
+    _Detector("experiencia_mal_atribuida", frozenset({CARTA}), detectar_experiencia_mal_atribuida, independiente_del_idioma=False),
+    _Detector("inflacion", frozenset({CV, CARTA}), detectar_inflacion, independiente_del_idioma=True),
+    # Reads the headline against the PERFIL BASE. Text-matching: it finds the section by
+    # its Spanish name ("Identidad profesional", "Identidades permitidas", "Variante
+    # permitida") and compares the headline's identities as literal strings with the
+    # master's. A master in another language names both differently, so it would
+    # either go silent or raise false alarms: translated mode skips it.
+    _Detector("titular_fuera_de_contrato", frozenset({TITULAR}), detectar_titular_fuera_de_contrato, independiente_del_idioma=False),
 ]
 
 
@@ -746,11 +762,26 @@ class Aviso(BaseModel):
     hallazgos: list[str]
 
 
-def revisar(texto: str, master: str, destino: str) -> list[Aviso]:
+def no_evaluables(destino: str, traducido: bool = False) -> list[str]:
+    """Names of the guardrails that cannot be evaluated for this document.
+
+    Only translated mode has any: the text-matching detectors, which `revisar`
+    skips. Callers publish this next to the avisos so that "no warning" is never
+    mistaken for "checked and clean"."""
+    if not traducido:
+        return []
+    return [g.nombre for g in guardrails_para(destino) if not g.independiente_del_idioma]
+
+
+def revisar(texto: str, master: str, destino: str, traducido: bool = False) -> list[Aviso]:
     """Pasa el texto por sus guardrails y devuelve solo lo que encontro algo.
 
     Avisa, no bloquea: la decision de que hacer con los hallazgos es de quien
     llama, no de aqui.
+
+    `traducido=True` significa que el master esta en otro idioma que el documento:
+    los detectores que comparan texto literal se saltan (ver `no_evaluables`) y
+    siguen los independientes del idioma (cifras, tecnologias, inflacion).
 
     OJO al serializar: el endpoint que los publica es Flask con `jsonify`, que
     NO sabe convertir un modelo Pydantic. Hay que pasar por `model_dump()`, y
@@ -758,6 +789,8 @@ def revisar(texto: str, master: str, destino: str) -> list[Aviso]:
     """
     hallazgos = []
     for g in guardrails_para(destino):
+        if traducido and not g.independiente_del_idioma:
+            continue        # master in another language: see no_evaluables()
         encontrados = g.revisar(texto, master)
         if encontrados:
             hallazgos.append(Aviso(regla=g.nombre, hallazgos=encontrados))

@@ -1,0 +1,62 @@
+name: neon-backup
+
+# Daily encrypted dump of the Neon database (ADR-008).
+#
+# Neon's free plan only restores the last 6 hours, so this is the real backup.
+# The dump is encrypted with `age` to a PUBLIC key before it touches the disk, and
+# only the encrypted file is uploaded. Artifacts of a public repository can be
+# downloaded by any signed-in GitHub user: never upload a plain dump.
+# The private key stays offline with the repository owner.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEON_BACKUP_URL: ${{ secrets.NEON_BACKUP_URL }}
+      AGE_PUBLIC_KEY: ${{ secrets.AGE_PUBLIC_KEY }}
+    steps:
+      - name: Check that the secrets exist
+        run: |
+          missing=0
+          for name in NEON_BACKUP_URL AGE_PUBLIC_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository secret $name is not set (see README, Backups)"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+
+      - name: Dump and encrypt
+        run: |
+          set -euo pipefail
+          mkdir backup
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          # The client must match the server major version (Postgres 18).
+          docker run --rm -e NEON_BACKUP_URL postgres:18 \
+            sh -c 'pg_dump --format=custom --no-owner --no-privileges "$NEON_BACKUP_URL"' \
+            | age -r "$AGE_PUBLIC_KEY" -o "backup/neon-${stamp}.dump.age"
+          # An empty or truncated file must fail the run, never upload quietly.
+          if [ "$(wc -c < "backup/neon-${stamp}.dump.age")" -lt 1024 ]; then
+            echo "::error::The encrypted dump is suspiciously small"
+            exit 1
+          fi
+
+      - name: Upload the encrypted dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: neon-backup-${{ github.run_id }}
+          path: backup/neon-*.dump.age
+          retention-days: 30
+          if-no-files-found: error

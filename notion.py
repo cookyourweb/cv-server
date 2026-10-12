@@ -8,6 +8,9 @@ Extraido de `server.py` el 28-ago-2026.
 import logging
 import os
 import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -15,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
-NOTION_DB_OFERTAS = os.getenv("NOTION_DB_OFERTAS", "33d11515-f4b2-8176-947b-000bbafd1ca7")
+NOTION_DB_OFERTAS = os.getenv("NOTION_DB_OFERTAS", "")
 
 def notion_headers():
     return {
@@ -57,6 +60,60 @@ def campos_alias_candidatos() -> list:
             vistos.add(n.lower()); out.append(n)
     return out
 
+# --- Caches (per process, in memory) -------------------------------------------
+# The Usuarios schema rarely changes, so it is read once per hour. The per-email
+# result is kept for a minute: enough for the two GET /yo calls of one sign-in to hit
+# Notion once, short enough that an edit in Notion shows up almost immediately.
+TTL_ESQUEMA = 3600.0
+TTL_USUARIO = 60.0
+
+_candado = threading.Lock()
+_esquema_alias: dict = {}      # {"campos": [...], "hasta": monotonic deadline}
+_campos_ausentes: set = set()  # alias properties Notion answered 400 "not found" for
+_usuarios_cache: dict = {}     # email -> (monotonic deadline, profile or None)
+
+
+def reiniciar_caches() -> None:
+    """Empty every cache. Used by tests."""
+    with _candado:
+        _esquema_alias.clear()
+        _campos_ausentes.clear()
+        _usuarios_cache.clear()
+
+
+def _campos_alias_existentes() -> list:
+    """Alias properties to query: the ones the database really has.
+
+    Reads the schema once (GET /v1/databases/{id}) and keeps the properties that
+    look like an alias field. If the schema cannot be read (network, permissions) it
+    falls back to the candidate names minus the ones already known to be missing,
+    and the failure is NOT cached so the next call tries again.
+    """
+    ahora = time.monotonic()
+    with _candado:
+        if _esquema_alias and _esquema_alias["hasta"] > ahora:
+            return list(_esquema_alias["campos"])
+    try:
+        resp = requests.get(
+            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}",
+            headers=notion_headers(), timeout=15,
+        )
+        if resp.status_code != 200:
+            raise ValueError(f"HTTP {resp.status_code}")
+        nombres = list((resp.json().get("properties") or {}).keys())
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("Notion schema read failed, using candidate alias names: %s",
+                       type(e).__name__)
+        with _candado:
+            return [c for c in campos_alias_candidatos() if c not in _campos_ausentes]
+    campos = [n for n in nombres if _es_campo_de_alias(n)]
+    # Configured name first, so the order stays predictable.
+    campos.sort(key=lambda n: n != CAMPO_EMAILS_ALIAS)
+    with _candado:
+        _esquema_alias.update({"campos": campos, "hasta": ahora + TTL_ESQUEMA})
+    return list(campos)
+
+
 _SEPARADORES_EMAIL = re.compile(r"[,;\n\r]+")
 _ES_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -95,8 +152,17 @@ def usuario_tiene_email(props: dict, email: str) -> bool:
     return (email or "").strip().lower() in emails_de_usuario(props)
 
 
-def _consultar_usuario(filtro: dict, email: str, verificar: bool) -> dict | None:
-    """Una consulta a Users. Si verificar=True confirma el email exacto en Python."""
+def _consultar_usuario_ok(filtro: dict, email: str, verificar: bool) -> tuple:
+    """Una consulta a Users. Devuelve (pagina o None, ok).
+
+    `ok` is False when the call failed (network, HTTP error) so the caller can avoid
+    caching a result that should be retried. A 400 "property not found" is a
+    permanent answer: the property is remembered, logged once, and counts as ok.
+    """
+    campo = filtro.get("property")
+    with _candado:
+        if campo in _campos_ausentes:
+            return None, True
     try:
         resp = requests.post(
             f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
@@ -105,17 +171,28 @@ def _consultar_usuario(filtro: dict, email: str, verificar: bool) -> dict | None
             timeout=15,
         )
     except requests.RequestException as e:
-        logger.warning("Notion query fallo (%s): %s", filtro.get("property"), e)
-        return None
+        logger.warning("Notion query fallo (%s): %s", campo, e)
+        return None, False
+    if resp.status_code == 400 and "Could not find property" in (resp.text or ""):
+        with _candado:
+            nuevo = campo not in _campos_ausentes
+            _campos_ausentes.add(campo)
+        if nuevo:
+            logger.warning("Notion property %r does not exist in Usuarios; "
+                           "it will not be queried again in this process", campo)
+        return None, True
     if resp.status_code != 200:
-        # Un 400 aqui suele significar que el campo no existe todavia en la base.
         logger.warning("Notion query error %s (%s): %s",
-                       resp.status_code, filtro.get("property"), resp.text[:200])
-        return None
+                       resp.status_code, campo, resp.text[:200])
+        return None, False
     for page in resp.json().get("results", []):
         if not verificar or usuario_atiende(page.get("properties", {}), email):
-            return page
-    return None
+            return page, True
+    return None, True
+
+
+def _consultar_usuario(filtro: dict, email: str, verificar: bool) -> dict | None:
+    return _consultar_usuario_ok(filtro, email, verificar)[0]
 
 
 def usuario_atiende(props: dict, email: str) -> bool:
@@ -133,26 +210,49 @@ def usuario_atiende(props: dict, email: str) -> bool:
 
 
 def buscar_usuario_por_email(email: str) -> dict | None:
-    """Consulta Notion por email (principal o alias). Devuelve el perfil o None."""
+    """Consulta Notion por email (principal o alias). Devuelve el perfil o None.
+
+    The result (found or not found) is cached for `TTL_USUARIO` seconds. Failed
+    calls are never cached.
+    """
     if not NOTION_DB_USUARIOS:
         return None
+    clave = (email or "").strip().lower()
+    with _candado:
+        hit = _usuarios_cache.get(clave)
+        if hit and hit[0] > time.monotonic():
+            return hit[1]
+    perfil, ok = _buscar_usuario_sin_cache(email)
+    if ok:
+        with _candado:
+            _usuarios_cache[clave] = (time.monotonic() + TTL_USUARIO, perfil)
+    return perfil
+
+
+def _buscar_usuario_sin_cache(email: str) -> tuple:
+    """(perfil o None, ok). ok=False si alguna consulta fallo y no se debe cachear."""
     # verificar=True tambien en la pasada por Email exacto: hay que comprobar que el
     # registro este ACTIVO, cosa que el filtro de Notion no hace.
-    page = _consultar_usuario(
+    page, ok = _consultar_usuario_ok(
         {"property": "Email", "email": {"equals": email}}, email, verificar=True
     )
     if page is None:
         # Segunda pasada por los alias. `contains` es de subcadena, de ahi el
         # verificar=True: se confirma la coincidencia exacta en Python.
-        for campo in campos_alias_candidatos():
-            page = _consultar_usuario(
+        for campo in _campos_alias_existentes():
+            page, ok_alias = _consultar_usuario_ok(
                 {"property": campo, "rich_text": {"contains": email}},
                 email, verificar=True,
             )
+            ok = ok and ok_alias
             if page is not None:
                 break
     if page is None:
-        return None
+        return None, ok
+    return _perfil_de_pagina(page), True
+
+
+def _perfil_de_pagina(page: dict) -> dict:
     p = page.get("properties", {})
     return {
         "notion_id":          page.get("id", ""),
@@ -242,12 +342,11 @@ def guardar_link_cv_en_notion(empresa: str, puesto: str, link_drive: str,
             timeout=15,
         )
         if resp.status_code != 200:
-            logger.warning("Notion: query oferta %s error %s", empresa, resp.status_code)
+            logger.warning("Notion: query oferta error %s", resp.status_code)
             return False
         results = resp.json().get("results", [])
         if not results:
-            logger.warning("Notion: no se encontro la oferta %s / %s para anotar el CV",
-                           empresa, puesto)
+            logger.warning("Notion: no se encontro la oferta para anotar el CV")
             return False
 
         page_id = results[0]["id"]
@@ -264,7 +363,7 @@ def guardar_link_cv_en_notion(empresa: str, puesto: str, link_drive: str,
             logger.warning("Notion: patch link CV error %s: %s",
                            patch.status_code, patch.text[:200])
             return False
-        logger.info("Notion: enlace del CV anotado en %s / %s", empresa, puesto)
+        logger.info("Notion: enlace del CV anotado")
         return True
     except requests.RequestException as e:
         logger.warning("Notion: no se pudo anotar el enlace del CV: %s", e)
@@ -314,6 +413,10 @@ def crear_oferta_en_notion(oferta: dict, idioma: str = "", usuario_notion_id: st
     Centraliza el mapeo oferta→Notion en código (en vez de la UI de n8n).
     `oferta` es el dict que devuelve /buscar-ofertas-reales (real_jobs.py).
     """
+    if not NOTION_DB_OFERTAS:
+        # Same family of error the caller already turns into a 502; no request is made.
+        raise requests.RequestException("NOTION_DB_OFERTAS no configurada")
+
     def _txt(v: str) -> dict:
         return {"rich_text": [{"text": {"content": (v or "")[:2000]}}]}
 
@@ -346,3 +449,114 @@ def crear_oferta_en_notion(oferta: dict, idioma: str = "", usuario_notion_id: st
                          headers=notion_headers(), json=payload, timeout=15)
     resp.raise_for_status()
     return resp.json()
+
+
+# ══════════════════════════════════════════════
+# OFERTAS DE UNA USUARIA (C13, ADR-009)
+# ══════════════════════════════════════════════
+# An offer is hers only if its "Usuario" relation holds her Notion page id. Everything
+# else (no owner, another owner, another database, archived, missing, malformed id) is
+# the same answer, None, so the route can answer one identical 404. A Notion failure is
+# NOT "not found": it raises ErrorDeNotion and the route fails closed.
+
+MAX_HILOS_NOTION = 3   # Notion averages ~3 requests per second per integration
+_ESPERA_MAXIMA_429 = 2.0
+
+
+class ErrorDeNotion(Exception):
+    """Notion is unconfigured, unreachable or answered something unexpected.
+
+    Carries no detail on purpose: it must never reach a response or a log.
+    """
+
+
+def normalizar_id(valor) -> str | None:
+    """A Notion id as 32 lowercase hex characters, or None if it is not one."""
+    if not isinstance(valor, str):
+        return None
+    plano = valor.strip().replace("-", "").lower()
+    return plano if re.fullmatch(r"[0-9a-f]{32}", plano) else None
+
+
+def _texto_rico(prop: dict) -> str:
+    return "".join(t.get("plain_text", "") for t in (prop or {}).get("rich_text") or [])
+
+
+def _exigir_configuracion() -> str:
+    """The offers database id (plain), or ErrorDeNotion when Notion is not configured."""
+    base = normalizar_id(NOTION_DB_OFERTAS)
+    if not NOTION_TOKEN or base is None:
+        raise ErrorDeNotion()
+    return base
+
+
+def _pedir_pagina(pagina_id: str):
+    """GET one page. One retry on 429 (the only error that is worth waiting for)."""
+    for intento in range(2):
+        try:
+            resp = requests.get(f"https://api.notion.com/v1/pages/{pagina_id}",
+                                headers=notion_headers(), timeout=10)
+        except requests.RequestException:
+            raise ErrorDeNotion() from None
+        if resp.status_code != 429 or intento == 1:
+            return resp
+        try:
+            espera = float(resp.headers.get("Retry-After", 1))
+        except (TypeError, ValueError):
+            espera = 1.0
+        time.sleep(min(max(espera, 0.0), _ESPERA_MAXIMA_429))
+
+
+def leer_oferta_de_usuaria(oferta_id, usuario_notion_id) -> dict | None:
+    """The offer `oferta_id` if it belongs to `usuario_notion_id`, else None.
+
+    Raises ErrorDeNotion when Notion is not configured or fails.
+    """
+    base = _exigir_configuracion()
+    pagina_id, dueno = normalizar_id(oferta_id), normalizar_id(usuario_notion_id)
+    if pagina_id is None or dueno is None:
+        return None
+    resp = _pedir_pagina(pagina_id)
+    if resp.status_code in (400, 403, 404):
+        return None
+    if resp.status_code != 200:
+        raise ErrorDeNotion()
+    try:
+        pagina = resp.json()
+    except ValueError:
+        raise ErrorDeNotion() from None
+    if not isinstance(pagina, dict):
+        raise ErrorDeNotion()
+    if pagina.get("archived") or pagina.get("in_trash"):
+        return None
+    # The page must live in the offers database: a page elsewhere may carry a "Usuario"
+    # property too, and the id in the URL is chosen by the caller.
+    if normalizar_id((pagina.get("parent") or {}).get("database_id")) != base:
+        return None
+    props = pagina.get("properties") or {}
+    duenos = {normalizar_id(r.get("id")) for r in (props.get("Usuario") or {}).get("relation") or []
+              if isinstance(r, dict)}
+    if dueno not in duenos:
+        return None
+    return {
+        "puesto":      _texto_rico(props.get("Puesto")),
+        "descripcion": _texto_rico(props.get("Descripción")),
+        "tags":        [t.get("name", "") for t in (props.get("Tags") or {}).get("multi_select") or []],
+        "idioma":      ((props.get("Idioma") or {}).get("select") or {}).get("name", ""),
+    }
+
+
+def leer_ofertas_de_usuaria(ids, usuario_notion_id) -> dict:
+    """{plain id: offer} for the ids that are hers; the rest are silently absent.
+
+    Notion cannot filter a database query by page id, and a relation query would have to
+    page through ALL her offers, so each distinct id is fetched on its own, `MAX_HILOS_NOTION`
+    at a time (the route caps the list at 50). Any Notion failure fails the whole batch.
+    """
+    _exigir_configuracion()
+    unicos = list(dict.fromkeys(i for i in (normalizar_id(x) for x in ids) if i))
+    if not unicos:
+        return {}
+    with ThreadPoolExecutor(max_workers=MAX_HILOS_NOTION) as pool:
+        ofertas = list(pool.map(lambda i: leer_oferta_de_usuaria(i, usuario_notion_id), unicos))
+    return {i: o for i, o in zip(unicos, ofertas) if o is not None}

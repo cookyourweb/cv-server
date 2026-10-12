@@ -12,6 +12,7 @@ cryptography==48.0.1
 sqlalchemy==2.1.4
 psycopg[binary]==3.3.6
 alembic==1.20.0
+pypdf==6.20.0
 fastapi==0.115.6
 uvicorn==0.34.0
 # dev / test
