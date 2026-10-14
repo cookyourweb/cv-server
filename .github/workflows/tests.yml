@@ -14,6 +14,31 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    # Base de pruebas DESECHABLE (14-oct-2026). Unos 30 tests (alta, consentimientos,
+    # borrado de cuenta, privacidad de logs) necesitan PostgreSQL de verdad; sin ella
+    # el CI estuvo en rojo desde el 11-oct mientras en local pasaba todo (el .env
+    # local tiene DATABASE_URL_PRUEBAS). Este contenedor nace y muere con cada
+    # ejecucion: no es Neon, no lleva datos reales y no necesita secretos, por eso
+    # aqui SI se permiten los tests destructivos (downgrade base).
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: pruebas
+          POSTGRES_PASSWORD: pruebas
+          POSTGRES_DB: pruebas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pruebas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # sslmode=disable: el contenedor local no tiene TLS y base_de_datos.py exige
+      # TLS salvo que la URL diga su propio sslmode.
+      DATABASE_URL_PRUEBAS: postgresql://pruebas:pruebas@localhost:5432/pruebas?sslmode=disable
+      ALLOW_DESTRUCTIVE_DB_TESTS: "1"
     steps:
       - uses: actions/checkout@v7
 
