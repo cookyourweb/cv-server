@@ -98,7 +98,9 @@ def test_a_second_invited_mailbox_of_the_same_account_is_added_without_a_new_use
         Identidad(EMISOR, quien.sub, "ana.trabajo@example.com", "Ana"), c)
     assert segundo == uid
     assert _cuenta(c, "usuarios") == 1
-    filas = c.execute(text("SELECT email, principal FROM usuario_emails ORDER BY email")).all()
+    # COLLATE "C": orden binario, igual en Neon que en el postgres del CI (cuyo locale
+    # en_US ignora '.' y '@' al ordenar y daba el orden contrario).
+    filas = c.execute(text('SELECT email, principal FROM usuario_emails ORDER BY email COLLATE "C"')).all()
     assert [(f.email, f.principal) for f in filas] == [
         ("ana.trabajo@example.com", False), ("ana@example.com", True)]
     assert c.execute(text("SELECT usada_por FROM invitaciones WHERE email = 'ana.trabajo@example.com'")
