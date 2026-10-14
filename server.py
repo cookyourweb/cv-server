@@ -592,6 +592,18 @@ def registro():
 #
 # Aqui fuera un test puede LEERLO. Ver tests/test_prompt_carta.py.
 #
+# 14-oct-2026. Incorpora la guia de redaccion de Vero
+# (buscartrabajo-privado/guia-redaccion-candidaturas.md): empezar directo, por que
+# interesa y que aporta, cierre sencillo, honestidad tecnica y su lista de frases
+# prohibidas. La LONGITUD corta (~70 palabras, una sola ancla) se mantiene por
+# decision suya.
+#
+# VERSION LARGA (no implementada, a peticion): si una oferta o un formulario pide
+# una carta mas desarrollada, la guia marca 100-160 palabras para formulario
+# (120-200 si va como email), con uno o dos ejemplos concretos y explicando por que
+# encaja (que construyo, que problema resolvia, que decisiones tomo). Solo cuando
+# se pida expresamente; la corta es la de por defecto.
+#
 # Es `.format()`, no f-string: la plantilla tiene que existir sin las variables.
 PROMPT_CARTA = """Eres un experto en cartas de presentación para ofertas de trabajo.
 Escribe una carta de presentación profesional para {nombre}.
@@ -606,17 +618,32 @@ OFERTA:
 REGLAS:
 - La oferta está en {idioma_carta}. Escribe TODA la carta en ese idioma (saludo, cuerpo y despedida).
 - LONGITUD: unas 70 palabras, cuatro o cinco líneas. Máximo 100 palabras.
-- ESTRUCTURA: presentarse, decir que has leído la oferta y que encaja, y remitir al CV.
-- UNA SOLA ancla concreta, nunca una lista. Nada de enumerar proyectos, tecnologías,
-  cifras ni tests: eso ya está en el CV. Una carta que lo cuenta todo compite con el
-  CV y pierde — el reclutador lee dos textos con lo mismo y ninguno con atención.
+- ESTRUCTURA, los cuatro pasos combinados en pocas frases: preséntate en media frase
+  (quién eres y a qué te dedicas), por qué te interesa esta oferta, qué experiencia
+  concreta aportas al equipo o al producto y por qué encajas; termina remitiendo al CV.
+  Empieza directamente por la presentación ligada al puesto, nada de introducciones
+  vacías como "Me dirijo a ustedes para expresar mi interés".
+- UNA SOLA ancla concreta, nunca una lista: qué construiste, qué problema resolvía o qué
+  decisión técnica tomaste. Nada de enumerar proyectos, tecnologías, cifras ni tests:
+  eso ya está en el CV. Una carta que lo cuenta todo compite con el CV y pierde — el
+  reclutador lee dos textos con lo mismo y ninguno con atención.
 - Usa SOLO experiencia real del CV master, y SOLO la relevante para este puesto.
   NO inventes, NO exageres y NO afirmes nada difícil de defender en entrevista
   (ni gestión de equipos ni arquitectura que no haya hecho).
+- HONESTIDAD TÉCNICA: no conviertas una tecnología que pide la oferta en una competencia
+  que no figura en el CV master. Si hay un requisito importante que no cumple, no lo
+  ocultes ni lo exageres: si aporta, busca una conexión honesta con experiencia
+  transferible o preséntalo como algo que quiere seguir aprendiendo.
 - NIVEL: si el puesto NO menciona lead/manager/responsable/principal/head, es un rol de
   DESARROLLO INDIVIDUAL: NO uses la coordinación/liderazgo de equipos como argumento.
-- Tono profesional, directo y humano. Cero frases vacías de IA: nada de "apasionada",
-  "proactiva", "soluciones innovadoras", "emocionada de la oportunidad", "dinámica".
+- Tono directo, cercano, profesional y seguro, sin arrogancia; voz humana y técnicamente
+  solvente. Escribe como una ingeniera que explica lo que ha construido, no como alguien
+  que intenta venderse, ni como una consultora o un departamento de RRHH.
+- Cero frases vacías: nada de "apasionada", "proactiva", "soluciones innovadoras",
+  "emocionada de la oportunidad", "dinámica", "me entusiasma enormemente",
+  "mi perfil encaja perfectamente", "aportar un gran valor", "altamente motivada",
+  "dilatada trayectoria", ni "no solo hago X, sino también Y" forzado.
+- Cierre sencillo, sin frases ceremoniosas ni llamadas a la acción comerciales.
 - Formato carta: {instr_saludo} ... cuerpo ... despedida formal ("Atentamente," /
   "Sincerely,") seguida de "{nombre}".
 - Devuelve SOLO el texto de la carta, sin encabezados ni comentarios."""

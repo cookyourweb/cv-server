@@ -63,3 +63,66 @@ def test_el_prompt_se_rellena_sin_perder_las_reglas():
     assert "{" not in texto.replace("{{", "").replace("}}", ""), "quedan huecos sin rellenar"
     cifras = [int(n) for n in re.findall(r"(\d+)\s+palabras", texto)]
     assert max(cifras) <= 100
+
+
+# ── Guia de redaccion de Vero (13-oct-2026) ──────────────────────────────────
+# buscartrabajo-privado/guia-redaccion-candidaturas.md. La longitud corta (~70)
+# se MANTIENE por decision de Vero (14-oct); de la guia se incorpora el resto.
+
+
+def test_empieza_directo_sin_introducciones_vacias():
+    # Guia, punto 3: empezar por el motivo de interes o la conexion con la oferta,
+    # nunca "Me dirijo a ustedes para expresar mi interes".
+    p = srv.PROMPT_CARTA.lower()
+    assert "me dirijo a ustedes" in p, "el prompt no prohibe la introduccion vacia"
+    assert re.search(r"empieza (directamente|directo)", p), \
+        "el prompt no pide empezar directo por el motivo de interes"
+
+
+def test_dice_por_que_interesa_y_que_aporta():
+    # Guia, punto 3: por que me interesa, que experiencia encaja, que aporto.
+    p = srv.PROMPT_CARTA.lower()
+    assert "por qué te interesa" in p or "por que te interesa" in p
+    assert "aport" in p, "el prompt no pide decir que aporta al equipo o al producto"
+
+
+def test_prohibe_las_frases_de_la_guia():
+    # Guia, punto 7. Si una desaparece del prompt, volvera a salir en las cartas.
+    p = srv.PROMPT_CARTA.lower()
+    for frase in ("me entusiasma", "encaja perfectamente", "gran valor",
+                  "altamente motivada", "dilatada trayectoria"):
+        assert frase in p, f"el prompt ya no prohibe '{frase}'"
+
+
+def test_honestidad_tecnica_no_convierte_requisitos_en_competencias():
+    # Guia, punto 6: no convertir una tecnologia de la oferta en una competencia
+    # que la candidata no tiene; si falta un requisito, conexion honesta.
+    p = srv.PROMPT_CARTA.lower()
+    assert "requisito" in p and "no cumpl" in p, \
+        "el prompt no dice que hacer con un requisito que no se cumple"
+
+
+def test_cierre_sencillo():
+    # Guia, punto 3: terminar de forma sencilla, sin llamadas comerciales.
+    p = srv.PROMPT_CARTA.lower()
+    assert "cierre sencillo" in p or "termina de forma sencilla" in p
+
+
+def test_queda_documentada_la_version_larga():
+    # Decision de Vero (14-oct): la corta es la de por defecto; si se pide una
+    # carta mas larga, la guia marca 100-160 palabras con 1-2 ejemplos y por que
+    # encaja. La nota tiene que estar junto al prompt para que no se pierda.
+    import inspect
+    fuente = inspect.getsource(srv)
+    assert "VERSION LARGA" in fuente and "100-160" in fuente, \
+        "falta la nota de la version larga junto a PROMPT_CARTA"
+
+
+def test_estructura_combinada_en_la_carta_corta():
+    # Decision de Vero (14-oct): corta, pero con los cuatro pasos combinados:
+    # presentarse, por que interesa, que experiencia aporta y por que encaja.
+    p = srv.PROMPT_CARTA.lower()
+    assert re.search(r"pres[eé]ntate", p), "el prompt no pide presentarse"
+    assert "por qué te interesa" in p
+    assert re.search(r"qu[eé]\s+experiencia\s+concreta\s+aportas", p)
+    assert re.search(r"por\s+qu[eé]\s+encajas", p), "el prompt no pide decir por que encaja"
