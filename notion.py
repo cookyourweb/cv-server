@@ -370,6 +370,103 @@ def guardar_link_cv_en_notion(empresa: str, puesto: str, link_drive: str,
         return False
 
 
+# ══════════════════════════════════════════════
+# SEMANTIC-FIT SCORE (ADR-011)
+# ══════════════════════════════════════════════
+MAX_OFERTAS_POR_LOTE = 100   # Notion's page_size ceiling and the batch the route embeds at once
+
+
+def escribir_encaje(page_id: str, encaje: int, avisos: list[str]) -> None:
+    """Write `Encaje` (number) and `Avisos` (multi_select) on an offer page.
+
+    Raises requests.RequestException on any failure: the caller counts it as one failed
+    offer and keeps going. 0 is a valid score and is written (an empty `Encaje` means
+    "not scored yet").
+    """
+    resp = requests.patch(
+        f"https://api.notion.com/v1/pages/{page_id}",
+        headers=notion_headers(),
+        json={"properties": {
+            "Encaje": {"number": encaje},
+            "Avisos": {"multi_select": [{"name": a} for a in avisos]},
+        }},
+        timeout=15,
+    )
+    resp.raise_for_status()
+
+
+def _consultar_todo(url: str, cuerpo: dict, limite: int | None = None) -> list:
+    """POST a Notion query and follow `next_cursor` until `limite` results (or the end)."""
+    resultados, cursor = [], None
+    while True:
+        peticion = dict(cuerpo)
+        if cursor:
+            peticion["start_cursor"] = cursor
+        resp = requests.post(url, headers=notion_headers(), json=peticion, timeout=15)
+        resp.raise_for_status()
+        datos = resp.json()
+        resultados += datos.get("results", [])
+        cursor = datos.get("next_cursor")
+        if not datos.get("has_more") or not cursor or (limite and len(resultados) >= limite):
+            return resultados[:limite] if limite else resultados
+
+
+def ofertas_por_puntuar(usuario_notion_id: str, limite: int = MAX_OFERTAS_POR_LOTE) -> list[dict]:
+    """Her `Pendiente` offers that have no `Encaje` yet, at most `limite` (never over 100).
+
+    Without NOTION_DB_OFERTAS it raises requests.RequestException and makes no request,
+    like `crear_oferta_en_notion`.
+    """
+    if not NOTION_DB_OFERTAS:
+        raise requests.RequestException("NOTION_DB_OFERTAS no configurada")
+    limite = min(limite, MAX_OFERTAS_POR_LOTE)
+    resp = requests.post(
+        f"https://api.notion.com/v1/databases/{NOTION_DB_OFERTAS}/query",
+        headers=notion_headers(),
+        json={"filter": {"and": [
+            {"property": "Usuario", "relation": {"contains": usuario_notion_id}},
+            {"property": "Estado", "select": {"equals": "Pendiente"}},
+            {"property": "Encaje", "number": {"is_empty": True}},
+        ]}, "page_size": limite},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    ofertas = []
+    for pagina in resp.json().get("results", [])[:limite]:
+        p = pagina.get("properties", {})
+        ofertas.append({
+            "page_id":     pagina.get("id", ""),
+            "empresa":     "".join(t.get("plain_text", "") for t in (p.get("Empresa") or {}).get("title") or []),
+            "puesto":      _texto_rico(p.get("Puesto")),
+            "descripcion": _texto_rico(p.get("Descripción")),
+            "salario":     _texto_rico(p.get("Salario")),
+            "modalidad":   ((p.get("Modalidad") or {}).get("select") or {}).get("name", ""),
+            "ubicacion":   _texto_rico(p.get("Ubicación")),
+        })
+    return ofertas
+
+
+def usuarios_activos() -> list[dict]:
+    """Active Notion users with the profile fields the score needs.
+
+    Each dict is `_perfil_de_pagina` plus `emails` (primary + aliases, sorted) and `evitar`
+    (text of the optional `Evitar` field, None when the field is missing or empty).
+    """
+    if not NOTION_DB_USUARIOS:
+        raise requests.RequestException("NOTION_DB_USUARIOS no configurada")
+    paginas = _consultar_todo(
+        f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
+        {"filter": {"property": "Activo", "checkbox": {"equals": True}}})
+    usuarios = []
+    for pagina in paginas:
+        perfil = _perfil_de_pagina(pagina)
+        props = pagina.get("properties", {})
+        perfil["emails"] = sorted(emails_de_usuario(props))
+        perfil["evitar"] = _texto_rico(props.get("Evitar")).strip() or None
+        usuarios.append(perfil)
+    return usuarios
+
+
 def _extraer_drive_file_id(url: str) -> str:
     """Extrae el file ID de una URL de Google Drive."""
     import re
