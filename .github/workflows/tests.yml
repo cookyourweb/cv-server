@@ -22,7 +22,7 @@ jobs:
     # aqui SI se permiten los tests destructivos (downgrade base).
     services:
       postgres:
-        image: postgres:18
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_USER: pruebas
           POSTGRES_PASSWORD: pruebas

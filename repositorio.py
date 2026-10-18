@@ -229,7 +229,7 @@ class RepositorioDeUsuaria:
         NULL, which leaves an anonymous aggregate that keeps the spend caps (and the
         one-extraction rule) honest (REQ-2.4). Returns False when the user no longer exists.
         """
-        for tabla in ("consentimientos", "cv_master", "perfil", "intereses"):
+        for tabla in ("consentimientos", "cv_master", "perfil", "intereses", "embeddings_oferta"):
             self._c.execute(text(f"DELETE FROM {tabla} WHERE usuario_id = :u"), {"u": self._usuario_id})
         # Her invitations hold her mailbox in the clear: they go before the mailboxes do (the
         # subquery needs them). Those she consumed (`usada_por`) go too.

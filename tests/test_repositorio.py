@@ -131,6 +131,9 @@ def _rellenar(c, uid):
     RepositorioDeUsuaria(c, uid).registrar_interes("academia", "Academia Prueba")
     c.execute(text("INSERT INTO gastos_generacion (usuario_id, tipo, modelo, unidades, estado, coste_estimado) "
                    "VALUES (:u, 'cv', 'prueba', 0.7, 'completada', 0.02)"), {"u": uid})
+    c.execute(text("INSERT INTO embeddings_oferta (notion_page_id, usuario_id, modelo, huella, vector) "
+                   "VALUES (:p, :u, 'prueba', 'h', CAST(:v AS vector))"),
+              {"p": f"pagina-{uid}", "u": uid, "v": "[" + ",".join(["0.1"] * 768) + "]"})
 
 
 @pytest.mark.bd
@@ -229,7 +232,8 @@ def test_S2_3_deleting_the_account_clears_every_owned_row_and_keeps_the_anonymou
     uid = _usuaria(c)
     _rellenar(c, uid)
     assert RepositorioDeUsuaria(c, uid).borrar_cuenta() is True
-    for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "intereses"):
+    for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "intereses",
+                  "embeddings_oferta"):
         assert _cuenta(c, tabla, uid) == 0, tabla
     huerfana = c.execute(text("SELECT usuario_id, estimado_eur FROM extracciones WHERE modelo = 'prueba'")).one()
     assert huerfana.usuario_id is None and float(huerfana.estimado_eur) == 0.04
@@ -253,7 +257,7 @@ def test_S2_5_deleting_one_account_leaves_the_other_untouched(c):
     _rellenar(c, b)
     RepositorioDeUsuaria(c, a).borrar_cuenta()
     for tabla in ("usuarios", "usuario_emails", "perfil", "cv_master", "consentimientos", "extracciones",
-                  "intereses", "gastos_generacion"):
+                  "intereses", "gastos_generacion", "embeddings_oferta"):
         assert _cuenta(c, tabla, b) == 1, tabla
 
 
