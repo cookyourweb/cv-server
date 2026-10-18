@@ -16,11 +16,17 @@ Uso (desde cv-server/):
   .venv/bin/python scripts/experimento_embeddings.py --estados Pendiente "Enviado a empresa"
 """
 import argparse
-import math
 import os
+import sys
 from pathlib import Path
 
 import requests
+
+# Run as a script, sys.path[0] is scripts/, not the repo root where the modules live.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from embeddings import embeddings as _embeddings_gemini
+from encaje_semantico import coseno  # noqa: F401  (also used by tests via exp.coseno)
 
 # ─── Configuración ──────────────────────────────────────────────────────────
 
@@ -49,7 +55,6 @@ def _credencial(nombre: str) -> str:
 
 
 DB_OFERTAS = os.getenv("NOTION_DB_OFERTAS") or "33d11515f4b281efa776d0ea698b748f"
-MODELO = "gemini-embedding-001"
 
 # Perfil por defecto: solo cosas confirmadas, sin inflar.
 # Mejor aún: pasá tu propio texto con --perfil.
@@ -120,32 +125,13 @@ def leer_ofertas(estados: list[str]) -> list[dict]:
 
 
 def embeddings(textos: list[str]) -> list[list[float]]:
-    """Una sola llamada a Gemini convierte hasta 100 textos en vectores."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:batchEmbedContents"
-    clave = _credencial("GEMINI_API_KEY")
-    vectores = []
-    for i in range(0, len(textos), 100):
-        lote = textos[i:i + 100]
-        cuerpo = {"requests": [{"model": f"models/{MODELO}",
-                                "content": {"parts": [{"text": t}]},
-                                "taskType": "SEMANTIC_SIMILARITY"} for t in lote]}
-        r = requests.post(url, headers={"x-goog-api-key": clave},
-                          json=cuerpo, timeout=60)
-        r.raise_for_status()
-        vectores += [e["values"] for e in r.json()["embeddings"]]
-    return vectores
+    """Delegates to the production client; as a script, a missing key exits cleanly."""
+    try:
+        return _embeddings_gemini(textos)
+    except RuntimeError as e:
+        raise SystemExit("Falta GEMINI_API_KEY en cv-server/.env") from e
 
-# ─── 3. Comparar: similitud del coseno ──────────────────────────────────────
-
-
-def coseno(a: list[float], b: list[float]) -> float:
-    """1.0 = mismo significado, 0 = nada que ver.
-
-    Mide el ángulo entre las dos flechas: si apuntan hacia el mismo lado,
-    los textos hablan de lo mismo. Esto es lo que pgvector hace con `<=>`.
-    """
-    punto = sum(x * y for x, y in zip(a, b))
-    return punto / (math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b)))
+# ─── 3. Comparar: similitud del coseno (en encaje_semantico.py) ─────────────
 
 
 def puntuar(ofertas: list[dict], v_perfil: list[float], v_anti: list[float],

@@ -104,21 +104,19 @@ def test_duplicados_solo_por_encima_del_umbral(exp):
 
 # ─── Gemini embeddings ──────────────────────────────────────────────────────
 
-def test_embeddings_en_lotes_de_cien_y_en_orden(exp, monkeypatch):
+def test_embeddings_delega_en_el_cliente_de_produccion(exp, monkeypatch):
+    # Batching, dimensions and normalization now live in embeddings.py (tests/test_embeddings.py).
     monkeypatch.setenv("GEMINI_API_KEY", "clave-falsa")
-    llamadas = []
+    cuerpos = []
 
     def falso_post(url, headers, json, timeout):
-        llamadas.append(len(json["requests"]))
-        return _Respuesta({"embeddings": [
-            {"values": [float(r["content"]["parts"][0]["text"])]} for r in json["requests"]]})
+        cuerpos.append(json)
+        return _Respuesta({"embeddings": [{"values": [3.0, 4.0]} for _ in json["requests"]]})
 
     monkeypatch.setattr(exp.requests, "post", falso_post)
 
-    vectores = exp.embeddings([str(i) for i in range(150)])
-
-    assert llamadas == [100, 50]
-    assert vectores == [[float(i)] for i in range(150)]
+    assert exp.embeddings(["a", "b"]) == [[0.6, 0.8], [0.6, 0.8]]
+    assert cuerpos[0]["requests"][0]["outputDimensionality"] == 768
 
 
 def test_embeddings_sin_clave_da_error_claro(exp, monkeypatch):
