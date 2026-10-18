@@ -178,3 +178,11 @@ def test_pureza_sin_io_red_llm_ni_reloj():
     assert importados <= {"__future__", "math", "re", "unicodedata", "typing"}, importados
     llamadas = {n.func.id for n in ast.walk(arbol) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
     assert not llamadas & {"open", "print", "input", "exec", "eval"}
+
+
+def test_valdemorillo_cuenta_como_madrid_y_la_ciudad_real_de_notion_funciona():
+    prefs = {"salario_min": 60000, "ciudad": "Valdemorillo, Madrid"}
+    assert es.reglas_duras({"modalidad": "Presencial", "ubicacion": "Valdemorillo"}, prefs) == []
+    assert es.reglas_duras({"modalidad": "Hibrido", "ubicacion": "Madrid"}, prefs) == []
+    assert es.reglas_duras({"modalidad": "Hibrido", "ubicacion": "Pozuelo de Alarcón"}, prefs) == []
+    assert es.reglas_duras({"modalidad": "Presencial", "ubicacion": "Barcelona"}, prefs) == ["ubicacion"]

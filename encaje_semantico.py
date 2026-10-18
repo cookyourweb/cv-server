@@ -105,7 +105,7 @@ _UBICACION_SIN_DATO = {"", "sin confirmar", "s/i", "n/a", "remoto"}
 # Municipalities counted as "Madrid" for the Madrid user (the offer rarely says "Madrid").
 _AREA_MADRID = {"alcobendas", "pozuelo", "las rozas", "majadahonda", "boadilla", "getafe",
                 "leganes", "mostoles", "fuenlabrada", "alcorcon", "alcala de henares",
-                "tres cantos", "san sebastian de los reyes", "rivas", "coslada", "torrejon"}
+                "tres cantos", "san sebastian de los reyes", "rivas", "coslada", "torrejon", "valdemorillo"}
 
 
 def _norm(s: str | None) -> str:
@@ -127,8 +127,10 @@ def reglas_duras(oferta: dict, preferencias: dict) -> list[str]:
     ubicacion = _norm(oferta.get("ubicacion"))
     if (ciudad and _norm(oferta.get("modalidad")) in _PRESENCIALES
             and ubicacion not in _UBICACION_SIN_DATO):
-        cerca = ciudad in ubicacion or (
-            ciudad == "madrid" and any(m in ubicacion for m in _AREA_MADRID))
+        # Notion may hold "Valdemorillo, Madrid": each comma-separated part is a place she accepts.
+        lugares = [p.strip() for p in ciudad.split(",") if p.strip()]
+        cerca = any(l in ubicacion for l in lugares) or (
+            "madrid" in lugares and any(m in ubicacion for m in _AREA_MADRID))
         if not cerca:
             motivos.append("ubicacion")
     return motivos
