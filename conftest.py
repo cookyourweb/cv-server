@@ -13,14 +13,44 @@ from pathlib import Path
 import pytest
 
 
-def _url_de_pruebas() -> str:
-    """Test database URL: the environment first, then a local `.env` (never printed)."""
-    url = os.getenv("DATABASE_URL_PRUEBAS", "")
+def _url_del_entorno(nombre: str) -> str:
+    """A database URL: the environment first, then a local `.env` (never printed)."""
+    url = os.getenv(nombre, "")
     if not url and (Path(__file__).parent / ".env").exists():
         from dotenv import dotenv_values
 
-        url = dotenv_values(Path(__file__).parent / ".env").get("DATABASE_URL_PRUEBAS") or ""
+        url = dotenv_values(Path(__file__).parent / ".env").get(nombre) or ""
     return url
+
+
+def _url_de_pruebas() -> str:
+    return _url_del_entorno("DATABASE_URL_PRUEBAS")
+
+
+def _destino(url: str) -> tuple:
+    """Server and database a URL points at; credentials and query string do not count."""
+    from urllib.parse import urlparse
+
+    partes = urlparse(url)
+    return ((partes.hostname or "").lower(), partes.port or 5432, partes.path.lstrip("/"))
+
+
+def pytest_collection_finish(session):
+    """Abort before any connection if a selected `bd` test would hit the service database.
+
+    On 18-oct-2026 a local .env had DATABASE_URL_PRUEBAS equal to DATABASE_URL and every
+    `bd` test ran against production. Runs after deselection, so `-m "not bd"` still works.
+    """
+    pruebas, servicio = _url_de_pruebas(), _url_del_entorno("DATABASE_URL")
+    if not pruebas or not servicio or _destino(pruebas) != _destino(servicio):
+        return
+    if any("bd" in item.keywords for item in session.items):
+        pytest.exit(
+            "DATABASE_URL_PRUEBAS points at the same database as DATABASE_URL (the service "
+            "database). Point it at a disposable database, such as a Neon branch, or run "
+            'with -m "not bd".',
+            returncode=3,
+        )
 
 
 def pytest_configure(config):
