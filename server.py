@@ -1368,6 +1368,21 @@ def crear_oferta():
     return jsonify({"ok": True, "notion_page_id": page.get("id", ""), "idioma": idioma})
 
 
+from puntuacion import puntuar_ofertas_core  # noqa: E402
+
+
+@app.route("/puntuar-ofertas", methods=["POST"])
+@requiere_clave_maquina
+def puntuar_ofertas():
+    """Thin route: scores every exempt user's pending offers (ADR-011). n8n calls it daily."""
+    try:
+        return jsonify(puntuar_ofertas_core())
+    except requests.RequestException as e:
+        # Never echo the exception: it may carry Notion details.
+        logger.error("Error puntuando ofertas: %s", type(e).__name__)
+        return jsonify({"ok": False, "error": "Notion no disponible"}), 502
+
+
 # ══════════════════════════════════════════════
 # IDENTIDAD DE LA USUARIA (token de Google, ver autenticacion.py)
 # ══════════════════════════════════════════════

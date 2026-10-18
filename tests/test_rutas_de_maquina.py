@@ -20,7 +20,7 @@ import pytest
 import server as srv
 
 CLAVE = "clave-de-prueba-larga-y-aleatoria"
-RUTAS_DE_MAQUINA = ["/generar-cv", "/generar-carta", "/crear-oferta", "/buscar-ofertas-reales", "/registro"]
+RUTAS_DE_MAQUINA = ["/generar-cv", "/generar-carta", "/crear-oferta", "/buscar-ofertas-reales", "/registro", "/puntuar-ofertas"]
 PUBLICAS = {"/", "/health", "/static/<path:filename>"}
 # /yo no usa la clave de maquina: se protege con el token de Google de la usuaria.
 PUBLICAS.add("/yo")
@@ -50,6 +50,7 @@ def llamadas(monkeypatch):
     for nombre, valor in (
         ("buscar_ofertas_reales", None),
         ("crear_oferta_en_notion", None),
+        ("puntuar_ofertas_core", {"ok": True}),
         ("buscar_usuario_por_email", None),
         ("crear_usuario_en_notion", {"id": "pagina-falsa"}),
         ("disparar_busqueda", srv.Resultado(False, hay_novedades=False)),

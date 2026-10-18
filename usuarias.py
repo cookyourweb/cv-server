@@ -102,6 +102,16 @@ def resolver_o_crear(identidad: Identidad, conexion=None, respaldo: frozenset = 
         raise BaseDeDatosNoDisponible() from None
 
 
+def id_por_emails(emails, conexion):
+    """The Neon user id that owns any of `emails`, or None. Read-only: never creates a user."""
+    lista = sorted({_normalizar(e) for e in emails if e and e.strip()})
+    if not lista:
+        return None
+    return conexion.execute(
+        text("SELECT usuario_id FROM usuario_emails WHERE email = ANY(:l) ORDER BY principal DESC LIMIT 1"),
+        {"l": lista}).scalar_one_or_none()
+
+
 def _existe(consulta: str, usuario_id, conexion) -> bool:
     try:
         if conexion is not None:

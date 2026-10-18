@@ -30,7 +30,7 @@ def test_panel_routes_answer_the_preflight_for_the_listed_origin(cliente, ruta):
 
 
 @pytest.mark.parametrize("ruta", [
-    "/usuarios", "/generar-cv", "/crear-oferta", "/registro", "/", "/perfiles", "/cvs", "/cuentas",
+    "/usuarios", "/generar-cv", "/crear-oferta", "/puntuar-ofertas", "/registro", "/", "/perfiles", "/cvs", "/cuentas",
     "/ofertas", "/ofertas/abc", "/ofertas/abc/otra", "/ofertas/a/b/encaje", "/no-existe", "/encaje",
 ])
 def test_other_routes_never_get_cors(cliente, ruta):
