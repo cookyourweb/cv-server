@@ -15,7 +15,7 @@ Python, FastAPI
     salida = normalizar_cv(texto)
 
     assert "experiencia" in salida["secciones"]
-    assert "skills" in salida["secciones"]
+    assert "habilidades" in salida["secciones"]
     assert salida["secciones"]["experiencia"].startswith("Senior Developer")
     assert salida["texto_normalizado"].startswith("# Experiencia") or "Senior" in salida["texto_normalizado"]
 

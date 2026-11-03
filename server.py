@@ -890,6 +890,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         raise CVError(404, f"Usuario {email} no encontrado en Notion")
 
     # Puerta BYOK (T4): diagnóstico previo, sin cambiar todavía la key real de LLM.
+    byok_api_key = None
     try:
         import base_de_datos
         import byok
@@ -903,6 +904,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
                     403,
                     decision.get("motivo", "No puedes generar sin clave propia ni generaciones gratuitas."),
                 )
+            byok_api_key = decision.get("clave") if decision.get("modo") == "key" else None
     except CVError:
         raise
     except Exception as exc:
@@ -993,7 +995,7 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
         respuesta_llm = cuota.generar(
             email, "cv", prompt, modelo=CV_MODEL, max_tokens=4096,
             llamar=lambda: call_llm_calidad(prompt, model=CV_MODEL, max_tokens=4096),
-            llamar_invitada=lambda: call_llm_invitada(prompt, model=CV_MODEL, max_tokens=4096))
+            llamar_invitada=lambda: call_llm_invitada(prompt, model=CV_MODEL, max_tokens=4096, api_key=byok_api_key))
         contenido_cv  = respuesta_llm.contenido
         logger.info("CONSUMO cv %s", consumo_de(respuesta_llm))
     except cuota.Rechazada as r:
@@ -1267,6 +1269,7 @@ def generar_carta():
             with base_de_datos.motor().begin() as conexion:
                 decision = byok.resolver_generacion_por_email(email, conexion, "anthropic")
             byok.registrar_modo_generacion(decision.get("modo", "denegado"), decision.get("motivo"), "anthropic", email)
+            byok_api_key = decision.get("clave") if decision.get("modo") == "key" else None
             if not decision.get("permitido", True):
                 return jsonify({
                     "ok": False,
@@ -1278,6 +1281,7 @@ def generar_carta():
         logger.error("BYOK gate failed: %s", type(exc).__name__)
         return jsonify({"ok": False, "error": "No se pudo verificar tu acceso; inténtalo más tarde."}), 503
 
+    byok_api_key = None
     nombre = usuario.get("nombre") or email.split("@")[0]
 
     # Resolver idioma y leer el CV master en ese idioma
@@ -1340,7 +1344,7 @@ def generar_carta():
         respuesta_llm = cuota.generar(
             email, "carta", prompt, modelo=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA,
             llamar=lambda: call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA),
-            llamar_invitada=lambda: call_llm_invitada(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA))
+            llamar_invitada=lambda: call_llm_invitada(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA, api_key=byok_api_key))
         carta         = respuesta_llm.contenido
         logger.info("CONSUMO carta %s", consumo_de(respuesta_llm))
     except cuota.Rechazada as r:
