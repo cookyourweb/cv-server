@@ -98,3 +98,6 @@ docs/privado/
 
 # Registro de skills, se regenera con /sdd-init. Local, no se comparte.
 .atl/
+
+# Local analysis output of the CV master checker (contains CV text).
+data/

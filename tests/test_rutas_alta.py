@@ -42,6 +42,10 @@ RUTAS_PROPIAS = {
     ("POST", "/cv"): None,
     ("GET", "/cv"): None,
     ("DELETE", "/cv/<idioma>"): None,
+    # BYOK: the user's own AI key.
+    ("GET", "/clave-api"): None,
+    ("PUT", "/clave-api"): {"proveedor": "anthropic", "api_key": "sk-ant-prueba-0000000000"},
+    ("DELETE", "/clave-api/<proveedor>"): None,
 }
 CORREOS = [f"{n}@ejemplo.es" for n in ("ana", "bea", "carla")]
 
