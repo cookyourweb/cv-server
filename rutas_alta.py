@@ -9,11 +9,12 @@ Without DATABASE_URL (production until the database exists) every route answers 
 generic 503; `/yo` and `/health` do not depend on it. Errors never carry submitted
 values, driver messages or connection details.
 """
+from typing import Literal
 import logging
 from functools import wraps
 
 from flask import Blueprint, g, jsonify, request
-from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError
+from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
 import base_de_datos
@@ -279,6 +280,55 @@ def crear_blueprint(con_usuaria, requiere_clave_maquina) -> Blueprint:
         except (SQLAlchemyError, base_de_datos.ErrorDeBaseDeDatos) as error:
             privacidad.registrar_fallo(logger, "database error in the extraction", error)
             return _respuesta(_NO_DISPONIBLE)
+
+    class ClaveApiEntrada(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+
+        proveedor: Literal["anthropic", "groq"] = "anthropic"
+        api_key: str
+
+        @field_validator("api_key")
+        @classmethod
+        def _validar_key(cls, value: str) -> str:
+            if not value or not value.strip() or len(value.strip()) < 10:
+                raise ValueError("API key no válida")
+            return value.strip()
+
+    @alta.get("/clave-api")
+    @con_usuaria
+    @_con_repositorio
+    def estado_clave_api(repo):
+        proveedor = request.args.get("proveedor", "anthropic")
+        if proveedor not in {"anthropic", "groq"}:
+            return _respuesta(({"ok": False, "error": "proveedor no válido"}, 422))
+        return jsonify({
+            "proveedor": proveedor,
+            "configurada": repo.tiene_clave_api(proveedor),
+            "trial_restante": repo.trial_restante(),
+        }), 200
+
+    @alta.put("/clave-api")
+    @con_usuaria
+    @_con_repositorio
+    def guardar_clave_api(repo):
+        entrada, error = _leer(ClaveApiEntrada)
+        if error:
+            return error
+        try:
+            repo.guardar_clave_api(entrada.proveedor, entrada.api_key)
+        except (ValueError, Exception):
+            logger.error("error guardando API key BYOK")
+            return _respuesta(({"ok": False, "error": "no se pudo guardar la clave"}, 422))
+        return jsonify({"configurada": True, "proveedor": entrada.proveedor}), 200
+
+    @alta.delete("/clave-api/<proveedor>")
+    @con_usuaria
+    @_con_repositorio
+    def borrar_clave_api(repo, proveedor):
+        if proveedor not in {"anthropic", "groq"}:
+            return _respuesta(({"ok": False, "error": "proveedor no válido"}, 422))
+        repo.borrar_clave_api(proveedor)
+        return jsonify({"ok": True}), 200
 
     @alta.delete("/cuenta")
     @con_usuaria

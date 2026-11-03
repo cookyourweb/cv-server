@@ -889,6 +889,27 @@ def generar_cv_core(email: str, empresa: str, puesto: str,
     if not usuario:
         raise CVError(404, f"Usuario {email} no encontrado en Notion")
 
+    # Puerta BYOK (T4): diagnóstico previo, sin cambiar todavía la key real de LLM.
+    try:
+        import base_de_datos
+        import byok
+        if base_de_datos.configurada():
+            # begin() commits on exit: the trial consumption must persist.
+            with base_de_datos.motor().begin() as conexion:
+                decision = byok.resolver_generacion_por_email(email, conexion, "anthropic")
+            byok.registrar_modo_generacion(decision.get("modo", "denegado"), decision.get("motivo"), "anthropic", email)
+            if not decision.get("permitido", True):
+                raise CVError(
+                    403,
+                    decision.get("motivo", "No puedes generar sin clave propia ni generaciones gratuitas."),
+                )
+    except CVError:
+        raise
+    except Exception as exc:
+        # Fail closed: without a verified decision nobody generates. Log the type only.
+        logger.error("BYOK gate failed: %s", type(exc).__name__)
+        raise CVError(503, "No se pudo verificar tu acceso; inténtalo más tarde.")
+
     nombre = usuario.get("nombre") or email.split("@")[0]
 
     # 2. Resolver idioma y leer el CV master en ese idioma
@@ -1126,6 +1147,89 @@ def generar_cv():
     return jsonify(result)
 
 
+@app.route("/cv-master/check", methods=["POST"])
+@requiere_clave_maquina
+def cv_master_check():
+    """Diagnóstico del CV maestro: checklist y propuestas marcadas, sin modificar."""
+    datos = request.get_json(force=True) or {}
+    texto = datos.get("markdown") or datos.get("texto") or datos.get("text") or ""
+
+    if not texto.strip():
+        return jsonify({"ok": False, "error": "Texto vacío"}), 400
+
+    import checker
+    import hashlib
+
+    normalizado = checker.normalizar_cv(texto)
+    claims = checker.detectar_claims_sin_metrica(texto)
+    skills = checker.detectar_skills_sin_evidencia(texto)
+    gaps = checker.detectar_gaps_temporales(texto)
+    secciones_faltantes = checker.detectar_secciones_recuperables(normalizado)
+
+    findings = []
+    for claim in claims:
+        findings.append(
+            {
+                "type": "needs-evidence",
+                "message": "Claim sin métrica ni evidencia.",
+                "evidence": claim,
+            }
+        )
+    for skill in skills:
+        findings.append(
+            {
+                "type": "unsupported-skill",
+                "message": "Skill declarada sin evidencia en experiencia.",
+                "evidence": skill,
+            }
+        )
+    for gap in gaps:
+        findings.append(
+            {
+                "type": "gap",
+                "message": "Gap temporal detectado.",
+                "evidence": gap,
+            }
+        )
+    for seccion in secciones_faltantes:
+        findings.append(
+            {
+                "type": "missing-section",
+                "message": "Sección recomendada ausente.",
+                "evidence": seccion,
+            }
+        )
+
+    if not normalizado["secciones_presentes"]:
+        status = checker.Status.INSUFFICIENT_CONTENT.value
+    elif findings:
+        status = checker.Status.WARNING.value
+    else:
+        status = checker.Status.OK.value
+
+    proposals = [
+        {
+            "type": "section",
+            "message": f"Añadir o completar la sección `{seccion}`.",
+            "section": seccion,
+        }
+        for seccion in secciones_faltantes
+    ]
+
+    hash_cv = hashlib.sha256(normalizado["texto_normalizado"].encode("utf-8")).hexdigest()
+    persistido = checker.persistir_analisis(
+        hash_cv,
+        {
+            "status": status,
+            "findings": findings,
+            "proposals": proposals,
+            "hash_cv": hash_cv,
+            "version_label": datos.get("version_label"),
+        },
+    )
+
+    return jsonify({"ok": True, "analisis": persistido})
+
 @app.route("/generar-carta", methods=["POST"])
 @requiere_clave_maquina
 def generar_carta():
@@ -1154,6 +1258,25 @@ def generar_carta():
     usuario = buscar_usuario_por_email(email)
     if not usuario:
         return jsonify({"ok": False, "error": f"Usuario {email} no encontrado en Notion"}), 404
+
+    try:
+        import base_de_datos
+        import byok
+        if base_de_datos.configurada():
+            # begin() commits on exit: the trial consumption must persist.
+            with base_de_datos.motor().begin() as conexion:
+                decision = byok.resolver_generacion_por_email(email, conexion, "anthropic")
+            byok.registrar_modo_generacion(decision.get("modo", "denegado"), decision.get("motivo"), "anthropic", email)
+            if not decision.get("permitido", True):
+                return jsonify({
+                    "ok": False,
+                    "error": decision.get("motivo", "No puedes generar sin clave propia ni generaciones gratuitas."),
+                    "guia": "Configura tu API key en el panel o usa los 3 trials disponibles.",
+                }), 403
+    except Exception as exc:
+        # Fail closed: without a verified decision nobody generates. Log the type only.
+        logger.error("BYOK gate failed: %s", type(exc).__name__)
+        return jsonify({"ok": False, "error": "No se pudo verificar tu acceso; inténtalo más tarde."}), 503
 
     nombre = usuario.get("nombre") or email.split("@")[0]
 

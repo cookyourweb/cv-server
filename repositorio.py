@@ -219,6 +219,76 @@ class RepositorioDeUsuaria:
 
     # --- account deletion ----------------------------------------------------------------------
 
+    # --- BYOK: clave de IA propia ----------------------------------------------------------
+
+    def guardar_clave_api(self, proveedor: str, api_key: str) -> None:
+        if proveedor not in {"anthropic", "groq"}:
+            raise ValueError("proveedor invalido")
+        import byok
+        if not byok.validar_api_key(proveedor, api_key):
+            raise ValueError("api key invalida")
+
+        version, nonce, cifrado = byok.cifrar_api_key(self._usuario_id, proveedor, api_key)
+        self._c.execute(
+            text("""
+                INSERT INTO claves_api (usuario_id, proveedor, clave_version, nonce, cifrado)
+                VALUES (:u, :proveedor, :version, :nonce, :cifrado)
+                ON CONFLICT (usuario_id, proveedor) DO UPDATE SET
+                    clave_version = EXCLUDED.clave_version,
+                    nonce = EXCLUDED.nonce,
+                    cifrado = EXCLUDED.cifrado,
+                    actualizado_en = now()
+            """),
+            {
+                "u": self._usuario_id,
+                "proveedor": proveedor,
+                "version": version,
+                "nonce": nonce,
+                "cifrado": cifrado,
+            },
+        )
+
+    def obtener_clave_api(self, proveedor: str) -> str | None:
+        fila = self._c.execute(
+            text("SELECT clave_version, nonce, cifrado FROM claves_api WHERE usuario_id = :u AND proveedor = :p"),
+            {"u": self._usuario_id, "p": proveedor},
+        ).first()
+        if fila is None:
+            return None
+        import byok
+        version, nonce, cifrado = fila[0], fila[1], fila[2]
+        return byok.descifrar_api_key(self._usuario_id, proveedor, version, bytes(nonce), bytes(cifrado))
+
+    def tiene_clave_api(self, proveedor: str) -> bool:
+        return self._c.execute(
+            text("SELECT 1 FROM claves_api WHERE usuario_id = :u AND proveedor = :p"),
+            {"u": self._usuario_id, "p": proveedor},
+        ).first() is not None
+
+    def trial_restante(self) -> int:
+        return self._c.execute(
+            text("SELECT trial_generaciones FROM usuarios WHERE id = :u"),
+            {"u": self._usuario_id},
+        ).scalar_one()
+
+    def consumir_trial(self) -> bool:
+        # One atomic statement: no row back means the trial is exhausted (no read-then-write race).
+        fila = self._c.execute(
+            text("UPDATE usuarios SET trial_generaciones = trial_generaciones - 1 "
+                 "WHERE id = :u AND trial_generaciones > 0 RETURNING trial_generaciones"),
+            {"u": self._usuario_id},
+        ).first()
+        return fila is not None
+
+    def borrar_clave_api(self, proveedor: str) -> None:
+        """Delete her stored encrypted key for this provider (idempotent)."""
+        self._c.execute(
+            text("DELETE FROM claves_api WHERE usuario_id = :u AND proveedor = :p"),
+            {"u": self._usuario_id, "p": proveedor},
+        )
+
+    # --- account deletion ----------------------------------------------------------------------
+
     def borrar_cuenta(self) -> bool:
         """Delete the user and everything she owns, in the caller's transaction.
 
