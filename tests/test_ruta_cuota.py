@@ -55,6 +55,7 @@ def entorno(monkeypatch, bd):  # noqa: F811
     monkeypatch.setattr(cuota, "TOPE_EUR", Decimal("100000"))
     monkeypatch.setattr(cuota, "aviso_configurado", lambda: False)
     monkeypatch.delenv("CUOTA_EXENTAS", raising=False)
+    monkeypatch.delenv("BYOK_PROPIETARIAS", raising=False)
     _limpiar()
     yield
     _limpiar()
@@ -205,15 +206,28 @@ def test_the_owner_listed_in_cuota_exentas_is_never_counted_or_blocked_and_sees_
     assert len(_libro(ana)) == 1                       # only the seeded row
 
 
-def test_the_legacy_owner_without_a_neon_row_is_never_counted_or_blocked(personas, llm_falso):
+def test_an_owner_in_byok_propietarias_without_a_neon_row_is_never_counted_or_blocked(personas, llm_falso,
+                                                                                    monkeypatch):
+    # Since the BYOK hotfix (3-nov-2026) the old "legacy" pass for any email without a Neon row is gone:
+    # only the owners listed in BYOK_PROPIETARIAS generate without an account.
     class Vero:
         email = "vero-legado@example.com"
+    monkeypatch.setenv("BYOK_PROPIETARIAS", f"otra@example.com, {Vero.email.upper()}")
     with base_de_datos.transaccion() as c:
         antes = c.execute(text("SELECT count(*) FROM gastos_generacion")).scalar_one()
     assert _post("/generar-carta", Vero)[0] == 200 and _post("/generar-cv", Vero)[0] == 200
     with base_de_datos.transaccion() as c:
         assert c.execute(text("SELECT count(*) FROM gastos_generacion")).scalar_one() == antes
     assert len(llm_falso.llamadas) == 2
+
+
+@pytest.mark.parametrize("ruta", ["/generar-carta", "/generar-cv"])
+def test_an_unknown_email_without_a_neon_row_is_denied_and_never_reaches_the_model(personas, llm_falso, ruta):
+    # Fail closed: an email that is neither an owner nor a Neon user must not spend the server key.
+    class Desconocida:
+        email = "nadie@example.com"
+    assert _post(ruta, Desconocida)[0] == 403
+    assert llm_falso.llamadas == []
 
 
 def test_without_database_url_the_routes_never_touch_the_database(personas, llm_falso, monkeypatch):
@@ -261,12 +275,14 @@ def test_an_invited_user_never_reaches_gemini_even_when_claude_and_groq_fail(ana
 
 
 @pytest.mark.parametrize("ruta", ["/generar-carta", "/generar-cv"])
-def test_legacy_and_exempt_users_keep_the_owner_chain(personas, cadenas, ana, monkeypatch, ruta):
+def test_owners_and_exempt_users_keep_the_owner_chain(personas, cadenas, ana, monkeypatch, ruta):
     duena, invitada = cadenas
 
     class Vero:
         email = "vero-legado@example.com"
-    assert _post(ruta, Vero)[0] == 200                       # no Neon user
+    monkeypatch.setenv("BYOK_PROPIETARIAS", Vero.email)
+    assert _post(ruta, Vero)[0] == 200                       # owner, no Neon user
+    monkeypatch.delenv("BYOK_PROPIETARIAS")
     monkeypatch.setenv("CUOTA_EXENTAS", ana.email)
     assert _post(ruta, ana)[0] == 200                        # exempt
     monkeypatch.delenv("CUOTA_EXENTAS")
