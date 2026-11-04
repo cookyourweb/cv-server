@@ -312,6 +312,7 @@ from notion import (  # noqa: F401
     _SEPARADORES_EMAIL,
     _ES_EMAIL,
     notion_headers,
+    paginas_usuarios_activos,
     _es_campo_de_alias,
     campos_alias_candidatos,
     emails_de_usuario,
@@ -1401,14 +1402,10 @@ def usuarios():
     if not NOTION_DB_USUARIOS:
         return jsonify({"ok": False, "error": "NOTION_DB_USUARIOS no configurada"}), 500
     try:
-        resp = requests.post(
-            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
-            headers=notion_headers(),
-            json={"filter": {"property": "Activo", "checkbox": {"equals": True}}},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
+        results = paginas_usuarios_activos()
+        if request.args.get("formato") == "notion":
+            # Same `results` shape Notion returns: n8n cannot call data sources itself.
+            return jsonify({"ok": True, "results": results})
         usuarios_list = []
         for p in results:
             props = p.get("properties", {})

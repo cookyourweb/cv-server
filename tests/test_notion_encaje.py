@@ -47,6 +47,7 @@ def notion_falso(monkeypatch):
     monkeypatch.setattr(notion, "NOTION_TOKEN", "token")
     monkeypatch.setattr(notion, "NOTION_DB_OFERTAS", BASE)
     monkeypatch.setattr(notion, "NOTION_DB_USUARIOS", "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+    monkeypatch.setattr(notion, "NOTION_DS_USUARIOS", "ssssssss-ssss-4sss-8sss-ssssssssssss")
     estado = {"posts": [], "patches": [], "respuestas": [Respuesta()]}
 
     def post(url, headers=None, json=None, timeout=None):
