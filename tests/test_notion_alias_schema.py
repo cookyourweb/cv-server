@@ -37,6 +37,7 @@ ERROR_400 = _Resp(400, text='{"message":"Could not find property with name or id
 @pytest.fixture(autouse=True)
 def _limpio(monkeypatch):
     monkeypatch.setattr(notion, "NOTION_DB_USUARIOS", "db1")
+    monkeypatch.setattr(notion, "NOTION_DS_USUARIOS", "ds1")
     notion.reiniciar_caches()
     yield
     notion.reiniciar_caches()

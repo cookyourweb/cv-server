@@ -19,13 +19,65 @@ logger = logging.getLogger(__name__)
 NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
 NOTION_DB_USUARIOS = os.getenv("NOTION_DB_USUARIOS", "")
 NOTION_DB_OFERTAS = os.getenv("NOTION_DB_OFERTAS", "")
+# Users database has several data sources: every Users call goes through this one.
+NOTION_DS_USUARIOS = os.getenv("NOTION_DS_USUARIOS", "")
 
-def notion_headers():
+VERSION_NOTION = "2022-06-28"          # Ofertas, pages
+VERSION_NOTION_DATA_SOURCES = "2025-09-03"  # Users (data sources API)
+
+
+def notion_headers(version: str = VERSION_NOTION):
     return {
         "Authorization":  f"Bearer {NOTION_TOKEN}",
-        "Notion-Version": "2022-06-28",
+        "Notion-Version": version,
         "Content-Type":   "application/json",
     }
+
+
+class DataSourceUsuariosError(requests.RequestException):
+    """The Users data source could not be determined (fail closed, never guess)."""
+
+
+_ds_resuelto: dict = {}
+
+
+def ds_usuarios() -> str:
+    """Id of the Users data source.
+
+    Uses NOTION_DS_USUARIOS when set. Otherwise it is resolved once from the database
+    (`data_sources`): the one named "Users", or the only one. Anything else raises
+    DataSourceUsuariosError. Only successful resolutions are cached.
+    """
+    if NOTION_DS_USUARIOS:
+        return NOTION_DS_USUARIOS
+    if not NOTION_DB_USUARIOS:
+        raise DataSourceUsuariosError("NOTION_DB_USUARIOS no configurada")
+    if _ds_resuelto.get(NOTION_DB_USUARIOS):
+        return _ds_resuelto[NOTION_DB_USUARIOS]
+    try:
+        resp = requests.get(
+            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}",
+            headers=notion_headers(VERSION_NOTION_DATA_SOURCES), timeout=15,
+        )
+        if resp.status_code != 200:
+            raise DataSourceUsuariosError(f"HTTP {resp.status_code} resolving Users data source")
+        fuentes = resp.json().get("data_sources") or []
+    except DataSourceUsuariosError:
+        raise
+    except (requests.RequestException, ValueError) as e:
+        raise DataSourceUsuariosError(f"cannot resolve Users data source: {type(e).__name__}") from e
+    por_nombre = [f for f in fuentes if (f.get("name") or "").strip() == "Users"]
+    if len(por_nombre) == 1:
+        elegida = por_nombre[0]
+    elif len(fuentes) == 1 and not por_nombre:
+        elegida = fuentes[0]
+    else:
+        raise DataSourceUsuariosError(
+            f"cannot pick the Users data source ({len(fuentes)} found); set NOTION_DS_USUARIOS")
+    if not elegida.get("id"):
+        raise DataSourceUsuariosError("Users data source has no id; set NOTION_DS_USUARIOS")
+    _ds_resuelto[NOTION_DB_USUARIOS] = elegida["id"]
+    return elegida["id"]
 
 
 # Campo de Notion (Users) con las direcciones ADICIONALES por las que entran ofertas
@@ -79,12 +131,13 @@ def reiniciar_caches() -> None:
         _esquema_alias.clear()
         _campos_ausentes.clear()
         _usuarios_cache.clear()
+        _ds_resuelto.clear()
 
 
 def _campos_alias_existentes() -> list:
     """Alias properties to query: the ones the database really has.
 
-    Reads the schema once (GET /v1/databases/{id}) and keeps the properties that
+    Reads the schema once (GET /v1/data_sources/{id}) and keeps the properties that
     look like an alias field. If the schema cannot be read (network, permissions) it
     falls back to the candidate names minus the ones already known to be missing,
     and the failure is NOT cached so the next call tries again.
@@ -95,8 +148,8 @@ def _campos_alias_existentes() -> list:
             return list(_esquema_alias["campos"])
     try:
         resp = requests.get(
-            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}",
-            headers=notion_headers(), timeout=15,
+            f"https://api.notion.com/v1/data_sources/{ds_usuarios()}",
+            headers=notion_headers(VERSION_NOTION_DATA_SOURCES), timeout=15,
         )
         if resp.status_code != 200:
             raise ValueError(f"HTTP {resp.status_code}")
@@ -165,8 +218,8 @@ def _consultar_usuario_ok(filtro: dict, email: str, verificar: bool) -> tuple:
             return None, True
     try:
         resp = requests.post(
-            f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
-            headers=notion_headers(),
+            f"https://api.notion.com/v1/data_sources/{ds_usuarios()}/query",
+            headers=notion_headers(VERSION_NOTION_DATA_SOURCES),
             json={"filter": filtro, "page_size": 5 if verificar else 1},
             timeout=15,
         )
@@ -395,14 +448,15 @@ def escribir_encaje(page_id: str, encaje: int, avisos: list[str]) -> None:
     resp.raise_for_status()
 
 
-def _consultar_todo(url: str, cuerpo: dict, limite: int | None = None) -> list:
+def _consultar_todo(url: str, cuerpo: dict, limite: int | None = None,
+                    version: str = VERSION_NOTION) -> list:
     """POST a Notion query and follow `next_cursor` until `limite` results (or the end)."""
     resultados, cursor = [], None
     while True:
         peticion = dict(cuerpo)
         if cursor:
             peticion["start_cursor"] = cursor
-        resp = requests.post(url, headers=notion_headers(), json=peticion, timeout=15)
+        resp = requests.post(url, headers=notion_headers(version), json=peticion, timeout=15)
         resp.raise_for_status()
         datos = resp.json()
         resultados += datos.get("results", [])
@@ -446,6 +500,14 @@ def ofertas_por_puntuar(usuario_notion_id: str, limite: int = MAX_OFERTAS_POR_LO
     return ofertas
 
 
+def paginas_usuarios_activos() -> list:
+    """Raw Notion pages of the active users (all pages), straight from the Users data source."""
+    return _consultar_todo(
+        f"https://api.notion.com/v1/data_sources/{ds_usuarios()}/query",
+        {"filter": {"property": "Activo", "checkbox": {"equals": True}}},
+        version=VERSION_NOTION_DATA_SOURCES)
+
+
 def usuarios_activos() -> list[dict]:
     """Active Notion users with the profile fields the score needs.
 
@@ -454,9 +516,7 @@ def usuarios_activos() -> list[dict]:
     """
     if not NOTION_DB_USUARIOS:
         raise requests.RequestException("NOTION_DB_USUARIOS no configurada")
-    paginas = _consultar_todo(
-        f"https://api.notion.com/v1/databases/{NOTION_DB_USUARIOS}/query",
-        {"filter": {"property": "Activo", "checkbox": {"equals": True}}})
+    paginas = paginas_usuarios_activos()
     usuarios = []
     for pagina in paginas:
         perfil = _perfil_de_pagina(pagina)
@@ -496,10 +556,11 @@ def crear_usuario_en_notion(datos: dict) -> dict:
         props["cv_master_file_id"] = {"rich_text": [{"text": {"content": cv_master_file_id}}]}
     # Filtrar propiedades con valor None que Notion rechaza
     payload = {
-        "parent": {"database_id": NOTION_DB_USUARIOS},
+        "parent": {"type": "data_source_id", "data_source_id": ds_usuarios()},
         "properties": {k: v for k, v in props.items() if v is not None and v != {"url": None}},
     }
-    resp = requests.post(url, headers=notion_headers(), json=payload, timeout=15)
+    resp = requests.post(url, headers=notion_headers(VERSION_NOTION_DATA_SOURCES),
+                         json=payload, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
