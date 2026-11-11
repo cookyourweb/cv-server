@@ -1,6 +1,6 @@
 # Spec 003 — BYOK: clave de IA propia y trial de 3 generaciones
 
-Estado: implementada (backend y gate; UI panel pendiente)
+Estado: implementada (backend, gate y UI panel)
 
 ## Contexto y objetivo
 Cada usuaria debe poder usar su propia key de IA sin compartir costes ni claves. Antes de obligar a la key propia, se permite un modo demo de 3 generaciones gratuitas para probar la funcionalidad. No hay fallback silencioso a clave global.
