@@ -1536,7 +1536,7 @@ ORIGENES_PERMITIDOS = origenes_desde_entorno()
 
 # Rutas del navegador (panel) con CORS, por prefijo. Las rutas de maquina (n8n) no.
 _RUTAS_CON_CORS = re.compile(
-    r"^/(?:yo|health|perfil|consentimientos|cv|extraccion|cuenta|encajes)(?:/.*)?$"
+    r"^/(?:yo|health|perfil|consentimientos|cv|extraccion|cuenta|encajes|clave-api)(?:/.*)?$"
     r"|^/ofertas/[^/]+/encaje$"
 )
 
