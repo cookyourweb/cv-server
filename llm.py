@@ -283,9 +283,10 @@ def get_anthropic_client():
     return _anthropic_client
 
 
-def call_claude(prompt: str, model: str, max_tokens: int = 4096) -> str:
+def call_claude(prompt: str, model: str, max_tokens: int = 4096, api_key: str | None = None) -> str:
     """Llama a Claude vía SDK oficial. Para CV/carta donde la calidad importa."""
-    resp = get_anthropic_client().messages.create(
+    cliente = get_anthropic_client() if api_key is None else anthropic.Anthropic(api_key=api_key)
+    resp = cliente.messages.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
@@ -408,14 +409,14 @@ def call_llm_extraccion(prompt: str, model: str = CV_MODEL) -> RespuestaLLM:
 # Anthropic y Groq. Por eso su CV nunca pasa por `call_llm_calidad` (cuyo fallback es la
 # cascada general: Groq, Gemini, Claude) ni por Gemini. A diferencia de la extraccion, aqui
 # se usa la clave general de Claude: `ANTHROPIC_CLAVE_ALTA` es solo del alta.
-def call_llm_invitada(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096) -> RespuestaLLM:
+def call_llm_invitada(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096, api_key: str | None = None) -> RespuestaLLM:
     """Claude, luego Groq, y NADA mas. Para el CV y la carta de las usuarias invitadas.
 
-    Si fallan los dos lanza `RuntimeError` con un mensaje fijo (las rutas lo traducen a 503 y
-    el mensaje de un proveedor puede llevar la URL de la peticion).
+    `api_key` cubre Anthropic con la clave propia de la usuaria. Si no se pasa,
+    cae en CLAUDE_API_KEY del entorno solo para modo trial o legado.
     """
     try:
-        contenido = call_claude(prompt, model=model, max_tokens=max_tokens)
+        contenido = call_claude(prompt, model=model, max_tokens=max_tokens, api_key=api_key)
         logger.info("LLM invitada: Claude OK (%s)", model)
         return RespuestaLLM(
             str(contenido), model,
@@ -425,7 +426,7 @@ def call_llm_invitada(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096
     except (NameError, AttributeError, TypeError, ImportError):
         raise  # bug nuestro, no una caida del proveedor: no se esconde tras el fallback
     except Exception as e:
-        logger.warning("Invitada: Claude fallo (%s) — pasando a Groq", describir_error(e))
+        logger.warning("Invitada: Claude falló (%s) — pasando a Groq", describir_error(e))
     try:
         respuesta = _groq_con_tope(prompt, max_tokens)
     except Exception as e:

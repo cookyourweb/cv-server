@@ -25,6 +25,7 @@ PERFIL = {
     "rol": "Frontend developer", "anios_experiencia": 12, "stack": ["Angular", "TypeScript"],
     "idiomas": ["es", "en"], "ubicacion": "Madrid", "modalidad": ["remoto", "hibrido"],
     "salario_min": 45000, "salario_moneda": "EUR",
+    "regiones_remoto": [], "ciudades_hibrido": [], "tarifa_dia_min": None, "evitar": None,
 }
 
 
@@ -62,9 +63,15 @@ def test_invalid_profiles_are_rejected(cambio):
         PerfilEntrada(**{**PERFIL, **cambio})
 
 
-@pytest.mark.parametrize("campo", sorted(PERFIL))
+CAMPOS_REQUERIDOS = sorted(k for k in PERFIL if k not in
+                           {"regiones_remoto", "ciudades_hibrido", "tarifa_dia_min", "evitar"})
+
+
+@pytest.mark.parametrize("campo", CAMPOS_REQUERIDOS)
 def test_every_field_is_required(campo):
     # The panel always sends all of them and reads them all back.
+    # Los campos de busqueda (regiones_remoto, ciudades_hibrido, tarifa_dia_min,
+    # evitar) son opcionales: se infieren o quedan vacios.
     datos = {k: v for k, v in PERFIL.items() if k != campo}
     with pytest.raises(ValidationError):
         PerfilEntrada(**datos)

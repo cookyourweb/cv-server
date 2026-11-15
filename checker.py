@@ -200,21 +200,36 @@ def normalizar_cv(texto: str) -> dict[str, Any]:
     sections = {}
 
     current = "general"
-    top = current  # last level 1-2 heading: it also owns the content of its subsections
     sections[current] = []
 
+    def canonicalizar_titulo(titulo: str) -> str:
+        lower = titulo.strip().lstrip("#").strip().lower()
+        if "experiencia" in lower:
+            return "experiencia"
+        if any(term in lower for term in ("skills", "habilidades", "tecnolog", "tech stack", "stack")):
+            return "habilidades"
+        if any(term in lower for term in ("educacion", "education", "formacion", "academic")):
+            return "educacion"
+        if any(term in lower for term in ("proyectos", "projects", "portfolio")):
+            return "proyectos"
+        if any(term in lower for term in ("perfil", "summary", "resumen", "objective")):
+            return "perfil"
+        if any(term in lower for term in ("logros", "impacto", "hitos")):
+            return "logros"
+        return lower or "general"
+
     for line in texto.splitlines():
-        if line.strip().startswith("#"):
-            marcas = line.strip()
-            nivel = len(marcas) - len(marcas.lstrip("#"))
-            current = marcas.lstrip("#").strip().lower() or "general"
+        encabezado = None
+        raw = line.strip()
+        if raw.startswith("#"):
+            encabezado = raw.lstrip("#").strip()
+        elif raw and raw.isupper() and len(raw) <= 60 and len(raw.split()) <= 8:
+            encabezado = raw
+        if encabezado is not None:
+            current = canonicalizar_titulo(encabezado)
             sections.setdefault(current, [])
-            if nivel <= 2:
-                top = current
         else:
             sections.setdefault(current, []).append(line)
-            if top != current:
-                sections.setdefault(top, []).append(line)
 
     sections_normalizadas = {}
     for name, lines in sections.items():
@@ -230,58 +245,6 @@ def normalizar_cv(texto: str) -> dict[str, Any]:
         "skills": [],
         "fechas": [],
     }
-
-
-def _parsear_intervalos_anios(texto: str) -> list[tuple[int, int]]:
-    intervalos: list[tuple[int, int]] = []
-    meses = (r"(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|"
-             r"diciembre|january|february|march|april|may|june|july|august|september|october|november|"
-             r"december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|dic|ene|abr|ago)\.?")
-    patron = re.compile(
-        r"(19\d{2}|20\d{2})(?:\s*[-–—]\s*(?:" + meses + r"\s+)?(19\d{2}|20\d{2}|presente|actualidad|current|present))?",
-        re.IGNORECASE)
-
-    for match in patron.finditer(texto or ""):
-        start = int(match.group(1))
-        end_raw = match.group(2) or match.group(1)
-
-        if str(end_raw).lower() in {"presente", "actualidad", "current", "present"}:
-            import datetime
-
-            end = datetime.datetime.now().year
-        else:
-            end = int(end_raw)
-
-        if start > end:
-            start, end = end, start
-        intervalos.append((start, end))
-
-    return intervalos
-
-
-def detectar_gaps_temporales(texto: str, umbral_meses: int = 6) -> list[str]:
-    """Detecta huecos mayores a `umbral_meses` entre intervalos de años."""
-    intervalos = sorted(_parsear_intervalos_anios(texto))
-    if len(intervalos) < 2:
-        return []
-
-    merged: list[tuple[int, int]] = [intervalos[0]]
-    for start, end in intervalos[1:]:
-        last_start, last_end = merged[-1]
-        if start <= last_end + 1:
-            merged[-1] = (last_start, max(last_end, end))
-        else:
-            merged.append((start, end))
-
-    hallazgos: list[str] = []
-    for (start_prev, end_prev), (start_next, end_next) in zip(merged, merged[1:]):
-        gap_meses = (start_next - end_prev) * 12
-        if gap_meses > umbral_meses:
-            hallazgos.append(
-                f"gap temporal de {gap_meses} meses aproximados entre {end_prev} y {start_next}"
-            )
-
-    return hallazgos
 
 
 def extraer_contenido_minimo(normalizado: dict[str, Any]) -> set[str]:
@@ -331,3 +294,49 @@ def obtener_analisis_por_hash(hash_cv: str, storage_dir=None):
     if not ruta.exists():
         return None
     return json.loads(ruta.read_text(encoding="utf-8"))
+
+
+def _parsear_intervalos_anios(texto: str) -> list[tuple[int, int]]:
+    intervalos: list[tuple[int, int]] = []
+    patron = re.compile(r"(19\d{2}|20\d{2})(?:\s*[-–]\s*(19\d{2}|20\d{2}|presente|actualidad|current))?", re.IGNORECASE)
+
+    for match in patron.finditer(texto or ""):
+        start = int(match.group(1))
+        end_raw = match.group(2) or match.group(1)
+
+        if str(end_raw).lower() in {"presente", "actualidad", "current"}:
+            import datetime
+            end = datetime.datetime.now().year
+        else:
+            end = int(end_raw)
+
+        if start > end:
+            start, end = end, start
+        intervalos.append((start, end))
+
+    return intervalos
+
+
+def detectar_gaps_temporales(texto: str, umbral_meses: int = 6) -> list[str]:
+    """Detecta huecos mayores a `umbral_meses` entre intervalos de años."""
+    intervalos = sorted(_parsear_intervalos_anios(texto))
+    if len(intervalos) < 2:
+        return []
+
+    merged: list[tuple[int, int]] = [intervalos[0]]
+    for start, end in intervalos[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end + 1:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+
+    hallazgos: list[str] = []
+    for (start_prev, end_prev), (start_next, end_next) in zip(merged, merged[1:]):
+        gap_meses = (start_next - end_prev) * 12
+        if gap_meses > umbral_meses:
+            hallazgos.append(
+                f"gap temporal de {gap_meses} meses aproximados entre {end_prev} y {start_next}"
+            )
+
+    return hallazgos
