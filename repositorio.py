@@ -43,6 +43,10 @@ class PerfilEntrada(BaseModel):
     modalidad: Annotated[list[Literal["remoto", "hibrido", "presencial"]], Field(max_length=3)]
     salario_min: Annotated[_Entero, Field(ge=0, le=100_000_000)]
     salario_moneda: Annotated[str, BeforeValidator(_mayusculas), Field(pattern=r"^[A-Z]{3}$")]
+    regiones_remoto: Annotated[list[_Etiqueta], Field(default_factory=list, max_length=50)]
+    ciudades_hibrido: Annotated[list[_Etiqueta], Field(default_factory=list, max_length=50)]
+    tarifa_dia_min: Annotated[Optional[_Entero], Field(default=None, ge=0)] = None
+    evitar: Optional[Annotated[str, StringConstraints(max_length=500)]] = None
 
 
 class ConsentimientoEntrada(BaseModel):
@@ -81,7 +85,8 @@ class InteresEntrada(BaseModel):
 
 
 _CAMPOS = ("rol", "anios_experiencia", "stack", "idiomas", "ubicacion", "modalidad",
-           "salario_min", "salario_moneda")
+           "salario_min", "salario_moneda", "regiones_remoto", "ciudades_hibrido",
+           "tarifa_dia_min", "evitar")
 
 
 class RepositorioDeUsuaria:
@@ -106,14 +111,19 @@ class RepositorioDeUsuaria:
         """Create or replace the profile."""
         self._c.execute(text("""
             INSERT INTO perfil (usuario_id, rol, anios_experiencia, stack, idiomas, ubicacion,
-                                modalidad, salario_min, salario_moneda)
+                                modalidad, salario_min, salario_moneda, regiones_remoto,
+                                ciudades_hibrido, tarifa_dia_min, evitar)
             VALUES (:u, :rol, :anios_experiencia, CAST(:stack AS text[]), CAST(:idiomas AS text[]),
-                    :ubicacion, CAST(:modalidad AS text[]), :salario_min, :salario_moneda)
+                    :ubicacion, CAST(:modalidad AS text[]), :salario_min, :salario_moneda,
+                    CAST(:regiones_remoto AS text[]), CAST(:ciudades_hibrido AS text[]),
+                    :tarifa_dia_min, :evitar)
             ON CONFLICT (usuario_id) DO UPDATE SET
                 rol = EXCLUDED.rol, anios_experiencia = EXCLUDED.anios_experiencia,
                 stack = EXCLUDED.stack, idiomas = EXCLUDED.idiomas, ubicacion = EXCLUDED.ubicacion,
                 modalidad = EXCLUDED.modalidad, salario_min = EXCLUDED.salario_min,
-                salario_moneda = EXCLUDED.salario_moneda, actualizado_en = now()"""),
+                salario_moneda = EXCLUDED.salario_moneda, regiones_remoto = EXCLUDED.regiones_remoto,
+                ciudades_hibrido = EXCLUDED.ciudades_hibrido, tarifa_dia_min = EXCLUDED.tarifa_dia_min,
+                evitar = EXCLUDED.evitar, actualizado_en = now()"""),
             {"u": self._usuario_id, **perfil.model_dump()})
 
     # --- consent ---------------------------------------------------------------------------
