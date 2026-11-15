@@ -530,6 +530,29 @@ def disparar_busqueda(usuario: dict) -> "Resultado":
     return Resultado(True, hay_novedades=True)
 
 
+def registrar_invitada(email: str, datos: dict) -> tuple[dict, bool, bool]:
+    """Registra una invitada o reutiliza su perfil y dispara su búsqueda.
+
+    Devuelve (perfil, creado, busqueda_disparada). Idempotente.
+    """
+    email = (email or "").strip().lower()
+    if not email:
+        return {}, False, False
+
+    try:
+        existente = buscar_usuario_por_email(email)
+    except Exception:
+        existente = None
+
+    if existente:
+        disparada = disparar_busqueda(existente)
+        return existente, False, disparada
+
+    notion_page = crear_usuario_en_notion(datos)
+    disparada = disparar_busqueda({**datos, "notion_id": notion_page.get("id", "")})
+    return notion_page, True, disparada
+
+
 @app.route("/registro", methods=["POST"])
 @requiere_clave_maquina
 def registro():
@@ -539,43 +562,28 @@ def registro():
     if not email:
         return jsonify({"ok": False, "error": "email requerido"}), 400
 
-    # Si ya existe, no duplicar
+    # Delegar el alta en helper reutilizable (idempotente).
     try:
-        existente = buscar_usuario_por_email(email)
-    except Exception:
-        existente = None
-
-    if existente:
-        # Usuario ya existe → disparar búsqueda igual
-        disparada = disparar_busqueda(existente)
-        return jsonify({
-            "ok": True,
-            "mensaje": ("Ya estabas registrado. Buscando ofertas ahora mismo."
-                        if disparada else
-                        "Ya estabas registrado. No se pudo lanzar la búsqueda ahora; "
-                        "entrarás en el barrido de las 9:00."),
-            "email": email,
-            "busqueda_disparada": disparada,
-        })
-
-    # Crear en Notion
-    try:
-        notion_page = crear_usuario_en_notion(datos)
-        notion_id = notion_page.get("id", "")
+        perfil, creado, disparada = registrar_invitada(email, datos)
     except Exception:
         logger.exception("Error creando usuario en Notion")
         return jsonify({"ok": False, "error": "no se pudo completar el registro"}), 500
 
-    # El alta ya está hecha en Notion. Esto lanza la primera búsqueda: iba al
-    # webhook `nuevo-usuario`, que no existe, así que quien se registraba no
-    # recibía nada hasta el barrido de las 9:00 del día siguiente.
-    disparada = disparar_busqueda({**datos, "notion_id": notion_id})
+    if not creado:
+        mensaje = ("Ya estabas registrado. Buscando ofertas ahora mismo."
+                   if disparada else
+                   "Ya estabas registrado. No se pudo lanzar la búsqueda ahora; "
+                   "entrarás en el barrido de las 9:00.")
+    else:
+        mensaje = ("Usuario registrado. Buscando tus primeras ofertas ahora mismo."
+                   if disparada else
+                   "Usuario registrado. Recibirás ofertas en el barrido de las 9:00.")
+
+
 
     return jsonify({
         "ok":      True,
-        "mensaje": ("Usuario registrado. Buscando tus primeras ofertas ahora mismo."
-                    if disparada else
-                    "Usuario registrado. Recibirás ofertas en el barrido de las 9:00."),
+        "mensaje": mensaje,
         "email":   email,
         "busqueda_disparada": disparada,
     })
@@ -1458,6 +1466,88 @@ def buscar_ofertas_reales_endpoint():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/buscar-para-usuaria", methods=["POST"])
+@requiere_clave_maquina
+def buscar_para_usuaria():
+    """Process one user's daily search (spec 009, T3).
+
+    Reads her profile from Postgres, runs the search pipeline for her alone and
+    returns a summary. Creating offers in Notion and scoring come in later tasks.
+    """
+    import time
+
+    datos = request.get_json(silent=True) or {}
+    usuario_id = datos.get("usuario_id")
+    if not usuario_id:
+        return jsonify({"ok": False, "error": "usuario_id requerido"}), 400
+
+    inicio = time.monotonic()
+
+    import base_de_datos
+    from repositorio import RepositorioDeUsuaria
+
+    if not base_de_datos.configurada():
+        return jsonify({"ok": False, "error": "BD no configurada"}), 503
+
+    try:
+        with base_de_datos.motor().begin() as conexion:
+            repo = RepositorioDeUsuaria(conexion, usuario_id)
+            perfil = repo.obtener_perfil()
+    except Exception as e:
+        logger.error("Error leyendo perfil de %s: %s", usuario_id, type(e).__name__)
+        return jsonify({"ok": False, "error": "BD no disponible"}), 503
+
+    if perfil is None:
+        return jsonify({"ok": False, "error": "perfil no encontrado", "usuario_id": usuario_id}), 404
+
+    rol = perfil.get("rol") or ""
+    stack = perfil.get("stack") or []
+    modalidad = perfil.get("modalidad") or []
+    ciudad = perfil.get("ubicacion") or ""
+    salario_min = perfil.get("salario_min") or 0
+    top_n = datos.get("top_n", 5)
+
+    errores = []
+    try:
+        resultado = buscar_ofertas_reales(
+            perfil=perfil, top_n=top_n)
+    except Exception as e:
+        logger.error("Error buscando ofertas para %s: %s", usuario_id, type(e).__name__)
+        errores.append(str(e))
+        resultado = {"ok": False, "ofertas": [], "total_encontradas": 0, "total_filtradas": 0}
+
+    # T6: persistir ofertas en Notion vinculadas a la usuaria.
+    email = (datos.get("email") or "").strip().lower()
+    usuario_notion_id = ""
+    if email:
+        u = buscar_usuario_por_email(email)
+        if u:
+            usuario_notion_id = u.get("notion_id", "")
+
+    ofertas_creadas = 0
+    for oferta in (resultado.get("ofertas") or []):
+        try:
+            idioma = idioma_de_oferta(oferta.get("puesto", ""), oferta.get("descripcion", ""),
+                                     oferta.get("empresa", ""))
+            crear_oferta_en_notion(oferta, idioma, usuario_notion_id)
+            ofertas_creadas += 1
+        except Exception as e:
+            logger.error("Error creando oferta en Notion (%s): %s", oferta.get("empresa"), type(e).__name__)
+            errores.append(f"notion: {oferta.get('empresa','?')}/{oferta.get('puesto','?')}")
+
+    duracion_ms = int((time.monotonic() - inicio) * 1000)
+    return jsonify({
+        "ok": len(errores) == 0,
+        "usuario_id": usuario_id,
+        "ofertas_encontradas": resultado.get("total_encontradas", 0),
+        "ofertas_creadas": ofertas_creadas,
+        "ofertas_descartadas": max(0, resultado.get("total_encontradas", 0) - resultado.get("total_filtradas", 0)),
+        "errores": errores,
+        "duracion_ms": duracion_ms,
+        "ofertas": resultado.get("ofertas", []),
+    })
+
+
 @app.route("/crear-oferta", methods=["POST"])
 @requiere_clave_maquina
 def crear_oferta():
@@ -1536,9 +1626,21 @@ ORIGENES_PERMITIDOS = origenes_desde_entorno()
 
 # Rutas del navegador (panel) con CORS, por prefijo. Las rutas de maquina (n8n) no.
 _RUTAS_CON_CORS = re.compile(
-    r"^/(?:yo|health|perfil|consentimientos|cv|extraccion|cuenta|encajes)(?:/.*)?$"
+    r"^/(?:yo|health|perfil|consentimientos|cv|extraccion|cuenta|encajes|clave-api)(?:/.*)?$"
     r"|^/ofertas/[^/]+/encaje$"
 )
+
+_ORIGENES_PREVIEW = re.compile(
+    r"^https://panel-empleo-[A-Za-z0-9-]+-cookyourwebs-projects\.vercel\.app$"
+)
+
+
+def _origen_permitido(origen: str) -> bool:
+    if not origen:
+        return False
+    if origen in ORIGENES_PERMITIDOS:
+        return True
+    return _ORIGENES_PREVIEW.fullmatch(origen) is not None
 
 
 @app.after_request
@@ -1546,7 +1648,7 @@ def cabeceras_cors(respuesta):
     """CORS solo en las rutas del panel y solo para un origen que este EXACTAMENTE en la
     lista. Nunca '*' ni credenciales: el token viaja en Authorization, no en cookies."""
     origen = request.headers.get("Origin")
-    if origen and origen in ORIGENES_PERMITIDOS and _RUTAS_CON_CORS.match(request.path):
+    if origen and _origen_permitido(origen) and _RUTAS_CON_CORS.match(request.path):
         respuesta.headers["Access-Control-Allow-Origin"] = origen
         respuesta.headers["Vary"] = "Origin"
         if request.method == "OPTIONS":

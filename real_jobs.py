@@ -179,28 +179,141 @@ def matchea_stack(oferta: dict, stack_usuario: list) -> int:
     return coincidencias
 
 
+KEYWORDS_IA = ("ai", "ml", "llm", "generative", "machine learning", "deep learning",
+               "nlp", "computer vision", "data science", "artificial intelligence")
+
+
+def tiene_keyword_ia(oferta: dict, keywords=None) -> bool:
+    """True si la oferta menciona alguna keyword de IA en puesto/tags/descripcion."""
+    if keywords is None:
+        keywords = KEYWORDS_IA
+    texto = " ".join([
+        oferta.get("puesto", ""),
+        " ".join(oferta.get("tags", []) or []),
+        oferta.get("descripcion", ""),
+    ]).lower()
+    return any(k in texto for k in (k.lower() for k in keywords))
+
+
+def region_remota_compatible(ubicacion_oferta: str, regiones_usuario=None, ciudad_usuario: str = "") -> bool:
+    """True si una oferta remota acepta la region/pais del usuario."""
+    ubi = (ubicacion_oferta or "").strip().lower()
+    if not ubi:
+        return True
+    universales = ("worldwide", "anywhere", "global", "remote", "eu", "europe", "spain", "españa", "emea")
+    if any(u in ubi for u in universales):
+        return True
+    regiones = [r.lower() for r in (regiones_usuario or [])]
+    if regiones and any(r in ubi for r in regiones):
+        return True
+    if ciudad_usuario and ciudad_usuario.lower() in ubi:
+        return True
+    regiones_conocidas = ("usa", "united states", "uk", "united kingdom", "canada", "latam",
+                          "apac", "asia", "africa", "india", "australia")
+    if any(r in ubi for r in regiones_conocidas):
+        return False
+    return True
+
+
 def filtrar_por_perfil(
     ofertas: list,
     stack_usuario: list = None,
     min_matches_stack: int = 1,
+    keywords_ia=None,
 ) -> list:
-    """
-    Filtra ofertas que tengan al menos `min_matches_stack` tecnologías
-    del stack del usuario. Si stack_usuario está vacío, no filtra.
-    """
+    """Prefiltro de stack: descarta solo ofertas con 0 coincidencias de stack Y sin
+    keyword de IA. Las demas pasan (y se anota `_stack_matches`)."""
+    if keywords_ia is None:
+        keywords_ia = KEYWORDS_IA
     if not stack_usuario:
-        return ofertas
+        stack_usuario = []
 
     filtradas = []
     for oferta in ofertas:
-        matches = matchea_stack(oferta, stack_usuario)
-        if matches >= min_matches_stack:
-            oferta["_stack_matches"] = matches  # para usar después en orden
-            filtradas.append(oferta)
+        matches = matchea_stack(oferta, stack_usuario) if stack_usuario else 0
+        if stack_usuario and matches < min_matches_stack and not tiene_keyword_ia(oferta, keywords_ia):
+            continue
+        oferta["_stack_matches"] = matches
+        filtradas.append(oferta)
 
-    logger.info("Filtrado por stack: %d ofertas con ≥%d coincidencias (de %d totales)",
-                len(filtradas), min_matches_stack, len(ofertas))
+    logger.info("Filtrado por stack: %d ofertas (de %d totales)", len(filtradas), len(ofertas))
     return filtradas
+
+
+def aplicar_evitar(ofertas: list, evitar=None) -> list:
+    """Descarta ofertas que matcheen `evitar` (substring case-insensitive)."""
+    if not evitar:
+        return ofertas
+    terminos = [t.strip().lower() for t in str(evitar).split(",") if t.strip()]
+    if not terminos:
+        return ofertas
+    salida = []
+    for oferta in ofertas:
+        texto = " ".join([
+            oferta.get("puesto", ""),
+            " ".join(oferta.get("tags", []) or []),
+            oferta.get("descripcion", ""),
+        ]).lower()
+        if any(t in texto for t in terminos):
+            continue
+        salida.append(oferta)
+    return salida
+
+
+def filtrar_por_modalidad(
+    ofertas: list,
+    modalidad_usuario=None,
+    ciudad_usuario: str = "",
+    ciudades_hibrido=None,
+    regiones_remoto=None,
+    evitar=None,
+) -> list:
+    """Porta 'Code - Normalizar Modalidad' per usuaria."""
+    if modalidad_usuario is None:
+        modalidad_usuario = []
+    mod = [str(m).lower() for m in (modalidad_usuario or [])]
+    acepta_remoto = any(m in ("remoto", "remote") for m in mod)
+    acepta_hibrido = any(m in ("hibrido", "hybrid", "híbrido") for m in mod)
+    acepta_presencial = any(m in ("presencial", "on-site", "onsite") for m in mod)
+
+    ciudades_hib = [c.strip() for c in (ciudades_hibrido or []) if c and str(c).strip()]
+    ciudades_hib_low = {c.lower(): c for c in ciudades_hib}
+
+    salida = []
+    for oferta in ofertas:
+        modalidad_oferta = (oferta.get("modalidad") or "").lower()
+        ubicacion = oferta.get("ubicacion") or ""
+        ciudad_oferta = ubicacion.split(",")[0].strip() if ubicacion else ""
+
+        if "remoto" in modalidad_oferta or modalidad_oferta == "remote":
+            if acepta_remoto and region_remota_compatible(ubicacion, regiones_remoto, ciudad_usuario):
+                salida.append(oferta)
+            continue
+
+        if "hibrid" in modalidad_oferta or "híbrid" in modalidad_oferta or "hybrid" in modalidad_oferta:
+            if not acepta_hibrido:
+                continue
+            ciudad_low = ciudad_oferta.lower()
+            if ciudad_usuario and ciudad_low == ciudad_usuario.lower():
+                salida.append(oferta)
+                continue
+            if ciudad_low in ciudades_hib_low:
+                copia = dict(oferta)
+                copia["notas"] = f"HIBRIDO {ciudades_hib_low[ciudad_low].upper()}: confirmar días de oficina"
+                salida.append(copia)
+                continue
+            continue
+
+        if "presencial" in modalidad_oferta or "on-site" in modalidad_oferta or "onsite" in modalidad_oferta:
+            if acepta_presencial and ciudad_usuario and ciudad_oferta.lower() == ciudad_usuario.lower():
+                salida.append(oferta)
+            continue
+
+        salida.append(oferta)
+
+    salida = aplicar_evitar(salida, evitar)
+    logger.info("Filtrado por modalidad: %d ofertas (de %d)", len(salida), len(ofertas))
+    return salida
 
 
 def deduplicar(ofertas: list) -> list:
@@ -223,10 +336,17 @@ def deduplicar(ofertas: list) -> list:
 
 def rankear_con_groq(
     ofertas: list,
-    perfil: str,
-    rol: str,
-    stack: list,
+    perfil_usuario=None,
+    perfil: str = "",
+    rol: str = "",
+    stack: list = None,
     salario_min: int = 0,
+    modalidad: list = None,
+    ciudad: str = "",
+    regiones_remoto=None,
+    ciudades_hibrido=None,
+    evitar=None,
+    tarifa_dia_min=None,
     top_n: int = 5,
     api_key: str = None,
     model: str = None,
@@ -238,6 +358,26 @@ def rankear_con_groq(
     Si la llamada al LLM falla, devuelve las top_n ofertas ordenadas por
     `_stack_matches` (fallback heurístico).
     """
+    if stack is None:
+        stack = []
+    if modalidad is None:
+        modalidad = []
+
+    # Desempaquetar perfil completo si se pasa como dict.
+    if isinstance(perfil_usuario, dict):
+        perfil = perfil_usuario.get("perfil") or perfil_usuario.get("perfil_texto") or perfil or ""
+        rol = perfil_usuario.get("rol") or perfil_usuario.get("rol_objetivo") or rol
+        stack = perfil_usuario.get("stack") or stack
+        salario_min = perfil_usuario.get("salario_min") or perfil_usuario.get("salario") or salario_min
+        modalidad = perfil_usuario.get("modalidad") or modalidad
+        ciudad = perfil_usuario.get("ubicacion") or perfil_usuario.get("ciudad") or ciudad
+        regiones_remoto = perfil_usuario.get("regiones_remoto") or regiones_remoto
+        ciudades_hibrido = perfil_usuario.get("ciudades_hibrido") or ciudades_hibrido
+        evitar = perfil_usuario.get("evitar") or evitar
+        tarifa_dia_min = perfil_usuario.get("tarifa_dia_min") or tarifa_dia_min
+    if not perfil and perfil_usuario and not isinstance(perfil_usuario, dict):
+        perfil = str(perfil_usuario)
+
     if not ofertas:
         return []
 
@@ -268,12 +408,22 @@ def rankear_con_groq(
         for i, o in enumerate(ofertas)
     ]
 
+    tarifa_dia = tarifa_dia_min or (int(salario_min / 150) if salario_min else 0)
+    tarifa_hora = int(salario_min / 1200) if salario_min else 0
+
     prompt = f"""Eres un recruiter senior. Tienes este candidato:
 
 PERFIL: {perfil}
 ROL OBJETIVO: {rol}
 STACK PRINCIPAL: {", ".join(stack) if stack else "(no especificado)"}
+AÑOS EXPERIENCIA: {perfil_usuario.get("anios_experiencia") if isinstance(perfil_usuario, dict) else ""}
+CIUDAD: {ciudad or "(no especificada)"}
+MODALIDAD ACEPTADA: {", ".join(modalidad) if modalidad else "(no especificada)"}
+REGIONES REMOTO: {", ".join(regiones_remoto or []) or "(sin restriccion)"}
+CIUDADES HIBRIDO OCASIONAL: {", ".join(ciudades_hibrido or []) or "(ninguna)"}
 SALARIO MÍNIMO: {salario_min}€/año (0 = sin preferencia)
+TARIFA FREELANCE: {tarifa_dia}€/dia, {tarifa_hora}€/hora (derivadas)
+EVITAR: {evitar or "(nada)"}
 
 OFERTAS DISPONIBLES ({len(ofertas_compactas)} ofertas):
 {json.dumps(ofertas_compactas, ensure_ascii=False, indent=2)}
@@ -283,8 +433,10 @@ Selecciona las {top_n} mejores ofertas para este candidato y dame un ranking.
 Considera:
 1. Encaje del stack tecnológico (lo más importante)
 2. Match del rol/seniority
-3. Ubicación compatible (España, Europa, Worldwide remote)
-4. Tipo de contrato razonable
+3. Ubicación compatible: remoto solo si la región acepta al usuario; híbrido en ciudad propia u ocasional (marcar HIBRIDO <CIUDAD> en motivo); presencial solo en su ciudad.
+4. Descarta cualquier oferta que encaje en EVITAR.
+5. Un rol frontend puro es tan válido como AI/full-stack.
+6. Tipo de contrato razonable (freelance: aplicar tarifa mínima).
 
 Devuelve SOLAMENTE un JSON array (sin explicaciones, sin markdown), formato:
 [
@@ -399,26 +551,56 @@ def _ranking_fallback(ofertas: list, top_n: int, master_texto: str = None) -> li
 # ══════════════════════════════════════════════
 
 def buscar_ofertas_reales(
-    perfil: str,
-    rol: str,
-    stack: list,
+    perfil=None,
+    perfil_usuario=None,
+    *,
+    rol: str = "",
+    stack: list = None,
     salario_min: int = 0,
     modalidad: list = None,
     ciudad: str = "",
+    regiones_remoto=None,
+    ciudades_hibrido=None,
+    evitar=None,
+    tarifa_dia_min=None,
+    anios_experiencia=None,
+    idiomas=None,
+    perfil_texto: str = "",
     top_n: int = 5,
+    api_key: str = None,
+    model: str = None,
 ) -> dict:
     """
-    Pipeline completo: buscar → filtrar → rankear → devolver.
+    Pipeline completo: buscar → dedup → filtrar stack → filtrar modalidad → rankear.
 
-    Returns:
-        {
-            "ok": True,
-            "ofertas": [...],          # top_n ofertas con score y motivo
-            "total_encontradas": 21,
-            "total_filtradas": 8,
-            "fuente": "remotive"
-        }
+    Acepta `perfil`/`perfil_usuario` como dict completo (Postgres) o str legacy.
+    Los kwargs explícitos sobrescriben los valores del dict.
     """
+    if stack is None:
+        stack = []
+    if modalidad is None:
+        modalidad = []
+
+    pu = perfil_usuario if perfil_usuario is not None else perfil
+    perfil_dict = pu if isinstance(pu, dict) else None
+
+    if perfil_dict:
+        rol = rol or perfil_dict.get("rol") or perfil_dict.get("rol_objetivo") or ""
+        stack = stack or (perfil_dict.get("stack") or [])
+        salario_min = salario_min or perfil_dict.get("salario_min") or perfil_dict.get("salario") or 0
+        modalidad = modalidad or (perfil_dict.get("modalidad") or [])
+        ciudad = ciudad or perfil_dict.get("ubicacion") or perfil_dict.get("ciudad") or ""
+        regiones_remoto = regiones_remoto if regiones_remoto is not None else perfil_dict.get("regiones_remoto")
+        ciudades_hibrido = ciudades_hibrido if ciudades_hibrido is not None else perfil_dict.get("ciudades_hibrido")
+        evitar = evitar if evitar is not None else perfil_dict.get("evitar")
+        tarifa_dia_min = tarifa_dia_min if tarifa_dia_min is not None else perfil_dict.get("tarifa_dia_min")
+        anios_experiencia = anios_experiencia if anios_experiencia is not None else perfil_dict.get("anios_experiencia")
+        idiomas = idiomas if idiomas is not None else perfil_dict.get("idiomas")
+        perfil_texto = perfil_texto or perfil_dict.get("perfil") or perfil_dict.get("perfil_texto") or ""
+    else:
+        if isinstance(pu, str):
+            perfil_texto = perfil_texto or pu
+
     rol_busqueda = rol or (stack[0] if stack else "")
 
     # 1. Buscar en Remotive
@@ -430,33 +612,57 @@ def buscar_ofertas_reales(
             "error":    "No se encontraron ofertas en Remotive",
             "ofertas":  [],
             "total_encontradas": 0,
+            "total_filtradas": 0,
         }
 
     # 2. Deduplicar
     unicas = deduplicar(ofertas_raw)
+    total_encontradas = len(ofertas_raw)
 
-    # 3. Filtrar por stack (solo si stack tiene contenido)
+    # 3. Prefiltro de stack (+ keyword IA)
     filtradas = filtrar_por_perfil(unicas, stack_usuario=stack, min_matches_stack=1)
 
-    # Si no quedan tras filtrar, usar las originales (fallback)
     if not filtradas:
         logger.info("Sin matches de stack — usando ofertas sin filtrar")
         filtradas = unicas
 
-    # 4. Rankear con LLM
+    # 4. Filtro por modalidad / region / evitar
+    filtradas = filtrar_por_modalidad(
+        filtradas,
+        modalidad_usuario=modalidad,
+        ciudad_usuario=ciudad,
+        ciudades_hibrido=ciudades_hibrido,
+        regiones_remoto=regiones_remoto,
+        evitar=evitar,
+    )
+
+    if not filtradas:
+        logger.info("Sin ofertas tras filtro de modalidad — usando deduplicadas")
+        filtradas = unicas
+
+    # 5. Rankear con LLM
     top = rankear_con_groq(
         filtradas,
-        perfil=perfil,
+        perfil_usuario=perfil_dict if perfil_dict else None,
+        perfil=perfil_texto,
         rol=rol,
         stack=stack,
         salario_min=salario_min,
+        modalidad=modalidad,
+        ciudad=ciudad,
+        regiones_remoto=regiones_remoto,
+        ciudades_hibrido=ciudades_hibrido,
+        evitar=evitar,
+        tarifa_dia_min=tarifa_dia_min,
         top_n=top_n,
+        api_key=api_key,
+        model=model,
     )
 
     return {
         "ok":                True,
         "ofertas":           top,
-        "total_encontradas": len(ofertas_raw),
+        "total_encontradas": total_encontradas,
         "total_filtradas":   len(filtradas),
         "fuente":            "remotive",
     }
