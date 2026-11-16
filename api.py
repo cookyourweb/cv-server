@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 import server
 import usuarias
 import base_de_datos
-from server import CVError, generar_cv_core
+from server import CVError, generar_cv_core, generar_carta_core
 
 app = FastAPI(title="cv-server API", version="0.1.0")
 
@@ -147,6 +147,27 @@ def borrar_clave_api(proveedor: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 
+class GenerarCartaRequest(BaseModel):
+    email: str = Field(min_length=1)
+    empresa: str = Field(min_length=1)
+    puesto: str = Field(min_length=1)
+    descripcion: str = ""
+    idioma: str | None = None
+    contacto: str | None = None
+
+
+class GenerarCartaResponse(BaseModel):
+    ok: bool
+    carta: str
+    modelo_usado: str
+    consumo: dict | None = None
+    email: str
+    cv_master_usado: bool
+    master_traducido: bool = False
+    avisos: list = []
+    no_evaluables: list = []
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "service": "cv-server", "framework": "fastapi"}
@@ -206,6 +227,23 @@ def generar_cv(req: GenerarCVRequest):
             puesto=req.puesto,
             descripcion=req.descripcion,
             idioma_in=(req.idioma or ""),
+        )
+    except CVError as e:
+        return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message, **e.extra})
+    return result
+
+
+@app.post("/generar-carta", response_model=GenerarCartaResponse, dependencies=[Depends(requiere_clave_maquina)])
+def generar_carta(req: GenerarCartaRequest):
+    """Ruta FastAPI: delega en generar_carta_core (ADR-001)."""
+    try:
+        result = generar_carta_core(
+            email=req.email,
+            empresa=req.empresa,
+            puesto=req.puesto,
+            descripcion=req.descripcion,
+            idioma_in=(req.idioma or "").strip().lower(),
+            contacto=(req.contacto or "").strip(),
         )
     except CVError as e:
         return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message, **e.extra})

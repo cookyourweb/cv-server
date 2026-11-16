@@ -1241,24 +1241,17 @@ def cv_master_check():
 
     return jsonify({"ok": True, "analisis": persistido})
 
-@app.route("/generar-carta", methods=["POST"])
-@requiere_clave_maquina
-def generar_carta():
-    """Genera la carta de presentación con la experiencia real del CV master.
-    Usa Claude Sonnet (calidad) — la carta va a la empresa."""
-    datos = request.get_json(force=True)
-    email       = datos.get("email", "")
-    empresa     = datos.get("empresa", "")
-    puesto      = datos.get("puesto", "")
-    descripcion = datos.get("descripcion", "")
-
+def generar_carta_core(email: str, empresa: str, puesto: str,
+                      descripcion: str = "", idioma_in: str = "",
+                      contacto: str = "") -> dict:
+    """Nucleo de /generar-carta (sin Flask): orquesta Notion/Drive/LLM y devuelve
+    el dict de respuesta. Lanza CVError(status, msg) en los errores. Compartido
+    por la ruta Flask y la ruta FastAPI. Ver docs/ADR-001."""
     if not email or not empresa or not puesto:
-        return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
+        raise CVError(400, "email, empresa y puesto son requeridos")
 
-    # Idioma autoritativo (igual que en /generar-cv) + persona de contacto para
-    # el saludo. Prioridad idioma: body.idioma > Idioma de Notion > detección.
-    idioma_in = (datos.get("idioma") or "").strip().lower()
-    contacto = (datos.get("contacto") or datos.get("nombre_contacto") or "").strip()
+    idioma_in = (idioma_in or "").strip().lower()
+    contacto = (contacto or "").strip()
     if not descripcion.strip() or not contacto or idioma_in not in ("en", "es"):
         oferta = buscar_oferta_en_notion(empresa, puesto)
         if oferta:
@@ -1268,48 +1261,36 @@ def generar_carta():
 
     usuario = buscar_usuario_por_email(email)
     if not usuario:
-        return jsonify({"ok": False, "error": f"Usuario {email} no encontrado en Notion"}), 404
+        raise CVError(404, f"Usuario {email} no encontrado en Notion")
 
+    # Puerta BYOK (igual que /generar-cv)
+    byok_api_key = None
     try:
         import base_de_datos
         import byok
         if base_de_datos.configurada():
-            # begin() commits on exit: the trial consumption must persist.
             with base_de_datos.motor().begin() as conexion:
                 decision = byok.resolver_generacion_por_email(email, conexion, "anthropic")
             byok.registrar_modo_generacion(decision.get("modo", "denegado"), decision.get("motivo"), "anthropic", email)
-            byok_api_key = decision.get("clave") if decision.get("modo") == "key" else None
             if not decision.get("permitido", True):
-                return jsonify({
-                    "ok": False,
-                    "error": decision.get("motivo", "No puedes generar sin clave propia ni generaciones gratuitas."),
-                    "guia": "Configura tu API key en el panel o usa los 3 trials disponibles.",
-                }), 403
+                raise CVError(403, decision.get("motivo", "No puedes generar sin clave propia ni generaciones gratuitas."))
+            byok_api_key = decision.get("clave") if decision.get("modo") == "key" else None
+    except CVError:
+        raise
     except Exception as exc:
-        # Fail closed: without a verified decision nobody generates. Log the type only.
         logger.error("BYOK gate failed: %s", type(exc).__name__)
-        return jsonify({"ok": False, "error": "No se pudo verificar tu acceso; inténtalo más tarde."}), 503
+        raise CVError(503, "No se pudo verificar tu acceso; inténtalo más tarde.")
 
-    byok_api_key = None
     nombre = usuario.get("nombre") or email.split("@")[0]
 
-    # Resolver idioma y leer el CV master en ese idioma
     idioma = idioma_in if idioma_in in ("en", "es") else idioma_de_oferta(puesto, descripcion, empresa)
     tiene_master = _tiene_algun_master(usuario)
     try:
-        master    = _resolver_master(usuario, idioma, email)
+        master = _resolver_master(usuario, idioma, email)
         cv_master = master.texto
     except Exception as e:
-        # Mismo guard que /generar-cv: get_drive_service() -> creds.refresh() puede
-        # fallar (token caducado o revocado) ANTES del try interno de la lectura.
-        # Sin esto sale un 500 HTML opaco y el fallo tarda en diagnosticarse: paso
-        # el 24-jul-2026, con el GOOGLE_REFRESH_TOKEN caducado, y dejo la cadena de
-        # n8n rota sin ningún mensaje util.
         privacidad.registrar_fallo(logger, "Drive auth/lectura falló en /generar-carta", e)
-        return jsonify({
-            "ok": False,
-            "error": f"No se pudo autenticar/leer el CV master en Drive: {e}",
-        }), 502
+        raise CVError(502, f"No se pudo autenticar/leer el CV master en Drive: {e}")
 
     def _es_legible(t: str) -> bool:
         if not t:
@@ -1321,18 +1302,12 @@ def generar_carta():
 
     if tiene_master and not _es_legible(cv_master):
         logger.error("CV master ILEGIBLE para carta de %s — abortando", privacidad.etiqueta_opaca(email))
-        return jsonify({
-            "ok": False,
-            "error": ("No se pudo leer tu CV master desde Drive. NO se generó la carta "
-                      "para evitar inventar datos. Revisá el archivo y permisos en Drive."),
-        }), 502
+        raise CVError(502, "No se pudo leer tu CV master desde Drive. NO se generó la carta para evitar inventar datos. Revisá el archivo y permisos en Drive.")
 
     contexto = (f"CV MASTER (usa SOLO esta experiencia real, NO inventes nada):\n{cv_master}"
                 if cv_master else
                 f"PERFIL: {nombre} — {usuario.get('rol','')} — {usuario.get('perfil','')}")
 
-    # Saludo: si hay persona de contacto real, dirigir la carta a ella; si no,
-    # saludo genérico. NUNCA inventar un nombre.
     if contacto:
         instr_saludo = (f'saludo dirigido a la persona de contacto ("A la atención de {contacto}," '
                         f'en español, "Dear {contacto}," en inglés) — usa EXACTAMENTE ese nombre, no lo inventes ni lo cambies')
@@ -1354,32 +1329,21 @@ def generar_carta():
             email, "carta", prompt, modelo=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA,
             llamar=lambda: call_llm_calidad(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA),
             llamar_invitada=lambda: call_llm_invitada(prompt, model=CARTA_MODEL, max_tokens=cuota.MAX_TOKENS_CARTA, api_key=byok_api_key))
-        carta         = respuesta_llm.contenido
+        carta = respuesta_llm.contenido
         logger.info("CONSUMO carta %s", consumo_de(respuesta_llm))
     except cuota.Rechazada as r:
         estado, mensaje, extra = _rechazo_de_cuota(r)
-        return jsonify({"ok": False, "error": mensaje, **extra}), estado
+        raise CVError(estado, mensaje, extra)
     except RuntimeError as e:
-        return jsonify({"ok": False, "error": str(e)}), 503
+        raise CVError(503, str(e))
 
-    # Limpiar frases introductorias del LLM
     carta = carta.strip()
     for pref in ("aquí tienes", "aquí está", "here is", "here's", "claro", "por supuesto"):
         if carta.lower().startswith(pref):
             carta = carta.split("\n", 1)[-1].strip()
             break
-    # Fuera guiones largos y flechas: la carta va a la empresa. Regla NO NEGOCIABLE.
     carta = sanear_tipografia(carta, idioma)
 
-    # GUARDRAILS DE LA CARTA. Hasta el 18-ago-2026 la carta salia SIN NINGUNO: los
-    # cuatro detectores existentes se aplicaban solo a `contenido_cv`. Y la carta es
-    # lo primero que lee un humano; el CV lo abren despues, si les interesas.
-    # Igual que en /generar-cv, esto AVISA y no aborta: un aviso puede ser una
-    # reformulacion legitima, y abortar dejaria a la usuaria sin carta.
-    # `detectar_skills_no_respaldadas` queda fuera a proposito: lee lineas de skills
-    # separadas por puntos, y una carta es prosa. Aplicarlo aqui daria ruido.
-    # Este endpoint ya NO sabe cuantos guardrails hay ni cuales aplican: lo pide
-    # y el registro decide. Anadir el septimo no toca esta linea.
     avisos = guardrails.revisar(carta, cv_master, guardrails.CARTA,
                                 traducido=master.master_traducido)
     for aviso in avisos:
@@ -1389,7 +1353,7 @@ def generar_carta():
             len(aviso.hallazgos),
         )
 
-    return jsonify({
+    return {
         "ok":              True,
         "carta":           carta,
         "modelo_usado":    respuesta_llm.modelo,
@@ -1397,15 +1361,37 @@ def generar_carta():
         "email":           email,
         "cv_master_usado": bool(cv_master),
         "master_traducido": master.master_traducido,
-        # `jsonify` es de Flask y no sabe serializar un modelo Pydantic: sin este
-        # `model_dump()` la respuesta revienta. La forma que sale por la red no
-        # cambia, y eso lo vigila tests/test_aviso_guardrail.py.
         "avisos":          [a.model_dump() for a in avisos],
-        # Guardrails skipped because the master is in another language. Empty in the
-        # normal flow; if not, "no avisos" for those rules means "not checked".
         "no_evaluables":   guardrails.no_evaluables(guardrails.CARTA, master.master_traducido),
-    })
+    }
 
+
+@app.route("/generar-carta", methods=["POST"])
+@requiere_clave_maquina
+def generar_carta():
+    """Genera la carta de presentación con la experiencia real del CV master.
+    Usa Claude Sonnet (calidad) — la carta va a la empresa."""
+    datos = request.get_json(force=True)
+    email       = datos.get("email", "")
+    empresa     = datos.get("empresa", "")
+    puesto      = datos.get("puesto", "")
+    descripcion = datos.get("descripcion", "")
+
+    if not email or not empresa or not puesto:
+        return jsonify({"ok": False, "error": "email, empresa y puesto son requeridos"}), 400
+
+    try:
+        result = generar_carta_core(
+            email=email,
+            empresa=empresa,
+            puesto=puesto,
+            descripcion=descripcion,
+            idioma_in=(datos.get("idioma") or "").strip().lower(),
+            contacto=(datos.get("contacto") or datos.get("nombre_contacto") or "").strip(),
+        )
+    except CVError as e:
+        return jsonify({"ok": False, "error": e.message, **e.extra}), e.status
+    return jsonify(result)
 
 @app.route("/usuarios", methods=["GET"])
 @requiere_clave_maquina
