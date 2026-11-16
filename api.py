@@ -19,7 +19,7 @@ import notion
 import real_jobs
 import base_de_datos
 import time
-from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada
+from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada, InteresEntrada
 import base_de_datos
 from server import CVError, generar_cv_core, generar_carta_core
 
@@ -132,7 +132,7 @@ def estado_clave_api(proveedor: str = "anthropic", user=Depends(get_current_user
     if proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
-    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada
+    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada, InteresEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         return {
@@ -147,7 +147,7 @@ def guardar_clave_api(req: ClaveApiRequest, user=Depends(get_current_user)):
     if req.proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
-    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada
+    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada, InteresEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         try:
@@ -162,7 +162,7 @@ def borrar_clave_api(proveedor: str, user=Depends(get_current_user)):
     if proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
-    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada
+    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada, InteresEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         repo.borrar_clave_api(proveedor)
@@ -440,6 +440,18 @@ def revocar_consentimiento(tipo: str, user=Depends(get_current_user)):
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         repo.revocar_consentimiento(tipo)
     return "", 204
+
+
+@app.post("/interes", status_code=201)
+def registrar_interes(interes: InteresEntrada, user=Depends(get_current_user)):
+    identidad, usuario_id = user
+    if usuario_id is None:
+        raise HTTPException(status_code=403, detail="acceso no permitido")
+    from repositorio import RepositorioDeUsuaria
+    with base_de_datos.transaccion() as conexion:
+        repo = RepositorioDeUsuaria(conexion, usuario_id)
+        organizacion = repo.registrar_interes(interes.tipo, interes.organizacion)
+    return {"tipo": interes.tipo, "organizacion": organizacion}
 
 @app.get("/health")
 def health():
