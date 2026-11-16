@@ -232,3 +232,36 @@ def test_yo_ok(monkeypatch):
     r = client.get("/yo", headers={"Authorization": "Bearer fake"})
     assert r.status_code == 200
     assert r.json()["email"] == "a@b.com"
+
+
+def test_perfil_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.get("/perfil")
+    assert r.status_code == 401
+
+
+def test_perfil_get_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    monkeypatch.setattr(base_de_datos if False else __import__("base_de_datos"), "configurada", lambda: True) if False else None
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})())
+    import usuarias
+    monkeypatch.setattr(usuarias, "resolver_o_crear", lambda identidad, conexion=None, respaldo=frozenset(): "uid-test")
+    monkeypatch.setattr(RepositorioDeUsuaria, "obtener_perfil", lambda self: {"rol": "Dev"})
+
+    client = TestClient(api.app)
+    r = client.get("/perfil", headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 200
+    assert r.json()["rol"] == "Dev"
