@@ -224,6 +224,39 @@ def buscar_ofertas_reales(req: BuscarOfertasRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class CrearOfertaRequest(BaseModel):
+    email: str = ""
+    empresa: str = Field(min_length=1)
+    puesto: str = Field(min_length=1)
+    descripcion: str = ""
+    modalidad: str = ""
+    ubicacion: str = ""
+    salario: str = ""
+    tipo_contrato: str = ""
+    link: str = ""
+    fecha_publicacion: str = ""
+    logo_empresa: str = ""
+    tags: list = []
+
+
+@app.post("/crear-oferta", dependencies=[Depends(requiere_clave_maquina)])
+def crear_oferta(req: CrearOfertaRequest):
+    oferta = req.model_dump()
+    if not oferta.get("empresa") or not oferta.get("puesto"):
+        raise HTTPException(status_code=400, detail="empresa y puesto son requeridos")
+    idioma = server.idioma_de_oferta(oferta["puesto"], oferta.get("descripcion", ""), oferta["empresa"])
+    usuario_notion_id = ""
+    if req.email:
+        u = server.buscar_usuario_por_email(req.email)
+        if u:
+            usuario_notion_id = u.get("notion_id", "")
+    try:
+        page = server.crear_oferta_en_notion(oferta, idioma, usuario_notion_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"ok": True, "notion_page_id": page.get("id", ""), "idioma": idioma}
+
 @app.get("/health")
 def health():
     return {"ok": True, "service": "cv-server", "framework": "fastapi"}

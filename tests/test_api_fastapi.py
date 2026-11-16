@@ -134,3 +134,23 @@ def test_buscar_ofertas_reales_ok(monkeypatch):
     r = client.post("/buscar-ofertas-reales", json={"rol": "frontend"}, headers={"X-Clave-Maquina": "test-clave"})
     assert r.status_code == 200
     assert r.json()["ok"] is True
+
+
+def test_crear_oferta_requires_clave():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/crear-oferta", json={"empresa": "X", "puesto": "Dev"})
+    assert r.status_code == 401
+
+
+def test_crear_oferta_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    monkeypatch.setattr(server, "idioma_de_oferta", lambda *a, **k: "es")
+    monkeypatch.setattr(server, "buscar_usuario_por_email", lambda email: {"notion_id": "n1"})
+    monkeypatch.setattr(server, "crear_oferta_en_notion", lambda oferta, idioma, uid: {"id": "page123"})
+    client = TestClient(api.app)
+    r = client.post("/crear-oferta", json={"email": "a@b.com", "empresa": "X", "puesto": "Dev"}, headers={"X-Clave-Maquina": "test-clave"})
+    assert r.status_code == 200
+    assert r.json()["notion_page_id"] == "page123"
