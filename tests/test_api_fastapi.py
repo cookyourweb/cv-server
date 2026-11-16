@@ -328,3 +328,34 @@ def test_interes_ok(monkeypatch):
     r = client.post("/interes", json={"tipo": "paquetes"}, headers={"Authorization": "Bearer fake"})
     assert r.status_code == 201
     assert r.json()["organizacion"] == "Acme"
+
+
+def test_cuenta_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.delete("/cuenta")
+    assert r.status_code == 401
+
+
+def test_cuenta_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})())
+    import usuarias
+    monkeypatch.setattr(usuarias, "resolver_o_crear", lambda identidad, conexion=None, respaldo=frozenset(): "uid-test")
+    monkeypatch.setattr(RepositorioDeUsuaria, "borrar_cuenta", lambda self: True)
+
+    client = TestClient(api.app)
+    r = client.delete("/cuenta", headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 204

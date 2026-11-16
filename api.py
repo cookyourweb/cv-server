@@ -453,6 +453,20 @@ def registrar_interes(interes: InteresEntrada, user=Depends(get_current_user)):
         organizacion = repo.registrar_interes(interes.tipo, interes.organizacion)
     return {"tipo": interes.tipo, "organizacion": organizacion}
 
+
+@app.delete("/cuenta", status_code=204)
+def borrar_cuenta(user=Depends(get_current_user)):
+    identidad, usuario_id = user
+    if usuario_id is None:
+        raise HTTPException(status_code=403, detail="acceso no permitido")
+    from repositorio import RepositorioDeUsuaria
+    with base_de_datos.transaccion() as conexion:
+        repo = RepositorioDeUsuaria(conexion, usuario_id)
+        ok = repo.borrar_cuenta()
+    if not ok:
+        raise HTTPException(status_code=404, detail="no encontrado")
+    return ""
+
 @app.get("/health")
 def health():
     return {"ok": True, "service": "cv-server", "framework": "fastapi"}
