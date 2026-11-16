@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 import server
 import usuarias
+from server import registrar_invitada
 import puntuacion
 import notion
 import real_jobs
@@ -333,6 +334,32 @@ def buscar_para_usuaria(req: BuscarParaUsuariaRequest):
         "duracion_ms": duracion_ms,
         "ofertas": resultado.get("ofertas", []),
     }
+
+
+class RegistroRequest(BaseModel):
+    email: str = Field(min_length=1)
+
+
+@app.post("/registro", dependencies=[Depends(requiere_clave_maquina)])
+def registro(req: RegistroRequest):
+    datos = req.model_dump()
+    email = (req.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="email requerido")
+    try:
+        perfil, creado, disparada = registrar_invitada(email, datos)
+    except Exception:
+        raise HTTPException(status_code=500, detail="no se pudo completar el registro")
+    if not creado:
+        mensaje = ("Ya estabas registrado. Buscando ofertas ahora mismo."
+                   if disparada else
+                   "Ya estabas registrado. No se pudo lanzar la búsqueda ahora; "
+                   "entrarás en el barrido de las 9:00.")
+    else:
+        mensaje = ("Usuario registrado. Buscando tus primeras ofertas ahora mismo."
+                   if disparada else
+                   "Usuario registrado. Recibirás ofertas en el barrido de las 9:00.")
+    return {"ok": True, "mensaje": mensaje, "email": email, "busqueda_disparada": disparada}
 
 @app.get("/health")
 def health():

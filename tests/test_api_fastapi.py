@@ -186,3 +186,21 @@ def test_buscar_para_usuaria_ok(monkeypatch):
     r = client.post("/buscar-para-usuaria", json={"usuario_id": "u1", "email": "a@b.com", "top_n": 3}, headers={"X-Clave-Maquina": "test-clave"})
     assert r.status_code == 200
     assert r.json()["ok"] is True
+
+
+def test_registro_requires_clave():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/registro", json={"email": "a@b.com"})
+    assert r.status_code == 401
+
+
+def test_registro_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    monkeypatch.setattr(api, "registrar_invitada", lambda email, datos: ({}, True, True))
+    client = TestClient(api.app)
+    r = client.post("/registro", json={"email": "a@b.com"}, headers={"X-Clave-Maquina": "test-clave"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
