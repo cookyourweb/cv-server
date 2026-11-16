@@ -1494,6 +1494,22 @@ def buscar_para_usuaria():
         logger.error("Error leyendo perfil de %s: %s", usuario_id, type(e).__name__)
         return jsonify({"ok": False, "error": "BD no disponible"}), 503
 
+    # Si el id enviado (p.ej. id de página de Notion) no tiene perfil en Neon,
+    # intentamos resolver el usuario interno por email antes de rendirnos.
+    if perfil is None and email:
+        try:
+            with base_de_datos.motor().begin() as conexion:
+                import usuarias as _usu
+                uid_interno = _usu.id_por_emails([email], conexion)
+            if uid_interno and uid_interno != usuario_id:
+                usuario_id = uid_interno
+                with base_de_datos.motor().begin() as conexion:
+                    from repositorio import RepositorioDeUsuaria
+                    repo = RepositorioDeUsuaria(conexion, usuario_id)
+                    perfil = repo.obtener_perfil()
+        except Exception as e:
+            logger.error("Error resolviendo usuario por email: %s", type(e).__name__)
+
     if perfil is None:
         return jsonify({"ok": False, "error": "perfil no encontrado", "usuario_id": usuario_id}), 404
 
