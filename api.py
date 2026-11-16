@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 import server
 import usuarias
+import puntuacion
 import base_de_datos
 from server import CVError, generar_cv_core, generar_carta_core
 
@@ -166,6 +167,15 @@ class GenerarCartaResponse(BaseModel):
     master_traducido: bool = False
     avisos: list = []
     no_evaluables: list = []
+
+
+@app.post("/puntuar-ofertas", dependencies=[Depends(requiere_clave_maquina)])
+def puntuar_ofertas():
+    """Thin route: scores every exempt user's pending offers (ADR-011)."""
+    try:
+        return puntuacion.puntuar_ofertas_core()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Notion no disponible")
 
 
 @app.get("/health")

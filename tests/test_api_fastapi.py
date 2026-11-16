@@ -79,3 +79,21 @@ def test_generar_carta_byok_gate_denegado(monkeypatch):
         "email": "a@b.com", "empresa": "X", "puesto": "Dev"
     }, headers={"X-Clave-Maquina": "test-clave"})
     assert r.status_code == 403
+
+
+def test_puntuar_ofertas_requires_clave():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/puntuar-ofertas")
+    assert r.status_code == 401
+
+
+def test_puntuar_ofertas_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, puntuacion
+    monkeypatch.setattr(puntuacion, "puntuar_ofertas_core", lambda: {"ok": True, "puntuadas": 2, "saltadas": 0, "errores": 0, "sin_vectores": 0})
+    client = TestClient(api.app)
+    r = client.post("/puntuar_ofertas" if False else "/puntuar-ofertas", headers={"X-Clave-Maquina": "test-clave"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
