@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 import server
 import usuarias
+import cuota
 from server import registrar_invitada
 import puntuacion
 import notion
@@ -309,6 +310,12 @@ def buscar_para_usuaria(req: BuscarParaUsuariaRequest):
             pass
     if perfil is None:
         raise HTTPException(status_code=404, detail="perfil no encontrado")
+
+    # T7: cuota Neon — no procesar si la usuaria agotó su cuota (solo no exentas).
+    if not cuota.es_exenta(email or ""):
+        estado = cuota.estado_de_usuaria(usuario_id, email or "")
+        if estado is not None and estado.get("unidades_restantes", 1) <= 0:
+            raise HTTPException(status_code=429, detail="cuota agotada")
 
     errores = []
     try:

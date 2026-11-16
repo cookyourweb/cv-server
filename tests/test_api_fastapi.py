@@ -359,3 +359,19 @@ def test_cuenta_ok(monkeypatch):
     client = TestClient(api.app)
     r = client.delete("/cuenta", headers={"Authorization": "Bearer fake"})
     assert r.status_code == 204
+
+
+def test_buscar_para_usuaria_cuota_agotada(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, base_de_datos, cuota, server, real_jobs
+    from repositorio import RepositorioDeUsuaria
+
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "motor", lambda: type("M", (), {"begin": lambda self: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})()})())
+    monkeypatch.setattr(RepositorioDeUsuaria, "obtener_perfil", lambda self: {"rol": "Dev", "stack": ["react"], "modalidad": ["remoto"], "ubicacion": "Madrid", "salario_min": 50000})
+    monkeypatch.setattr(cuota, "es_exenta", lambda email: False)
+    monkeypatch.setattr(cuota, "estado_de_usuaria", lambda uid, email, ahora=None: {"unidades_restantes": 0})
+
+    client = TestClient(api.app)
+    r = client.post("/buscar-para-usuaria", json={"usuario_id": "u1", "email": "a@b.com", "top_n": 3}, headers={"X-Clave-Maquina": "test-clave"})
+    assert r.status_code == 429
