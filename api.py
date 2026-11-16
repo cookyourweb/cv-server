@@ -4,8 +4,10 @@ Capa HTTP tipada con Pydantic sobre la lógica de negocio de server.
 Coexiste con Flask; se migra endpoint por endpoint. Servir con:  uvicorn api:app
 """
 import hmac
+import hashlib
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -13,6 +15,16 @@ import server
 from server import CVError, generar_cv_core
 
 app = FastAPI(title="cv-server API", version="0.1.0")
+
+# CORS: replica de server.py (_RUTAS_CON_CORS). En FastAPI se aplica globalmente;
+# las rutas de máquina (n8n) no pasan por aquí porque no envían Origin.
+_ORIGENES = [o.strip() for o in (server.ORIGENES_PERMITIDOS or []) if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ORIGENES,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class GenerarCVRequest(BaseModel):
@@ -59,6 +71,55 @@ def requiere_clave_maquina(x_clave_maquina: str = Header(default="")):
     clave = server.CLAVE_MAQUINA
     if not clave or not hmac.compare_digest(x_clave_maquina.encode(), clave.encode()):
         raise HTTPException(status_code=401, detail="no autorizado")
+
+
+@app.get("/health")
+def health():
+    return {"ok": True, "service": "cv-server", "framework": "fastapi"}
+
+
+@app.post("/cv-master/check", dependencies=[Depends(requiere_clave_maquina)])
+async def cv_master_check(request: Request):
+    """Diagnóstico del CV maestro (port de server.py /cv-master/check)."""
+    import checker
+
+    datos = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    texto = datos.get("markdown") or datos.get("texto") or datos.get("text") or ""
+    if not texto.strip():
+        raise HTTPException(status_code=400, detail="Texto vacío")
+
+    normalizado = checker.normalizar_cv(texto)
+    claims = checker.detectar_claims_sin_metrica(texto)
+    skills = checker.detectar_skills_sin_evidencia(texto)
+    gaps = checker.detectar_gaps_temporales(texto)
+    secciones_faltantes = checker.detectar_secciones_recuperables(normalizado)
+
+    findings = []
+    for claim in claims:
+        findings.append({"type": "needs-evidence", "message": "Claim sin métrica ni evidencia.", "evidence": claim})
+    for skill in skills:
+        findings.append({"type": "unsupported-skill", "message": "Skill declarada sin evidencia en experiencia.", "evidence": skill})
+    for gap in gaps:
+        findings.append({"type": "gap", "message": "Gap temporal detectado.", "evidence": gap})
+    for seccion in secciones_faltantes:
+        findings.append({"type": "missing-section", "message": "Sección recomendada ausente.", "evidence": seccion})
+
+    if not normalizado["secciones_presentes"]:
+        status = checker.Status.INSUFFICIENT_CONTENT.value
+    elif findings:
+        status = checker.Status.WARNING.value
+    else:
+        status = checker.Status.OK.value
+
+    proposals = [{"type": "section", "message": f"Añadir o completar la sección `{s}`.", "section": s} for s in secciones_faltantes]
+
+    hash_cv = hashlib.sha256(normalizado["texto_normalizado"].encode("utf-8")).hexdigest()
+    persistido = checker.persistir_analisis(hash_cv, {
+        "status": status, "findings": findings, "proposals": proposals,
+        "hash_cv": hash_cv, "version_label": datos.get("version_label"),
+    })
+
+    return {"ok": True, "analisis": persistido}
 
 
 @app.post("/generar-cv", response_model=GenerarCVResponse, dependencies=[Depends(requiere_clave_maquina)])
