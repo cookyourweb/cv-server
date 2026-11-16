@@ -39,6 +39,7 @@ import json
 import logging
 import requests
 from html import unescape
+import xml.etree.ElementTree as ET
 
 import match
 
@@ -323,6 +324,96 @@ def filtrar_por_modalidad(
     salida = aplicar_evitar(salida, evitar)
     logger.info("Filtrado por modalidad: %d ofertas (de %d)", len(salida), len(ofertas))
     return salida
+
+
+def buscar_tecnoempleo(rol: str = "", max_results: int = 20) -> list:
+    """Busca ofertas en Tecnoempleo RSS. Devuelve lista normalizada (puede estar vacía)."""
+    url = "https://www.tecnoempleo.com/rss/ofertas-empleo.xml"
+    if rol:
+        url = f"https://www.tecnoempleo.com/rss/ofertas-empleo.xml?k={rol}"
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+    except Exception as e:
+        logger.error("Tecnoempleo RSS falló: %s", e)
+        return []
+    try:
+        root = ET.fromstring(resp.content)
+    except Exception as e:
+        logger.error("Tecnoempleo XML inválido: %s", e)
+        return []
+    ofertas = []
+    for item in root.iter("item"):
+        titulo = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        desc = (item.findtext("description") or "").strip()
+        fecha = (item.findtext("pubDate") or "").strip()
+        if not titulo:
+            continue
+        ofertas.append({
+            "id": f"tecnoempleo-{hash(titulo + link)}",
+            "source": "tecnoempleo",
+            "empresa": "",
+            "puesto": titulo,
+            "descripcion": limpiar_html(desc, max_chars=1000),
+            "tags": [],
+            "modalidad": "Remoto",
+            "ubicacion": "",
+            "salario": "",
+            "tipo_contrato": "",
+            "link": link,
+            "fecha_publicacion": fecha,
+            "logo_empresa": "",
+        })
+        if len(ofertas) >= max_results:
+            break
+    logger.info("Tecnoempleo: %d ofertas (rol='%s')", len(ofertas), rol)
+    return ofertas
+
+
+def buscar_google_jobs(rol: str = "", api_key: str = None, max_results: int = 20) -> list:
+    """Busca ofertas en Google Jobs via SerpApi. Devuelve lista normalizada (puede estar vacía)."""
+    api_key = api_key or os.getenv("SERPAPI_KEY", "")
+    if not api_key:
+        logger.warning("No SERPAPI_KEY — saltando Google Jobs")
+        return []
+    params = {
+        "engine": "google_jobs",
+        "q": rol or "software developer",
+        "api_key": api_key,
+        "num": max_results,
+    }
+    try:
+        resp = requests.get("https://serpapi.com/search", params=params, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.error("Google Jobs (SerpApi) falló: %s", e)
+        return []
+    jobs = data.get("jobs_results", []) or []
+    ofertas = []
+    for raw in jobs[:max_results]:
+        titulo = raw.get("title", "").strip()
+        empresa = raw.get("company_name", "").strip()
+        if not titulo:
+            continue
+        ofertas.append({
+            "id": f"googlejobs-{raw.get('job_id', hash(titulo + empresa))}",
+            "source": "google_jobs",
+            "empresa": empresa,
+            "puesto": titulo,
+            "descripcion": limpiar_html(raw.get("description", ""), max_chars=1000),
+            "tags": raw.get("detected_extensions", {}).get("qualifications", []) or [],
+            "modalidad": raw.get("detected_extensions", {}).get("work_from_home", "Remoto") or "Remoto",
+            "ubicacion": raw.get("location", "").strip(),
+            "salario": raw.get("detected_extensions", {}).get("salary", "") or "",
+            "tipo_contrato": raw.get("detected_extensions", {}).get("schedule_type", "") or "",
+            "link": raw.get("related_links", [{}])[0].get("link", "") if raw.get("related_links") else "",
+            "fecha_publicacion": raw.get("detected_extensions", {}).get("posted_at", "") or "",
+            "logo_empresa": raw.get("thumbnail", "") or "",
+        })
+    logger.info("Google Jobs: %d ofertas (rol='%s')", len(ofertas), rol)
+    return ofertas
 
 
 def deduplicar(ofertas: list) -> list:
@@ -612,13 +703,16 @@ def buscar_ofertas_reales(
 
     rol_busqueda = rol or (stack[0] if stack else "")
 
-    # 1. Buscar en Remotive
-    ofertas_raw = buscar_remotive(rol=rol_busqueda, max_results=20)
+    # 1. Buscar en todas las fuentes disponibles
+    ofertas_raw = []
+    ofertas_raw.extend(buscar_remotive(rol=rol_busqueda, max_results=20))
+    ofertas_raw.extend(buscar_tecnoempleo(rol=rol_busqueda, max_results=20))
+    ofertas_raw.extend(buscar_google_jobs(rol=rol_busqueda, max_results=20))
 
     if not ofertas_raw:
         return {
             "ok":       False,
-            "error":    "No se encontraron ofertas en Remotive",
+            "error":    "No se encontraron ofertas en ninguna fuente",
             "ofertas":  [],
             "total_encontradas": 0,
             "total_filtradas": 0,
