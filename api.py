@@ -12,6 +12,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 import server
+import usuarias
+import base_de_datos
 from server import CVError, generar_cv_core
 
 app = FastAPI(title="cv-server API", version="0.1.0")
@@ -27,6 +29,15 @@ app.add_middleware(
 )
 
 
+class ClaveApiRequest(BaseModel):
+    proveedor: str = "anthropic"
+    api_key: str = Field(min_length=10)
+
+
+class ClaveApiEstado(BaseModel):
+    proveedor: str
+    configurada: bool
+    trial_restante: int
 class GenerarCVRequest(BaseModel):
     email: str = Field(min_length=1)
     empresa: str = Field(min_length=1)
@@ -71,6 +82,69 @@ def requiere_clave_maquina(x_clave_maquina: str = Header(default="")):
     clave = server.CLAVE_MAQUINA
     if not clave or not hmac.compare_digest(x_clave_maquina.encode(), clave.encode()):
         raise HTTPException(status_code=401, detail="no autorizado")
+
+
+def get_current_user(authorization: str = Header(default="")):
+    """Resuelve la identidad y el usuario_id de Neon a partir del token de Google."""
+    try:
+        identidad = server.identificar(authorization, server.CONFIG_OIDC, server.CLAVES,
+                                     autorizar=lambda id_: True)  # invitadas por lista en config
+    except (server.ErrorDeAutenticacion, server.NoInvitada, server.ProveedorNoDisponible) as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    # resolver en Neon (si hay BD)
+    usuario_id = None
+    if base_de_datos.configurada():
+        try:
+            with base_de_datos.transaccion() as conexion:
+                usuario_id = usuarias.resolver_o_crear(identidad, conexion=conexion)
+        except Exception:
+            usuario_id = None
+    if usuario_id is None:
+        raise HTTPException(status_code=403, detail="acceso no permitido")
+    return identidad, usuario_id
+
+
+
+@app.get("/clave-api", response_model=ClaveApiEstado)
+def estado_clave_api(proveedor: str = "anthropic", user=Depends(get_current_user)):
+    if proveedor not in {"anthropic", "groq"}:
+        raise HTTPException(status_code=422, detail="proveedor no válido")
+    identidad, usuario_id = user
+    from repositorio import RepositorioDeUsuaria
+    with base_de_datos.transaccion() as conexion:
+        repo = RepositorioDeUsuaria(conexion, usuario_id)
+        return {
+            "proveedor": proveedor,
+            "configurada": repo.tiene_clave_api(proveedor),
+            "trial_restante": repo.trial_restante(),
+        }
+
+
+@app.put("/clave-api")
+def guardar_clave_api(req: ClaveApiRequest, user=Depends(get_current_user)):
+    if req.proveedor not in {"anthropic", "groq"}:
+        raise HTTPException(status_code=422, detail="proveedor no válido")
+    identidad, usuario_id = user
+    from repositorio import RepositorioDeUsuaria
+    with base_de_datos.transaccion() as conexion:
+        repo = RepositorioDeUsuaria(conexion, usuario_id)
+        try:
+            repo.guardar_clave_api(req.proveedor, req.api_key)
+        except Exception:
+            raise HTTPException(status_code=422, detail="no se pudo guardar la clave")
+    return {"configurada": True, "proveedor": req.proveedor}
+
+
+@app.delete("/clave-api/{proveedor}")
+def borrar_clave_api(proveedor: str, user=Depends(get_current_user)):
+    if proveedor not in {"anthropic", "groq"}:
+        raise HTTPException(status_code=422, detail="proveedor no válido")
+    identidad, usuario_id = user
+    from repositorio import RepositorioDeUsuaria
+    with base_de_datos.transaccion() as conexion:
+        repo = RepositorioDeUsuaria(conexion, usuario_id)
+        repo.borrar_clave_api(proveedor)
+    return {"ok": True}
 
 
 @app.get("/health")
