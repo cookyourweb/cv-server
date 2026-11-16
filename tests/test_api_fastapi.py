@@ -204,3 +204,31 @@ def test_registro_ok(monkeypatch):
     r = client.post("/registro", json={"email": "a@b.com"}, headers={"X-Clave-Maquina": "test-clave"})
     assert r.status_code == 200
     assert r.json()["ok"] is True
+
+
+def test_yo_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.get("/yo")
+    assert r.status_code == 401
+
+
+def test_yo_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+
+    class Id:
+        sub = "sub123"
+        email = "a@b.com"
+        nombre = "Test"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    monkeypatch.setattr(server, "_estado_del_perfil", lambda uid, email: {"tiene_perfil": True})
+    monkeypatch.setattr(server, "_consentimientos_de", lambda uid: {"consentimientos": {}})
+    monkeypatch.setattr(server.cuota, "estado_de_usuaria", lambda uid, email: None)
+
+    client = TestClient(api.app)
+    r = client.get("/yo", headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 200
+    assert r.json()["email"] == "a@b.com"

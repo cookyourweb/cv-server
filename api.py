@@ -376,6 +376,19 @@ def registro(req: RegistroRequest):
                    "Usuario registrado. Recibirás ofertas en el barrido de las 9:00.")
     return {"ok": True, "mensaje": mensaje, "email": email, "busqueda_disparada": disparada}
 
+
+@app.get("/yo")
+def yo(user=Depends(get_current_user)):
+    """Quien es la usuaria que llama, segun su token de Google."""
+    identidad, usuario_id = user
+    estado_cuota = server.cuota.estado_de_usuaria(usuario_id, identidad.email)
+    body = {"sub": identidad.sub, "email": identidad.email, "nombre": identidad.nombre}
+    body.update(server._estado_del_perfil(usuario_id, identidad.email))
+    body.update(server._consentimientos_de(usuario_id))
+    if estado_cuota is not None:
+        body["cuota"] = estado_cuota
+    return body
+
 @app.get("/health")
 def health():
     return {"ok": True, "service": "cv-server", "framework": "fastapi"}
