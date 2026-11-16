@@ -1522,11 +1522,16 @@ def buscar_para_usuaria():
             usuario_notion_id = u.get("notion_id", "")
 
     ofertas_creadas = 0
+    notion_page_ids = []
     for oferta in (resultado.get("ofertas") or []):
         try:
             idioma = idioma_de_oferta(oferta.get("puesto", ""), oferta.get("descripcion", ""),
                                      oferta.get("empresa", ""))
-            crear_oferta_en_notion(oferta, idioma, usuario_notion_id)
+            page = crear_oferta_en_notion(oferta, idioma, usuario_notion_id)
+            pid = page.get("id", "") if isinstance(page, dict) else ""
+            if pid:
+                notion_page_ids.append(pid)
+                oferta["notion_page_id"] = pid
             ofertas_creadas += 1
         except Exception as e:
             logger.error("Error creando oferta en Notion (%s): %s", oferta.get("empresa"), type(e).__name__)
@@ -1538,6 +1543,7 @@ def buscar_para_usuaria():
         "usuario_id": usuario_id,
         "ofertas_encontradas": resultado.get("total_encontradas", 0),
         "ofertas_creadas": ofertas_creadas,
+        "notion_page_ids": notion_page_ids,
         "ofertas_descartadas": max(0, resultado.get("total_encontradas", 0) - resultado.get("total_filtradas", 0)),
         "errores": errores,
         "duracion_ms": duracion_ms,
