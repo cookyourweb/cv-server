@@ -97,3 +97,22 @@ def test_puntuar_ofertas_ok(monkeypatch):
     r = client.post("/puntuar_ofertas" if False else "/puntuar-ofertas", headers={"X-Clave-Maquina": "test-clave"})
     assert r.status_code == 200
     assert r.json()["ok"] is True
+
+
+def test_usuarios_requires_clave():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.get("/usuarios")
+    assert r.status_code == 401
+
+
+def test_usuarios_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, notion, server
+    monkeypatch.setattr(server, "NOTION_DB_USUARIOS", "db123")
+    monkeypatch.setattr(notion, "paginas_usuarios_activos", lambda: [{"id": "p1", "properties": {"Name": {"title": [{"plain_text": "Vero"}]}, "Email": {"email": "v@x.com"}, "Activo": {"checkbox": True}}}])
+    client = TestClient(api.app)
+    r = client.get("/usuarios", headers={"X-Clave-Maquina": "test-clave"})
+    assert r.status_code == 200
+    assert r.json()["total"] == 1

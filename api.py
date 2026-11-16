@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 import server
 import usuarias
 import puntuacion
+import notion
 import base_de_datos
 from server import CVError, generar_cv_core, generar_carta_core
 
@@ -177,6 +178,29 @@ def puntuar_ofertas():
     except Exception as e:
         raise HTTPException(status_code=502, detail="Notion no disponible")
 
+
+
+@app.get("/usuarios", dependencies=[Depends(requiere_clave_maquina)])
+def usuarios(formato: str = None):
+    """Consulta usuarios activos en Notion."""
+    if not server.NOTION_DB_USUARIOS:
+        raise HTTPException(status_code=500, detail="NOTION_DB_USUARIOS no configurada")
+    try:
+        results = notion.paginas_usuarios_activos()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if formato == "notion":
+        return {"ok": True, "results": results}
+    usuarios_list = []
+    for p in results:
+        props = p.get("properties", {})
+        usuarios_list.append({
+            "id":     p["id"],
+            "nombre": props.get("Name", {}).get("title", [{}])[0].get("plain_text", ""),
+            "email":  props.get("Email", {}).get("email", ""),
+            "activo": props.get("Activo", {}).get("checkbox", False),
+        })
+    return {"ok": True, "usuarios": usuarios_list, "total": len(usuarios_list)}
 
 @app.get("/health")
 def health():
