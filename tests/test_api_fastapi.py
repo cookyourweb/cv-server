@@ -525,3 +525,41 @@ def test_sse_progress_streams(monkeypatch):
     r = client.get("/buscar-para-usuaria/progress?usuario_id=u1")
     assert r.status_code == 200
     assert "text/event-stream" in r.headers.get("content-type", "")
+
+
+def test_sse_progress_emits_events_in_order_threadsafe(monkeypatch):
+    import threading, json
+    from fastapi.testclient import TestClient
+    import api, base_de_datos, real_jobs
+    from repositorio import RepositorioDeUsuaria
+
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    conn = type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})()
+    monkeypatch.setattr(base_de_datos, "motor", lambda: type("M", (), {"begin": lambda self: conn})())
+    monkeypatch.setattr(RepositorioDeUsuaria, "obtener_perfil", lambda self: {
+        "rol": "Dev", "stack": ["react"], "modalidad": ["remoto"],
+        "ubicacion": "Madrid", "salario_min": 50000,
+    })
+
+    def fake_buscar(**kw):
+        cb = kw.get("progress_cb")
+        for ev in [{"stage": "searching"}, {"stage": "filtering"}, {"stage": "ranking"}]:
+            if cb:
+                cb(ev)
+        return {"ok": True, "ofertas": []}
+    monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", fake_buscar)
+
+    class FakeThread:
+        def __init__(self, target=None, daemon=True, *a, **k):
+            self._target = target
+        def start(self):
+            if self._target:
+                self._target()
+    monkeypatch.setattr(threading, "Thread", FakeThread)
+
+    client = TestClient(api.app)
+    r = client.get("/buscar-para-usuaria/progress?usuario_id=u1")
+    assert r.status_code == 200
+    lines = [l for l in r.text.splitlines() if l.startswith("data:")]
+    stages = [json.loads(l[len("data:"):].strip())["stage"] for l in lines]
+    assert stages == ["searching", "filtering", "ranking", "done"]

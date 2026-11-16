@@ -480,30 +480,34 @@ async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: 
     """SSE: emite progreso de la búsqueda en tiempo real."""
     import asyncio, json, threading
 
+    loop = asyncio.get_running_loop()
     queue = asyncio.Queue()
 
+    def enqueue(event):
+        loop.call_soon_threadsafe(queue.put_nowait, event)
+
     def progress_cb(event):
-        queue.put_nowait(event)
+        enqueue(event)
 
     def worker():
         try:
             import base_de_datos, real_jobs
             from repositorio import RepositorioDeUsuaria
             if not base_de_datos.configurada():
-                queue.put_nowait({"stage": "error", "detail": "BD no configurada"})
+                enqueue({"stage": "error", "detail": "BD no configurada"})
                 return
             with base_de_datos.motor().begin() as conexion:
                 repo = RepositorioDeUsuaria(conexion, usuario_id)
                 perfil = repo.obtener_perfil()
             if perfil is None:
-                queue.put_nowait({"stage": "error", "detail": "perfil no encontrado"})
+                enqueue({"stage": "error", "detail": "perfil no encontrado"})
                 return
             resultado = real_jobs.buscar_ofertas_reales(perfil=perfil, top_n=top_n, progress_cb=progress_cb)
-            queue.put_nowait({"stage": "done", "summary": {"ok": resultado.get("ok"), "creadas": len(resultado.get("ofertas", []))}})
+            enqueue({"stage": "done", "summary": {"ok": resultado.get("ok"), "creadas": len(resultado.get("ofertas", []))}})
         except Exception as e:
-            queue.put_nowait({"stage": "error", "detail": str(e)})
+            enqueue({"stage": "error", "detail": str(e)})
         finally:
-            queue.put_nowait(None)
+            enqueue(None)
 
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
