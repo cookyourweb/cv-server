@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 """API FastAPI del cv-server (ADR-001).
 
 Capa HTTP tipada con Pydantic sobre la lógica de negocio de server.
@@ -29,6 +32,10 @@ app = FastAPI(title="cv-server API", version="0.1.0")
 # CORS: replica de server.py (_RUTAS_CON_CORS). En FastAPI se aplica globalmente;
 # las rutas de máquina (n8n) no pasan por aquí porque no envían Origin.
 _ORIGENES = [o.strip() for o in (server.ORIGENES_PERMITIDOS or []) if o.strip()]
+if "http://localhost:4200" not in _ORIGENES:
+    _ORIGENES.append("http://localhost:4200")
+if "http://127.0.0.1:4200" not in _ORIGENES:
+    _ORIGENES.append("http://127.0.0.1:4200")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ORIGENES,
