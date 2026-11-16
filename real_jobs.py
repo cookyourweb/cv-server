@@ -161,6 +161,17 @@ def matchea_stack(oferta: dict, stack_usuario: list) -> int:
     if not stack_usuario:
         return 0
 
+    # Normalizar: aceptar strings con espacios/comas y minúsculas.
+    stack_norm = []
+    for tech in stack_usuario:
+        if isinstance(tech, str):
+            stack_norm.extend([t.strip().lower() for t in re.split(r"[,\s]+", tech) if t.strip()])
+        elif tech:
+            stack_norm.append(str(tech).strip().lower())
+
+    if not stack_norm:
+        return 0
+
     texto = " ".join([
         oferta.get("puesto", ""),
         " ".join(oferta.get("tags", [])),
@@ -168,11 +179,9 @@ def matchea_stack(oferta: dict, stack_usuario: list) -> int:
     ]).lower()
 
     coincidencias = 0
-    for tech in stack_usuario:
-        if not tech:
-            continue
+    for tech in stack_norm:
         # Match exacto de palabra (no substring), case-insensitive
-        patron = r"\b" + re.escape(tech.lower()) + r"\b"
+        patron = r"\b" + re.escape(tech) + r"\b"
         if re.search(patron, texto):
             coincidencias += 1
 

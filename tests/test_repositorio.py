@@ -22,7 +22,7 @@ from repositorio import (
 from test_migracion_0001 import _alembic
 
 PERFIL = {
-    "rol": "Frontend developer", "anios_experiencia": 12, "stack": ["Angular", "TypeScript"],
+    "rol": "Frontend developer", "anios_experiencia": 12, "stack": ["angular", "typescript"],
     "idiomas": ["es", "en"], "ubicacion": "Madrid", "modalidad": ["remoto", "hibrido"],
     "salario_min": 45000, "salario_moneda": "EUR",
     "regiones_remoto": [], "ciudades_hibrido": [], "tarifa_dia_min": None, "evitar": None,

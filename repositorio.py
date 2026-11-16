@@ -8,6 +8,7 @@ A missing row is reported as None or False; the routes turn that into a 404 iden
 
 The connection (and its transaction) belongs to the caller: nothing here commits.
 """
+import re
 from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, field_validator
@@ -109,6 +110,15 @@ class RepositorioDeUsuaria:
 
     def guardar_perfil(self, perfil: PerfilEntrada) -> None:
         """Create or replace the profile."""
+        datos = perfil.model_dump()
+        if isinstance(datos.get("stack"), list):
+            stack_norm = []
+            for tech in datos["stack"]:
+                if isinstance(tech, str):
+                    stack_norm.extend([t.strip().lower() for t in re.split(r"[,\s]+", tech) if t.strip()])
+                elif tech:
+                    stack_norm.append(str(tech).strip().lower())
+            datos["stack"] = stack_norm
         self._c.execute(text("""
             INSERT INTO perfil (usuario_id, rol, anios_experiencia, stack, idiomas, ubicacion,
                                 modalidad, salario_min, salario_moneda, regiones_remoto,
@@ -124,7 +134,7 @@ class RepositorioDeUsuaria:
                 salario_moneda = EXCLUDED.salario_moneda, regiones_remoto = EXCLUDED.regiones_remoto,
                 ciudades_hibrido = EXCLUDED.ciudades_hibrido, tarifa_dia_min = EXCLUDED.tarifa_dia_min,
                 evitar = EXCLUDED.evitar, actualizado_en = now()"""),
-            {"u": self._usuario_id, **perfil.model_dump()})
+            {"u": self._usuario_id, **datos})
 
     # --- consent ---------------------------------------------------------------------------
 
