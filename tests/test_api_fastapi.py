@@ -499,3 +499,29 @@ def test_buscar_para_usuaria_devuelve_notion_page_ids(monkeypatch):
     assert r.json()["notion_page_ids"] == ["page-1", "page-2"]
     assert r.json()["ofertas_creadas"] == 2
     assert all("notion_page_id" in o for o in r.json()["ofertas"])
+
+
+def test_sse_progress_requires_no_clave():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.get("/buscar-para-usuaria/progress?usuario_id=u1")
+    # SSE endpoint is open (no clave) for demo; just ensure it responds
+    assert r.status_code == 200
+
+
+def test_sse_progress_streams(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, base_de_datos, real_jobs
+    from repositorio import RepositorioDeUsuaria
+
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    conn = type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})()
+    monkeypatch.setattr(base_de_datos, "motor", lambda: type("M", (), {"begin": lambda self: conn})())
+    monkeypatch.setattr(RepositorioDeUsuaria, "obtener_perfil", lambda self: {"rol": "Dev", "stack": ["react"], "modalidad": ["remoto"], "ubicacion": "Madrid", "salario_min": 50000})
+    monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", lambda **kw: {"ok": True, "ofertas": [], "total_encontradas": 0, "total_filtradas": 0})
+
+    client = TestClient(api.app)
+    r = client.get("/buscar-para-usuaria/progress?usuario_id=u1")
+    assert r.status_code == 200
+    assert "text/event-stream" in r.headers.get("content-type", "")

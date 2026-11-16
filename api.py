@@ -8,7 +8,7 @@ import hashlib
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 import server
@@ -473,6 +473,50 @@ def borrar_cuenta(user=Depends(get_current_user)):
     if not ok:
         raise HTTPException(status_code=404, detail="no encontrado")
     return ""
+
+
+@app.get("/buscar-para-usuaria/progress")
+async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: int = 5):
+    """SSE: emite progreso de la búsqueda en tiempo real."""
+    import asyncio, json, threading
+
+    queue = asyncio.Queue()
+
+    def progress_cb(event):
+        queue.put_nowait(event)
+
+    def worker():
+        try:
+            import base_de_datos, real_jobs
+            from repositorio import RepositorioDeUsuaria
+            if not base_de_datos.configurada():
+                queue.put_nowait({"stage": "error", "detail": "BD no configurada"})
+                return
+            with base_de_datos.motor().begin() as conexion:
+                repo = RepositorioDeUsuaria(conexion, usuario_id)
+                perfil = repo.obtener_perfil()
+            if perfil is None:
+                queue.put_nowait({"stage": "error", "detail": "perfil no encontrado"})
+                return
+            resultado = real_jobs.buscar_ofertas_reales(perfil=perfil, top_n=top_n, progress_cb=progress_cb)
+            queue.put_nowait({"stage": "done", "summary": {"ok": resultado.get("ok"), "creadas": len(resultado.get("ofertas", []))}})
+        except Exception as e:
+            queue.put_nowait({"stage": "error", "detail": str(e)})
+        finally:
+            queue.put_nowait(None)
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+
+    async def event_stream():
+        while True:
+            event = await queue.get()
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+            await asyncio.sleep(0)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 @app.get("/health")
 def health():

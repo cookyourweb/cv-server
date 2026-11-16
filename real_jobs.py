@@ -669,6 +669,7 @@ def buscar_ofertas_reales(
     top_n: int = 5,
     api_key: str = None,
     model: str = None,
+    progress_cb=None,
 ) -> dict:
     """
     Pipeline completo: buscar → dedup → filtrar stack → filtrar modalidad → rankear.
@@ -706,8 +707,11 @@ def buscar_ofertas_reales(
     # 1. Buscar en todas las fuentes disponibles
     ofertas_raw = []
     ofertas_raw.extend(buscar_remotive(rol=rol_busqueda, max_results=20))
+    if progress_cb: progress_cb({"stage": "searching", "source": "remotive", "count": len(ofertas_raw)})
     ofertas_raw.extend(buscar_tecnoempleo(rol=rol_busqueda, max_results=20))
+    if progress_cb: progress_cb({"stage": "searching", "source": "tecnoempleo", "count": len(ofertas_raw)})
     ofertas_raw.extend(buscar_google_jobs(rol=rol_busqueda, max_results=20))
+    if progress_cb: progress_cb({"stage": "searching", "source": "google_jobs", "count": len(ofertas_raw)})
 
     if not ofertas_raw:
         return {
@@ -721,15 +725,18 @@ def buscar_ofertas_reales(
     # 2. Deduplicar
     unicas = deduplicar(ofertas_raw)
     total_encontradas = len(ofertas_raw)
+    if progress_cb: progress_cb({"stage": "dedup", "count": len(unicas)})
 
     # 3. Prefiltro de stack (+ keyword IA)
     filtradas = filtrar_por_perfil(unicas, stack_usuario=stack, min_matches_stack=1)
+    if progress_cb: progress_cb({"stage": "filtering", "count": len(filtradas)})
 
     if not filtradas:
         logger.info("Sin matches de stack — usando ofertas sin filtrar")
         filtradas = unicas
 
     # 4. Filtro por modalidad / region / evitar
+    if progress_cb: progress_cb({"stage": "modalidad", "count": len(filtradas)})
     filtradas = filtrar_por_modalidad(
         filtradas,
         modalidad_usuario=modalidad,
@@ -744,6 +751,7 @@ def buscar_ofertas_reales(
         filtradas = unicas
 
     # 5. Rankear con LLM
+    if progress_cb: progress_cb({"stage": "ranking"})
     top = rankear_con_groq(
         filtradas,
         perfil_usuario=perfil_dict if perfil_dict else None,
