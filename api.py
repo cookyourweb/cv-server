@@ -19,7 +19,7 @@ import notion
 import real_jobs
 import base_de_datos
 import time
-from repositorio import RepositorioDeUsuaria, PerfilEntrada
+from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada
 import base_de_datos
 from server import CVError, generar_cv_core, generar_carta_core
 
@@ -132,7 +132,7 @@ def estado_clave_api(proveedor: str = "anthropic", user=Depends(get_current_user
     if proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
-    from repositorio import RepositorioDeUsuaria, PerfilEntrada
+    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         return {
@@ -147,7 +147,7 @@ def guardar_clave_api(req: ClaveApiRequest, user=Depends(get_current_user)):
     if req.proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
-    from repositorio import RepositorioDeUsuaria, PerfilEntrada
+    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         try:
@@ -162,7 +162,7 @@ def borrar_clave_api(proveedor: str, user=Depends(get_current_user)):
     if proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
-    from repositorio import RepositorioDeUsuaria, PerfilEntrada
+    from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         repo.borrar_clave_api(proveedor)
@@ -414,6 +414,32 @@ def guardar_perfil(perfil: PerfilEntrada, user=Depends(get_current_user)):
         repo = RepositorioDeUsuaria(conexion, usuario_id)
         repo.guardar_perfil(perfil)
         return repo.obtener_perfil()
+
+
+@app.post("/consentimientos", status_code=201)
+def registrar_consentimiento(consentimiento: ConsentimientoEntrada, user=Depends(get_current_user)):
+    identidad, usuario_id = user
+    if usuario_id is None:
+        raise HTTPException(status_code=403, detail="acceso no permitido")
+    from repositorio import RepositorioDeUsuaria
+    with base_de_datos.transaccion() as conexion:
+        repo = RepositorioDeUsuaria(conexion, usuario_id)
+        repo.registrar_consentimiento(consentimiento.tipo, consentimiento.version)
+    return {"tipo": consentimiento.tipo, "version": consentimiento.version}
+
+
+@app.delete("/consentimientos/{tipo}")
+def revocar_consentimiento(tipo: str, user=Depends(get_current_user)):
+    if tipo not in ("almacenar_cv", "enviar_cv_a_ia"):
+        raise HTTPException(status_code=422, detail="datos no validos")
+    identidad, usuario_id = user
+    if usuario_id is None:
+        raise HTTPException(status_code=403, detail="acceso no permitido")
+    from repositorio import RepositorioDeUsuaria
+    with base_de_datos.transaccion() as conexion:
+        repo = RepositorioDeUsuaria(conexion, usuario_id)
+        repo.revocar_consentimiento(tipo)
+    return "", 204
 
 @app.get("/health")
 def health():

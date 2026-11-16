@@ -265,3 +265,34 @@ def test_perfil_get_ok(monkeypatch):
     r = client.get("/perfil", headers={"Authorization": "Bearer fake"})
     assert r.status_code == 200
     assert r.json()["rol"] == "Dev"
+
+
+def test_consentimientos_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/consentimientos", json={"tipo": "almacenar_cv", "version": "v2"})
+    assert r.status_code == 401
+
+
+def test_consentimientos_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})())
+    import usuarias
+    monkeypatch.setattr(usuarias, "resolver_o_crear", lambda identidad, conexion=None, respaldo=frozenset(): "uid-test")
+    monkeypatch.setattr(RepositorioDeUsuaria, "registrar_consentimiento", lambda self, tipo, version: None)
+
+    client = TestClient(api.app)
+    r = client.post("/consentimientos", json={"tipo": "almacenar_cv", "version": "v2"}, headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 201
