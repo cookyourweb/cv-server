@@ -1464,6 +1464,7 @@ def buscar_para_usuaria():
     if not usuario_id:
         return jsonify({"ok": False, "error": "usuario_id requerido"}), 400
 
+    email = (datos.get("email") or "").strip().lower()
     inicio = time.monotonic()
 
     import base_de_datos
@@ -1516,7 +1517,6 @@ def buscar_para_usuaria():
         resultado = {"ok": False, "ofertas": [], "total_encontradas": 0, "total_filtradas": 0}
 
     # T6: persistir ofertas en Notion vinculadas a la usuaria.
-    email = (datos.get("email") or "").strip().lower()
     usuario_notion_id = ""
     if email:
         u = buscar_usuario_por_email(email)
