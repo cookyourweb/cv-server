@@ -17,6 +17,9 @@ import puntuacion
 import notion
 import real_jobs
 import base_de_datos
+import time
+from repositorio import RepositorioDeUsuaria
+import base_de_datos
 from server import CVError, generar_cv_core, generar_carta_core
 
 app = FastAPI(title="cv-server API", version="0.1.0")
@@ -256,6 +259,80 @@ def crear_oferta(req: CrearOfertaRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"ok": True, "notion_page_id": page.get("id", ""), "idioma": idioma}
+
+
+class BuscarParaUsuariaRequest(BaseModel):
+    usuario_id: str = Field(min_length=1)
+    email: str = ""
+    top_n: int = 5
+
+
+@app.post("/buscar-para-usuaria", dependencies=[Depends(requiere_clave_maquina)])
+def buscar_para_usuaria(req: BuscarParaUsuariaRequest):
+    if not base_de_datos.configurada():
+        raise HTTPException(status_code=503, detail="BD no configurada")
+    inicio = time.monotonic()
+    usuario_id = req.usuario_id
+    email = req.email.strip().lower() if req.email else ""
+    try:
+        with base_de_datos.motor().begin() as conexion:
+            repo = RepositorioDeUsuaria(conexion, usuario_id)
+            perfil = repo.obtener_perfil()
+    except Exception:
+        raise HTTPException(status_code=503, detail="BD no disponible")
+    if perfil is None and email:
+        try:
+            with base_de_datos.motor().begin() as conexion:
+                uid_interno = usuarias.id_por_emails([email], conexion)
+            if uid_interno and uid_interno != usuario_id:
+                usuario_id = uid_interno
+                with base_de_datos.motor().begin() as conexion:
+                    repo = RepositorioDeUsuaria(conexion, usuario_id)
+                    perfil = repo.obtener_perfil()
+        except Exception:
+            pass
+    if perfil is None:
+        raise HTTPException(status_code=404, detail="perfil no encontrado")
+
+    errores = []
+    try:
+        resultado = real_jobs.buscar_ofertas_reales(perfil=perfil, top_n=req.top_n)
+    except Exception as e:
+        errores.append(str(e))
+        resultado = {"ok": False, "ofertas": [], "total_encontradas": 0, "total_filtradas": 0}
+
+    usuario_notion_id = ""
+    if email:
+        u = server.buscar_usuario_por_email(email)
+        if u:
+            usuario_notion_id = u.get("notion_id", "")
+
+    ofertas_creadas = 0
+    notion_page_ids = []
+    for oferta in (resultado.get("ofertas") or []):
+        try:
+            idioma = server.idioma_de_oferta(oferta.get("puesto", ""), oferta.get("descripcion", ""), oferta.get("empresa", ""))
+            page = server.crear_oferta_en_notion(oferta, idioma, usuario_notion_id)
+            pid = page.get("id", "") if isinstance(page, dict) else ""
+            if pid:
+                notion_page_ids.append(pid)
+                oferta["notion_page_id"] = pid
+            ofertas_creadas += 1
+        except Exception as e:
+            errores.append(f"notion: {oferta.get('empresa','?')}/{oferta.get('puesto','?')}")
+
+    duracion_ms = int((time.monotonic() - inicio) * 1000)
+    return {
+        "ok": len(errores) == 0,
+        "usuario_id": usuario_id,
+        "ofertas_encontradas": resultado.get("total_encontradas", 0),
+        "ofertas_creadas": ofertas_creadas,
+        "notion_page_ids": notion_page_ids,
+        "ofertas_descartadas": max(0, resultado.get("total_encontradas", 0) - resultado.get("total_filtradas", 0)),
+        "errores": errores,
+        "duracion_ms": duracion_ms,
+        "ofertas": resultado.get("ofertas", []),
+    }
 
 @app.get("/health")
 def health():

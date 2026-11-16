@@ -154,3 +154,35 @@ def test_crear_oferta_ok(monkeypatch):
     r = client.post("/crear-oferta", json={"email": "a@b.com", "empresa": "X", "puesto": "Dev"}, headers={"X-Clave-Maquina": "test-clave"})
     assert r.status_code == 200
     assert r.json()["notion_page_id"] == "page123"
+
+
+def test_buscar_para_usuaria_requires_clave():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/buscar-para-usuaria", json={"usuario_id": "u1"})
+    assert r.status_code == 401
+
+
+def test_buscar_para_usuaria_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, base_de_datos, real_jobs, server, usuarias
+    from repositorio import RepositorioDeUsuaria
+
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+
+    class FakeConn:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(base_de_datos, "motor", lambda: type("M", (), {"begin": lambda self: FakeConn()})())
+    monkeypatch.setattr(RepositorioDeUsuaria, "obtener_perfil", lambda self: {"rol": "Dev", "stack": ["react"], "modalidad": ["remoto"], "ubicacion": "Madrid", "salario_min": 50000})
+    monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", lambda **kw: {"ok": True, "ofertas": [], "total_encontradas": 2, "total_filtradas": 1})
+    monkeypatch.setattr(server, "buscar_usuario_por_email", lambda email: {"notion_id": "n1"})
+    monkeypatch.setattr(server, "crear_oferta_en_notion", lambda oferta, idioma, uid: {"id": "p1"})
+    monkeypatch.setattr(server, "idioma_de_oferta", lambda *a, **k: "es")
+
+    client = TestClient(api.app)
+    r = client.post("/buscar-para-usuaria", json={"usuario_id": "u1", "email": "a@b.com", "top_n": 3}, headers={"X-Clave-Maquina": "test-clave"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
