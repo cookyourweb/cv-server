@@ -116,3 +116,21 @@ def test_usuarios_ok(monkeypatch):
     r = client.get("/usuarios", headers={"X-Clave-Maquina": "test-clave"})
     assert r.status_code == 200
     assert r.json()["total"] == 1
+
+
+def test_buscar_ofertas_reales_requires_clave():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/buscar-ofertas-reales", json={"rol": "frontend"})
+    assert r.status_code == 401
+
+
+def test_buscar_ofertas_reales_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, real_jobs
+    monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", lambda **kw: {"ok": True, "ofertas": [], "total_encontradas": 0, "total_filtradas": 0})
+    client = TestClient(api.app)
+    r = client.post("/buscar-ofertas-reales", json={"rol": "frontend"}, headers={"X-Clave-Maquina": "test-clave"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True

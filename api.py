@@ -15,6 +15,7 @@ import server
 import usuarias
 import puntuacion
 import notion
+import real_jobs
 import base_de_datos
 from server import CVError, generar_cv_core, generar_carta_core
 
@@ -201,6 +202,27 @@ def usuarios(formato: str = None):
             "activo": props.get("Activo", {}).get("checkbox", False),
         })
     return {"ok": True, "usuarios": usuarios_list, "total": len(usuarios_list)}
+
+
+class BuscarOfertasRequest(BaseModel):
+    perfil: str = ""
+    rol: str = ""
+    stack: list = []
+    salario_min: int = 0
+    modalidad: list = []
+    ciudad: str = ""
+    top_n: int = 5
+
+
+@app.post("/buscar-ofertas-reales", dependencies=[Depends(requiere_clave_maquina)])
+def buscar_ofertas_reales(req: BuscarOfertasRequest):
+    try:
+        return real_jobs.buscar_ofertas_reales(
+            perfil=req.perfil, rol=req.rol, stack=req.stack,
+            salario_min=req.salario_min, modalidad=req.modalidad,
+            ciudad=req.ciudad, top_n=req.top_n)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 def health():
