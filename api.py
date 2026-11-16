@@ -91,14 +91,28 @@ def requiere_clave_maquina(x_clave_maquina: str = Header(default="")):
         raise HTTPException(status_code=401, detail="no autorizado")
 
 
+def _autorizar_invitada(identidad):
+    """Callback de invitacion: usa la BD si esta configurada, si no la lista de config."""
+    if not base_de_datos.configurada():
+        return identidad.email.strip().lower() in (server.CONFIG_OIDC.invitadas or set())
+    try:
+        with base_de_datos.transaccion() as conexion:
+            uid = usuarias.id_por_emails([identidad.email], conexion)
+            if uid is not None:
+                return True
+            # sin fila en Neon: solo si esta en la lista heredada
+            return identidad.email.strip().lower() in (server.CONFIG_OIDC.invitadas or set())
+    except Exception:
+        return False
+
+
 def get_current_user(authorization: str = Header(default="")):
     """Resuelve la identidad y el usuario_id de Neon a partir del token de Google."""
     try:
         identidad = server.identificar(authorization, server.CONFIG_OIDC, server.CLAVES,
-                                     autorizar=lambda id_: True)  # invitadas por lista en config
+                                     autorizar=_autorizar_invitada)
     except (server.ErrorDeAutenticacion, server.NoInvitada, server.ProveedorNoDisponible) as e:
         raise HTTPException(status_code=401, detail=str(e))
-    # resolver en Neon (si hay BD)
     usuario_id = None
     if base_de_datos.configurada():
         try:
@@ -107,7 +121,8 @@ def get_current_user(authorization: str = Header(default="")):
         except Exception:
             usuario_id = None
     if usuario_id is None:
-        raise HTTPException(status_code=403, detail="acceso no permitido")
+        # modo heredado sin BD: None permitido para rutas que no requieren Neon
+        pass
     return identidad, usuario_id
 
 
