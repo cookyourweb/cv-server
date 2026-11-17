@@ -143,6 +143,8 @@ def estado_clave_api(proveedor: str = "anthropic", user=Depends(get_current_user
     if proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
+    if usuario_id is None:
+        raise HTTPException(status_code=401, detail="usuario no registrado en la base de datos")
     from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada, InteresEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)
@@ -158,6 +160,8 @@ def guardar_clave_api(req: ClaveApiRequest, user=Depends(get_current_user)):
     if req.proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
+    if usuario_id is None:
+        raise HTTPException(status_code=401, detail="usuario no registrado en la base de datos")
     from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada, InteresEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)
@@ -173,6 +177,8 @@ def borrar_clave_api(proveedor: str, user=Depends(get_current_user)):
     if proveedor not in {"anthropic", "groq"}:
         raise HTTPException(status_code=422, detail="proveedor no válido")
     identidad, usuario_id = user
+    if usuario_id is None:
+        raise HTTPException(status_code=401, detail="usuario no registrado en la base de datos")
     from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada, InteresEntrada
     with base_de_datos.transaccion() as conexion:
         repo = RepositorioDeUsuaria(conexion, usuario_id)

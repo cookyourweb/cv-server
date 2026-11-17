@@ -577,3 +577,18 @@ def test_sse_progress_emits_events_in_order_threadsafe(monkeypatch):
     lines = [l for l in r.text.splitlines() if l.startswith("data:")]
     stages = [json.loads(l[len("data:"):].strip())["stage"] for l in lines]
     assert stages == ["searching", "filtering", "ranking", "done"]
+
+
+def test_health_parity_with_flask():
+    from fastapi.testclient import TestClient
+    import api
+
+    client = TestClient(api.app)
+    r = client.get("/health")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["ok"] is True
+    assert datos["status"] == "ok"
+    assert "modelos" in datos
+    assert "fallbacks" in datos
+    assert "deploy" in datos
