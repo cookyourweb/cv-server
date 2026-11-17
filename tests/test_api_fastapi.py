@@ -8,11 +8,25 @@ from fastapi.testclient import TestClient
 import api
 
 
-def test_health():
+def test_cv_master_check_shape():
     client = TestClient(api.app)
-    r = client.get("/health")
+    r = client.post(
+        "/cv-master/check",
+        headers={"X-Clave-Maquina": "test-clave"},
+        json={"markdown": "# Experiencia\nDev 2020-2022\n\n# Skills\nPython\n\n# Educacion\nGrado"},
+    )
     assert r.status_code == 200
-    assert r.json()["ok"] is True
+    datos = r.json()
+    assert datos["ok"] is True
+    analisis = datos["analisis"]
+    assert set(analisis) >= {"status", "findings", "proposals", "hash_cv"}
+    assert analisis["status"] in {"ok", "warning", "insufficient-content"}
+
+
+def test_clave_api_requires_auth():
+    client = TestClient(api.app)
+    r = client.get("/clave-api")
+    assert r.status_code in (401, 503)
 
 
 def test_cv_master_check_requires_clave():

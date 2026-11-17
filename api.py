@@ -8,6 +8,8 @@ Coexiste con Flask; se migra endpoint por endpoint. Servir con:  uvicorn api:app
 """
 import hmac
 import hashlib
+import os
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +41,7 @@ if "http://127.0.0.1:4200" not in _ORIGENES:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ORIGENES,
+    allow_origin_regex=r"https://panel-empleo-[A-Za-z0-9-]+-cookyourwebs-projects\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -531,7 +534,25 @@ async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "cv-server", "framework": "fastapi"}
+    return {
+        "ok": True,
+        "status": "ok",
+        "version": "v2.4",
+        "modelos": {
+            "cv": server.CV_MODEL,
+            "carta": server.CARTA_MODEL,
+            "fallback": server.GROQ_MODEL,
+        },
+        "fallbacks": {
+            "gemini": bool(server.GEMINI_API_KEY),
+            "claude": bool(server.CLAUDE_API_KEY),
+        },
+        "deploy": {
+            "branch": os.environ.get("RENDER_GIT_BRANCH", "local"),
+            "commit": (os.environ.get("RENDER_GIT_COMMIT", "") or "")[:7],
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.post("/cv-master/check", dependencies=[Depends(requiere_clave_maquina)])
