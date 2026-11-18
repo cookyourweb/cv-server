@@ -15,6 +15,8 @@ alembic==1.20.0
 pypdf==6.20.0
 fastapi==0.115.6
 uvicorn==0.34.0
+# FastAPI lo exige para UploadFile/Form: sin esto la app no arranca.
+python-multipart==0.0.34
 # dev / test
 pytest==8.3.4
 httpx==0.28.1

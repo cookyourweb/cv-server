@@ -1,0 +1,23 @@
+# Contexto de build: todo lo que no hace falta en la imagen.
+# Regla: si no se importa en runtime, fuera. Y ningún secreto entra jamás.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+
+# Git, docs, tests y artefactos
+.git/
+.gitignore
+docs/
+tests/
+evals/
+*.md
+*.sqlite
+*.db
+*.log
+.DS_Store
