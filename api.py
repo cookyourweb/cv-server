@@ -245,7 +245,8 @@ def usuarios(formato: str = None):
     try:
         results = notion.paginas_usuarios_activos()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging; logging.getLogger(__name__).warning("usuarios: error %s", type(e).__name__)
+        raise HTTPException(status_code=500, detail="servicio no disponible")
     if formato == "notion":
         return {"ok": True, "results": results}
     usuarios_list = []
@@ -278,7 +279,8 @@ def buscar_ofertas_reales(req: BuscarOfertasRequest):
             salario_min=req.salario_min, modalidad=req.modalidad,
             ciudad=req.ciudad, top_n=req.top_n)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import logging; logging.getLogger(__name__).warning("buscar_ofertas_reales: error %s", type(e).__name__)
+        raise HTTPException(status_code=500, detail="servicio no disponible")
 
 
 class CrearOfertaRequest(BaseModel):
@@ -310,7 +312,8 @@ def crear_oferta(req: CrearOfertaRequest):
     try:
         page = server.crear_oferta_en_notion(oferta, idioma, usuario_notion_id)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        import logging; logging.getLogger(__name__).warning("crear_oferta: error %s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="servicio no disponible")
     return {"ok": True, "notion_page_id": page.get("id", ""), "idioma": idioma}
 
 
@@ -569,7 +572,7 @@ async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: 
             resultado = real_jobs.buscar_ofertas_reales(perfil=perfil, top_n=top_n, progress_cb=progress_cb)
             enqueue({"stage": "done", "summary": {"ok": resultado.get("ok"), "creadas": len(resultado.get("ofertas", []))}})
         except Exception as e:
-            enqueue({"stage": "error", "detail": str(e)})
+            enqueue({"stage": "error", "detail": "error interno"})
         finally:
             enqueue(None)
 
@@ -706,20 +709,29 @@ def resumen_pendientes():
 
 @app.post("/rag/preguntar")
 def rag_preguntar(req: RagPregunta, user=Depends(get_current_user)):
-    """RAG con citas sobre el CV master de la usuaria. Delega en rag.py."""
-    _identidad, usuario_id = user
-    usuario = server.buscar_usuario_por_email(req.email)
+    """RAG con citas sobre el CV master de la usuaria. Delega en rag.py.
+
+    La identidad del token es la fuente de verdad para el email (anti-IDOR):
+    se ignora req.email si no coincide.
+    """
+    identidad, usuario_id = user
+    email = (identidad.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=401, detail="no autorizado")
+    if req.email and req.email.strip().lower() != email:
+        raise HTTPException(status_code=403, detail="no autorizado")
+    usuario = server.buscar_usuario_por_email(email)
     if not usuario:
         raise HTTPException(status_code=404, detail="usuario no encontrado")
     try:
-        master = server._resolver_master(usuario, req.idioma, req.email)
+        master = server._resolver_master(usuario, req.idioma, email)
         cv_texto = master.texto
     except Exception:
         cv_texto = ""
     if not cv_texto:
         raise HTTPException(status_code=404, detail="no hay CV master")
     try:
-        return rag.preguntar_cv(req.email, req.pregunta, cv_texto)
+        return rag.preguntar_cv(email, req.pregunta, cv_texto)
     except CVError as e:
         raise HTTPException(status_code=e.status, detail=e.message)
 
