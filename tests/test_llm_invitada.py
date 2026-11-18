@@ -124,3 +124,17 @@ def test_the_extraction_chain_is_unchanged_and_keeps_its_own_cap(http):
     assert r.contenido == "de claude"
     assert AnthropicFalso.llamadas[0]["max_tokens"] == llm.TOKENS_SALIDA_EXTRACCION == 1200
     assert AnthropicFalso.construidos[0]["api_key"] == CLAVE_ALTA
+
+
+def test_con_clave_propia_si_claude_falla_no_hay_fallback_a_groq(http):
+    AnthropicFalso.error = RuntimeError("claude caido")
+    with pytest.raises(RuntimeError, match="La clave propia no es válida"):
+        llm.call_llm_invitada("prompt", model="modelo-cv", max_tokens=4096, api_key="sk-ant-propia")
+    assert http == []  # Groq no se llamó
+
+
+def test_con_clave_propia_si_claude_ok_usa_la_clave_propia(http):
+    r = llm.call_llm_invitada("prompt", model="modelo-cv", max_tokens=4096, api_key="sk-ant-propia")
+    assert r.contenido == "de claude"
+    (construido,) = AnthropicFalso.construidos
+    assert construido["api_key"] == "sk-ant-propia"

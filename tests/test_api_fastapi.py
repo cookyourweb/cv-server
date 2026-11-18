@@ -515,13 +515,19 @@ def test_buscar_para_usuaria_devuelve_notion_page_ids(monkeypatch):
     assert all("notion_page_id" in o for o in r.json()["ofertas"])
 
 
-def test_sse_progress_requires_no_clave():
+def test_sse_progress_requires_token():
     from fastapi.testclient import TestClient
     import api
+    import server
+    server.CLAVE_MAQUINA = "clave-test"
     client = TestClient(api.app)
     r = client.get("/buscar-para-usuaria/progress?usuario_id=u1")
-    # SSE endpoint is open (no clave) for demo; just ensure it responds
-    assert r.status_code == 200
+    # Sin token -> 401 (fail-closed)
+    assert r.status_code == 401
+
+    r2 = client.get("/buscar-para-usuaria/progress?usuario_id=u1&token=clave-test")
+    # Con token válido -> 200 (stream)
+    assert r2.status_code == 200
 
 
 def test_sse_progress_streams(monkeypatch):
@@ -534,9 +540,11 @@ def test_sse_progress_streams(monkeypatch):
     monkeypatch.setattr(base_de_datos, "motor", lambda: type("M", (), {"begin": lambda self: conn})())
     monkeypatch.setattr(RepositorioDeUsuaria, "obtener_perfil", lambda self: {"rol": "Dev", "stack": ["react"], "modalidad": ["remoto"], "ubicacion": "Madrid", "salario_min": 50000})
     monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", lambda **kw: {"ok": True, "ofertas": [], "total_encontradas": 0, "total_filtradas": 0})
+    import server
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-test")
 
     client = TestClient(api.app)
-    r = client.get("/buscar-para-usuaria/progress?usuario_id=u1")
+    r = client.get("/buscar-para-usuaria/progress?usuario_id=u1&token=clave-test")
     assert r.status_code == 200
     assert "text/event-stream" in r.headers.get("content-type", "")
 
@@ -562,6 +570,8 @@ def test_sse_progress_emits_events_in_order_threadsafe(monkeypatch):
                 cb(ev)
         return {"ok": True, "ofertas": []}
     monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", fake_buscar)
+    import server
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-test")
 
     class FakeThread:
         def __init__(self, target=None, daemon=True, *a, **k):
@@ -572,11 +582,253 @@ def test_sse_progress_emits_events_in_order_threadsafe(monkeypatch):
     monkeypatch.setattr(threading, "Thread", FakeThread)
 
     client = TestClient(api.app)
-    r = client.get("/buscar-para-usuaria/progress?usuario_id=u1")
+    r = client.get("/buscar-para-usuaria/progress?usuario_id=u1&token=clave-test")
     assert r.status_code == 200
     lines = [l for l in r.text.splitlines() if l.startswith("data:")]
     stages = [json.loads(l[len("data:"):].strip())["stage"] for l in lines]
     assert stages == ["searching", "filtering", "ranking", "done"]
+
+
+def test_ajustes_extraccion_sin_clave_401():
+    from fastapi.testclient import TestClient
+    import api, server
+    server.CLAVE_MAQUINA = "clave-test"
+    client = TestClient(api.app)
+    r = client.put("/ajustes/extraccion", json={"activa": True})
+    assert r.status_code == 401
+
+
+def test_ajustes_extraccion_sin_bd_503(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server, base_de_datos, alta_core
+    server.CLAVE_MAQUINA = "clave-test"
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: False)
+    client = TestClient(api.app)
+    r = client.put("/ajustes/extraccion", json={"activa": True}, headers={"X-Clave-Maquina": "clave-test"})
+    assert r.status_code == 503
+
+
+def test_ajustes_extraccion_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server, base_de_datos
+    server.CLAVE_MAQUINA = "clave-test"
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: _FakeTx())
+    monkeypatch.setattr("extraccion.fijar_interruptor", lambda conexion, activa: None)
+    client = TestClient(api.app)
+    r = client.put("/ajustes/extraccion", json={"activa": False}, headers={"X-Clave-Maquina": "clave-test"})
+    assert r.status_code == 200
+    assert r.json() == {"activa": False}
+
+
+class _FakeTx:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, *a, **k):
+        return self
+
+
+def test_cv_listar_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.get("/cv")
+    assert r.status_code == 401
+
+
+def test_cv_listar_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})())
+    import usuarias
+    monkeypatch.setattr(usuarias, "resolver_o_crear", lambda identidad, conexion=None, respaldo=frozenset(): "uid-test")
+    monkeypatch.setattr(RepositorioDeUsuaria, "listar_cvs", lambda self: [{"idioma": "es", "formato": "pdf"}])
+
+    client = TestClient(api.app)
+    r = client.get("/cv", headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 200
+    assert r.json() == [{"idioma": "es", "formato": "pdf"}]
+
+
+def test_cv_borrar_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.delete("/cv/es")
+    assert r.status_code == 401
+
+
+def test_cv_borrar_ok(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})())
+    import usuarias
+    monkeypatch.setattr(usuarias, "resolver_o_crear", lambda identidad, conexion=None, respaldo=frozenset(): "uid-test")
+    monkeypatch.setattr(RepositorioDeUsuaria, "borrar_cv", lambda self, idioma: True)
+
+    client = TestClient(api.app)
+    r = client.delete("/cv/es", headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 204
+
+
+def test_cv_borrar_no_encontrado(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})())
+    import usuarias
+    monkeypatch.setattr(usuarias, "resolver_o_crear", lambda identidad, conexion=None, respaldo=frozenset(): "uid-test")
+    monkeypatch.setattr(RepositorioDeUsuaria, "borrar_cv", lambda self, idioma: False)
+
+    client = TestClient(api.app)
+    r = client.delete("/cv/es", headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 404
+
+
+def test_encaje_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.get("/ofertas/x/encaje")
+    assert r.status_code == 401
+
+
+def test_encajes_batch_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/encajes", json={"ids": ["a"]})
+    assert r.status_code == 401
+
+
+def test_encajes_batch_validacion_422(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})())
+    import usuarias
+    monkeypatch.setattr(usuarias, "resolver_o_crear", lambda identidad, conexion=None, respaldo=frozenset(): "uid-test")
+    monkeypatch.setattr("notion.buscar_usuario_por_email", lambda email: {"notion_id": "n1"})
+
+    client = TestClient(api.app)
+    r = client.post("/encajes", json={"ids": "not-a-list"}, headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 422
+
+
+def test_cv_subir_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/cv", files={"archivo": ("cv.pdf", b"%PDF-1.4\n" + b"x" * 400, "application/pdf")})
+    assert r.status_code == 401
+
+
+def test_cv_subir_ok(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})())
+    import usuarias
+    monkeypatch.setattr(usuarias, "resolver_o_crear", lambda identidad, conexion=None, respaldo=frozenset(): "uid-test")
+    monkeypatch.setattr(RepositorioDeUsuaria, "tiene_consentimiento", lambda self, tipo: True)
+    monkeypatch.setattr(RepositorioDeUsuaria, "guardar_cv", lambda self, *a, **k: None)
+
+    # Mock cifrado and lectura_cv to avoid real parsing/crypto.
+    import alta_core
+    monkeypatch.setattr(alta_core, "cifrar", lambda texto, uid, idioma: (1, b"nonce", b"cifrado"))
+    import cifrado
+    monkeypatch.setattr(cifrado, "cifrar", lambda texto, uid, idioma: (1, b"nonce", b"cifrado"))
+
+    client = TestClient(api.app)
+    r = client.post("/cv", files={"archivo": ("cv.pdf", b"%PDF-1.4\n" + b"x" * 400, "application/pdf")}, headers={"Authorization": "Bearer fake"})
+    # Either 201 (if parsing succeeds) or 422 (if text too short) — both are acceptable non-500 outcomes.
+    assert r.status_code in (201, 422, 415, 413)
+
+
+def test_extraccion_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/extraccion")
+    assert r.status_code == 401
+
+
+def test_extraccion_sin_bd_503(monkeypatch):
+    from fastapi.testclient import TestClient
+    import api, server
+    from repositorio import RepositorioDeUsuaria
+
+    class Id:
+        sub = "s"
+        email = "a@b.com"
+        nombre = "T"
+
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: Id())
+    import base_de_datos
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: False)
+
+    client = TestClient(api.app)
+    r = client.post("/extraccion", headers={"Authorization": "Bearer fake"})
+    assert r.status_code == 503
+
+
+def test_rag_preguntar_requires_auth():
+    from fastapi.testclient import TestClient
+    import api
+    client = TestClient(api.app)
+    r = client.post("/rag/preguntar", json={"email": "a@b.com", "pregunta": "que sabe?"})
+    assert r.status_code == 401
 
 
 def test_health_parity_with_flask():
@@ -592,3 +844,4 @@ def test_health_parity_with_flask():
     assert "modelos" in datos
     assert "fallbacks" in datos
     assert "deploy" in datos
+

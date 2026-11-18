@@ -114,18 +114,8 @@ if _faltan:
 app = Flask(__name__)
 
 
-class CVError(Exception):
-    """Error de negocio del cv-server: status HTTP + mensaje.
-
-    El core (generar_cv_core, ...) la lanza; cada capa HTTP (Flask/FastAPI)
-    la mapea a su formato de respuesta. Ver docs/ADR-001."""
-
-    def __init__(self, status: int, message: str, extra: dict | None = None):
-        super().__init__(message)
-        self.status = status
-        self.message = message
-        # Extra fields of the JSON body (e.g. `motivo`, `se_renueva` of a quota refusal).
-        self.extra = extra or {}
+# CVError vive en errores.py (sin deps de framework); se reexporta para compat.
+from errores import CVError
 
 
 # ══════════════════════════════════════════════

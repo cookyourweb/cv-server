@@ -404,51 +404,6 @@ def call_llm_extraccion(prompt: str, model: str = CV_MODEL) -> RespuestaLLM:
     return respuesta
 
 
-# ── Capa INVITADAS: el CV y la carta de una usuaria con cuenta en la base de datos ──
-# El mismo texto de consentimiento (`enviar_cv_a_ia`) cubre la generacion, y nombra SOLO a
-# Anthropic y Groq. Por eso su CV nunca pasa por `call_llm_calidad` (cuyo fallback es la
-# cascada general: Groq, Gemini, Claude) ni por Gemini. A diferencia de la extraccion, aqui
-# se usa la clave general de Claude: `ANTHROPIC_CLAVE_ALTA` es solo del alta.
-def llamar_con_byok(decision: dict, prompt: str, *, model: str = CV_MODEL, max_tokens: int = 4096) -> RespuestaLLM:
-    """Ejecuta la generación según la decisión BYOK.
-
-    No inventa fallback: si la key es inválida, el error se propaga.
-    """
-    modo = (decision or {}).get("modo")
-    if not decision.get("permitido", False):
-        raise RuntimeError(decision.get("motivo") or "No autorizado para generar")
-    if modo == "key":
-        clave = decision.get("clave")
-        if not clave:
-            raise RuntimeError("La decisión BYOK no incluye clave")
-        return call_llm_invitada(prompt, model=model, max_tokens=max_tokens, api_key=clave)
-    if modo in {"trial", "legacy", "propietaria"}:
-        return call_llm_invitada(prompt, model=model, max_tokens=max_tokens)
-    raise RuntimeError(f"Modo BYOK no soportado: {modo}")
-    """Claude, luego Groq, y NADA mas. Para el CV y la carta de las usuarias invitadas.
-
-    `api_key` cubre Anthropic con la clave propia de la usuaria. Si no se pasa,
-    cae en CLAUDE_API_KEY del entorno solo para modo trial o legado.
-    """
-    try:
-        contenido = call_claude(prompt, model=model, max_tokens=max_tokens, api_key=api_key)
-        logger.info("LLM invitada: Claude OK (%s)", model)
-        return RespuestaLLM(
-            str(contenido), model,
-            getattr(contenido, "tokens_entrada", None),
-            getattr(contenido, "tokens_salida", None),
-        )
-    except (NameError, AttributeError, TypeError, ImportError):
-        raise  # bug nuestro, no una caida del proveedor: no se esconde tras el fallback
-    except Exception as e:
-        logger.warning("Invitada: Claude falló (%s) — pasando a Groq", describir_error(e))
-    try:
-        respuesta = _groq_con_tope(prompt, max_tokens)
-    except Exception as e:
-        logger.error("Invitada: Groq fallo (%s)", describir_error(e))
-        raise RuntimeError("Todos los LLMs fallaron. Revisa las API keys y el estado de los servicios.") from None
-    logger.info("LLM invitada: Groq OK (%s)", GROQ_MODEL)
-    return respuesta
 
 
 def call_llm_invitada(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096, api_key: str | None = None) -> RespuestaLLM:
@@ -468,7 +423,11 @@ def call_llm_invitada(prompt: str, model: str = CV_MODEL, max_tokens: int = 4096
     except (NameError, AttributeError, TypeError, ImportError):
         raise  # bug nuestro, no una caida del proveedor: no se esconde tras el fallback
     except Exception as e:
-        logger.warning("Invitada: Claude falló (%s) — pasando a Groq", describir_error(e))
+        if api_key is not None:
+            # Clave propia de la usuaria: sin fallback silencioso a Groq (Spec 005).
+            logger.warning("Invitada: Claude fallo con clave propia (%s) - sin fallback", describir_error(e))
+            raise RuntimeError("La clave propia no es válida o la llamada falló: " + describir_error(e)) from e
+        logger.warning("Invitada: Claude fallo (%s) - pasando a Groq", describir_error(e))
     try:
         respuesta = _groq_con_tope(prompt, max_tokens)
     except Exception as e:

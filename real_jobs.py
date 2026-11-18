@@ -193,6 +193,74 @@ KEYWORDS_IA = ("ai", "ml", "llm", "generative", "machine learning", "deep learni
                "nlp", "computer vision", "data science", "artificial intelligence")
 
 
+# Términos que suelen indicar spam / ofertas no reales (cursos, bootcamps, etc.).
+TAGS_SPAM = ("bootcamp", "curso", "course", "masterclass", "webinar", "tutorial",
+             "prácticas no remuneradas", "sin remunerar", "unpaid internship")
+
+
+def filtrar_spam(ofertas: list, tags_spam=None) -> list:
+    """Descarta ofertas cuyo texto contenga términos de spam (case-insensitive)."""
+    if tags_spam is None:
+        tags_spam = TAGS_SPAM
+    terminos = [t.strip().lower() for t in tags_spam if t and str(t).strip()]
+    if not terminos:
+        return list(ofertas)
+    salida = []
+    for oferta in ofertas:
+        texto = " ".join([
+            oferta.get("puesto", "") or "",
+            " ".join(oferta.get("tags", []) or []),
+            oferta.get("descripcion", "") or "",
+            oferta.get("empresa", "") or "",
+        ]).lower()
+        if any(t in texto for t in terminos):
+            continue
+        salida.append(oferta)
+    logger.info("Filtro spam: %d ofertas (de %d)", len(salida), len(ofertas))
+    return salida
+
+
+import re as _re
+
+
+def _salario_anual(salario: str) -> int | None:
+    """Extrae un salario anual aproximado de un texto libre. None si no es parseable."""
+    if not salario:
+        return None
+    texto = str(salario).lower().replace(" ", "")
+    # Detectar periodicidad mensual.
+    mensual = "mes" in texto or "month" in texto
+    # Buscar el primer número (con opcional 'k').
+    m = _re.search(r"(\d+(?:[.,]\d+)?)\s*k", texto)
+    if m:
+        valor = float(m.group(1).replace(",", "."))
+        anual = int(valor * 1000)
+        return anual * 12 if mensual else anual
+    m = _re.search(r"(\d{3,})", texto)
+    if m:
+        valor = float(m.group(1))
+        anual = int(valor)
+        return anual * 12 if mensual else anual
+    return None
+
+
+def filtrar_por_salario(ofertas: list, salario_min: int = 0) -> list:
+    """Descarta ofertas con salario parseable inferior a salario_min.
+
+    Las ofertas sin salario parseable se conservan (no se asume que no cumplen).
+    """
+    if not salario_min:
+        return list(ofertas)
+    salida = []
+    for oferta in ofertas:
+        anual = _salario_anual(oferta.get("salario", "") or "")
+        if anual is not None and anual < salario_min:
+            continue
+        salida.append(oferta)
+    logger.info("Filtro salario (min %s): %d ofertas (de %d)", salario_min, len(salida), len(ofertas))
+    return salida
+
+
 def tiene_keyword_ia(oferta: dict, keywords=None) -> bool:
     """True si la oferta menciona alguna keyword de IA en puesto/tags/descripcion."""
     if keywords is None:
@@ -727,6 +795,10 @@ def buscar_ofertas_reales(
     total_encontradas = len(ofertas_raw)
     if progress_cb: progress_cb({"stage": "dedup", "count": len(unicas)})
 
+    # 2b. Filtro de spam (cursos, bootcamps, etc.)
+    unicas = filtrar_spam(unicas)
+    if progress_cb: progress_cb({"stage": "spam", "count": len(unicas)})
+
     # 3. Prefiltro de stack (+ keyword IA)
     filtradas = filtrar_por_perfil(unicas, stack_usuario=stack, min_matches_stack=1)
     if progress_cb: progress_cb({"stage": "filtering", "count": len(filtradas)})
@@ -749,6 +821,14 @@ def buscar_ofertas_reales(
     if not filtradas:
         logger.info("Sin ofertas tras filtro de modalidad — usando deduplicadas")
         filtradas = unicas
+
+    # 4b. Filtro de salario mínimo (hard filter cuando el salario es parseable)
+    if salario_min:
+        filtradas = filtrar_por_salario(filtradas, salario_min=salario_min)
+        if progress_cb: progress_cb({"stage": "salario", "count": len(filtradas)})
+        if not filtradas:
+            logger.info("Sin ofertas tras filtro de salario — usando anteriores")
+            filtradas = unicas
 
     # 5. Rankear con LLM
     if progress_cb: progress_cb({"stage": "ranking"})

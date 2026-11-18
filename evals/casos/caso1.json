@@ -1,0 +1,17 @@
+{
+  "id": "caso1",
+  "descripcion": "Frontend Angular senior, oferta en inglés",
+  "perfil": "Vero, Tech Lead Frontend, 8 años, Angular/TypeScript/RxJS, Madrid",
+  "cv_master": "Vero Serna. Tech Lead en Acme (2020-2024). Frontend Developer en Beta (2016-2020). Stack: Angular, TypeScript, RxJS, Node.",
+  "oferta": {
+    "empresa": "Acme Corp",
+    "puesto": "Senior Frontend Engineer",
+    "descripcion": "We are looking for a senior frontend engineer with Angular and TypeScript experience. Remote, English required.",
+    "idioma": "en"
+  },
+  "restricciones": {
+    "idioma": "en",
+    "max_palabras_carta": 100,
+    "no_inventar_metricas": true
+  }
+}

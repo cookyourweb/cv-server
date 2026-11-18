@@ -1,0 +1,34 @@
+OUTPUT FORMAT (plain text, no markdown):
+
+HEADLINE: [professional title for this offer — see HEADLINE RULES below]
+
+PROFESSIONAL SUMMARY
+[ONE single paragraph, 3-4 lines, 70 words MAXIMUM. Hard limit: whoever screens reads the headline and these three lines, and the detail is already in EXPERIENCE below, so a long summary buries what matters instead of showing it. Generated from her REAL EXPERIENCE (never copied from PERFIL BASE). Keep the career arc: where she comes from, how she evolved, what defines her today, using EVOLUCIÓN PROFESIONAL from the master. Do NOT turn it into a list of tools. Write with NO GRAMMATICAL SUBJECT, standard English CV style: "Frontend Tech Lead with 10+ years...", "Led the migration...". NEVER "She is", "She brings", "Her career spans", and never "I am".]
+
+PROFESSIONAL EXPERIENCE
+[Role] — [Company]
+[Start date] - [End date]
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+- Real achievement from the CV master, XYZ formula, prioritised by relevance
+(6-9 bullets for recent/relevant roles, 3-4 for older ones — always real, never padded)
+
+TECHNICAL SKILLS
+[Skills grouped by category (Frontend, AI, Design Systems, Backend, Cloud, Testing...) with concrete tools/versions, ordered by relevance to this offer]
+
+EDUCATION
+[From the CV master]
+
+LANGUAGES
+[From the CV master]
+
+FINAL RULES:
+- First line MUST be "HEADLINE: ..." — it becomes the header title
+- Do NOT include name/email/phone, they are added programmatically
+- Do NOT use markdown (**text**, ##, ```)
+- Do NOT invent anything not in the CV master
+- EXPERIENCE reads as a career story told through ROLES: the job title opens every entry and the company follows it. A recruiter must be able to scan the left edge and see the progression (Tech Lead, then Front-End Developer, then Designer). Never lead with the company.
+- Language: the ENTIRE CV must be in English (section titles and content)

@@ -1,0 +1,17 @@
+{
+  "id": "caso2",
+  "descripcion": "Rol individual, oferta en español, sin lead",
+  "perfil": "Vero, Frontend Developer, 5 años, React/TypeScript, Madrid",
+  "cv_master": "Vero Serna. Frontend Developer en Beta (2019-2024). Stack: React, TypeScript, CSS.",
+  "oferta": {
+    "empresa": "Startup ES",
+    "puesto": "Frontend Developer",
+    "descripcion": "Buscamos frontend developer con React y TypeScript. Presencial Madrid.",
+    "idioma": "es"
+  },
+  "restricciones": {
+    "idioma": "es",
+    "max_palabras_carta": 100,
+    "no_liderazgo_si_no_lead": true
+  }
+}

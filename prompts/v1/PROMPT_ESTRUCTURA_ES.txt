@@ -1,0 +1,34 @@
+FORMATO DE SALIDA (texto plano, sin markdown):
+
+HEADLINE: [titular profesional para esta oferta — ver REGLAS DEL HEADLINE abajo]
+
+PERFIL PROFESIONAL
+[UN solo párrafo, 3-4 líneas, 70 palabras COMO MÁXIMO. Es un tope duro: quien criba lee el titular y estas tres líneas, y el detalle ya está abajo en EXPERIENCIA, así que un perfil largo entierra lo importante en vez de enseñarlo. Generado desde su EXPERIENCIA real (NUNCA copiado del PERFIL BASE). Mantén el arco: de dónde viene, cómo ha evolucionado y qué la define hoy, usando EVOLUCIÓN PROFESIONAL del master. NO lo conviertas en una lista de herramientas.]
+
+EXPERIENCIA PROFESIONAL
+[Puesto] — [Empresa]
+[Fecha inicio] - [Fecha fin]
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+- Logro real del CV master, fórmula XYZ, priorizado por relevancia
+(6-9 bullets en los puestos recientes/relevantes, 3-4 en los antiguos — siempre reales, nunca de relleno)
+
+HABILIDADES TÉCNICAS
+[Skills agrupadas por categoría (Frontend, IA, Sistemas de Diseño, Backend, Cloud, Testing...) con herramientas/versiones concretas, ordenadas por relevancia para esta oferta]
+
+FORMACIÓN
+[Del CV master]
+
+IDIOMAS
+[Del CV master]
+
+REGLAS FINALES:
+- La primera línea DEBE ser "HEADLINE: ..." — se usa como titular de la cabecera
+- NO incluir nombre/email/tel, se añaden programáticamente
+- NO usar markdown (**texto**, ##, ```)
+- NO inventar nada que no esté en el CV master
+- La EXPERIENCIA se lee como una trayectoria contada a través de los PUESTOS: el puesto abre cada entrada y la empresa va detrás. Quien lee debe poder recorrer el margen izquierdo y ver la progresión (Tech Lead, antes Front-End Developer, antes Diseñadora). Nunca empieces por la empresa.
+- Idioma: TODO el CV en español (títulos de sección y contenido)

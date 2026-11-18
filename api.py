@@ -11,7 +11,7 @@ import hashlib
 import os
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -22,14 +22,23 @@ import cuota
 from server import registrar_invitada
 import puntuacion
 import notion
+import notion_resumen
+import rag
 import real_jobs
 import base_de_datos
 import time
+import alta_core
+import encaje_core
 from repositorio import RepositorioDeUsuaria, PerfilEntrada, ConsentimientoEntrada, InteresEntrada
 import base_de_datos
 from server import CVError, generar_cv_core, generar_carta_core
 
 app = FastAPI(title="cv-server API", version="0.1.0")
+
+# Paridad con Flask: CVError -> {"ok": False, "error": ..., **extra} con el status del error.
+@app.exception_handler(CVError)
+async def _cv_error_handler(request, exc):
+    return JSONResponse(status_code=exc.status, content={"ok": False, "error": exc.message, **exc.extra})
 
 # CORS: replica de server.py (_RUTAS_CON_CORS). En FastAPI se aplica globalmente;
 # las rutas de máquina (n8n) no pasan por aquí porque no envían Origin.
@@ -56,6 +65,17 @@ class ClaveApiEstado(BaseModel):
     proveedor: str
     configurada: bool
     trial_restante: int
+
+class AjusteDeExtraccion(BaseModel):
+    activa: bool
+
+class EncajesRequest(BaseModel):
+    ids: list[str] = []
+
+class RagPregunta(BaseModel):
+    email: str = Field(min_length=1)
+    pregunta: str = Field(min_length=1)
+    idioma: str = "es"
 class GenerarCVRequest(BaseModel):
     email: str = Field(min_length=1)
     empresa: str = Field(min_length=1)
@@ -492,8 +512,36 @@ def borrar_cuenta(user=Depends(get_current_user)):
 
 
 @app.get("/buscar-para-usuaria/progress")
-async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: int = 5):
-    """SSE: emite progreso de la búsqueda en tiempo real."""
+async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: int = 5, token: str = ""):
+    """SSE: emite progreso de la búsqueda en tiempo real.
+
+    EventSource no puede enviar cabeceras, así que el token de máquina va en la URL
+    (?token=...). Se valida con comparación en tiempo constante (fail-closed).
+    """
+    import hmac
+    clave = server.CLAVE_MAQUINA
+    autorizado = bool(clave) and hmac.compare_digest(token.encode(), clave.encode())
+    # Opcion B: aceptar tambien un JWT de Google del panel (token en URL por EventSource).
+    if not autorizado and token:
+        try:
+            identidad = server.identificar(f"Bearer {token}", server.CONFIG_OIDC, server.CLAVES)
+            # El usuario_id del query debe coincidir con la identidad del token (evitar IDOR).
+            if (identidad.email or "").strip().lower() and usuario_id:
+                # Comparacion defensiva: el usuario_id es un UUID de Neon; el token da email.
+                # Aceptamos si el email del token esta registrado para ese usuario_id.
+                if base_de_datos.configurada():
+                    with base_de_datos.transaccion() as conexion:
+                        uid = usuarias.id_por_emails([identidad.email], conexion)
+                        if uid is not None and str(uid) == str(usuario_id):
+                            autorizado = True
+                else:
+                    # Modo heredado: aceptar si el email del token coincide con el param email.
+                    if email and identidad.email.strip().lower() == email.strip().lower():
+                        autorizado = True
+        except Exception:
+            autorizado = False
+    if not autorizado:
+        raise HTTPException(status_code=401, detail="no autorizado")
     import asyncio, json, threading
 
     loop = asyncio.get_running_loop()
@@ -636,3 +684,94 @@ def generar_carta(req: GenerarCartaRequest):
     except CVError as e:
         return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message, **e.extra})
     return result
+
+
+@app.get("/resumen-pendientes", dependencies=[Depends(requiere_clave_maquina)])
+def resumen_pendientes():
+    """Resumen operativo (solo lectura) de las ofertas en estado 'Pendiente' del CRM de Notion.
+
+    Devuelve Markdown legible + total + número de incompletas. No modifica Notion.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        ofertas = notion_resumen.listar_ofertas_pendientes()
+    except Exception as e:
+        log.warning("resumen_pendientes: Notion falló: %s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="No se pudo leer Notion")
+    markdown = notion_resumen.resumen_pendientes_markdown(ofertas)
+    incompletas = sum(1 for o in ofertas if notion_resumen.es_incompleta(o))
+    return {"ok": True, "markdown": markdown, "total": len(ofertas), "incompletas": incompletas}
+
+
+@app.post("/rag/preguntar")
+def rag_preguntar(req: RagPregunta, user=Depends(get_current_user)):
+    """RAG con citas sobre el CV master de la usuaria. Delega en rag.py."""
+    _identidad, usuario_id = user
+    usuario = server.buscar_usuario_por_email(req.email)
+    if not usuario:
+        raise HTTPException(status_code=404, detail="usuario no encontrado")
+    try:
+        master = server._resolver_master(usuario, req.idioma, req.email)
+        cv_texto = master.texto
+    except Exception:
+        cv_texto = ""
+    if not cv_texto:
+        raise HTTPException(status_code=404, detail="no hay CV master")
+    try:
+        return rag.preguntar_cv(req.email, req.pregunta, cv_texto)
+    except CVError as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+
+
+@app.post("/extraccion")
+def extraer_perfil(user=Depends(get_current_user)):
+    """Extracción owner-paid del perfil. Delega en alta_core (body ignorado)."""
+    _identidad, usuario_id = user
+    return alta_core.extraer_perfil_core(usuario_id)
+
+
+@app.post("/cv", status_code=201)
+def subir_cv(archivo: UploadFile = File(...), user=Depends(get_current_user)):
+    """Sube y cifra un CV. Delega en alta_core (consentimiento antes de parsear)."""
+    identidad, usuario_id = user
+    # Tope a nivel de framework (3 MB) antes de leer completo (REQ: LIMITE_BYTES=2 MB lógico).
+    LIMITE_FRAMEWORK = 3 * 1024 * 1024
+    contenido = archivo.file.read(LIMITE_FRAMEWORK + 1)
+    if len(contenido) > LIMITE_FRAMEWORK:
+        raise HTTPException(status_code=413, detail="archivo demasiado grande")
+    return alta_core.subir_cv_core(usuario_id, contenido)
+
+
+@app.get("/ofertas/{oferta_id}/encaje")
+def encaje_de_oferta(oferta_id: str, user=Depends(get_current_user)):
+    identidad, usuario_id = user
+    return encaje_core.encaje_de_oferta_core(usuario_id, identidad.email, oferta_id)
+
+
+@app.post("/encajes")
+def encajes_batch(req: EncajesRequest, user=Depends(get_current_user)):
+    identidad, usuario_id = user
+    return encaje_core.encajes_batch_core(usuario_id, identidad.email, req.ids)
+
+
+@app.get("/cv")
+def listar_cvs(user=Depends(get_current_user)):
+    """Lista los CVs guardados (solo metadatos). Delega en alta_core."""
+    _identidad, usuario_id = user
+    return alta_core.listar_cvs_core(usuario_id)
+
+
+@app.delete("/cv/{idioma}", status_code=204)
+def borrar_cv(idioma: str, user=Depends(get_current_user)):
+    """Borra el CV del idioma indicado. Delega en alta_core."""
+    _identidad, usuario_id = user
+    alta_core.borrar_cv_core(usuario_id, idioma)
+    return None
+
+
+@app.put("/ajustes/extraccion", dependencies=[Depends(requiere_clave_maquina)])
+def fijar_extraccion(req: AjusteDeExtraccion):
+    """Kill switch del gasto de extracción (solo machine key). Delega en alta_core."""
+    return alta_core.fijar_extraccion_core(req.activa)
+

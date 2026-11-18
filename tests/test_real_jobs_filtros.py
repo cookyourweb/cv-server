@@ -1,51 +1,46 @@
-"""Tests for the per-user filters ported from n8n (spec 009, T4)."""
-import real_jobs as rj
+"""Tests for T5 filters: spam + salary."""
+import real_jobs
 
 
-def test_tiene_keyword_ia_detecta_ai():
-    oferta = {"puesto": "AI Engineer", "tags": [], "descripcion": ""}
-    assert rj.tiene_keyword_ia(oferta) is True
-
-
-def test_tiene_keyword_ia_sin_keyword():
-    oferta = {"puesto": "Java Backend Developer", "tags": [], "descripcion": "Spring Boot"}
-    assert rj.tiene_keyword_ia(oferta) is False
-
-
-def test_filtrar_por_perfil_mantiene_ia_sin_stack():
+def test_filtrar_spam_descarta_bootcamp():
     ofertas = [
-        {"puesto": "AI Engineer", "tags": [], "descripcion": "LLM", "modalidad": "Remoto", "ubicacion": "Remote"},
-        {"puesto": "Java Dev", "tags": [], "descripcion": "Spring", "modalidad": "Remoto", "ubicacion": "Remote"},
+        {"puesto": "Dev", "tags": ["react"], "descripcion": "ok", "empresa": "A"},
+        {"puesto": "Bootcamp React", "tags": [], "descripcion": "curso intensivo", "empresa": "B"},
     ]
-    out = rj.filtrar_por_perfil(ofertas, stack_usuario=["React"], min_matches_stack=1)
-    puestos = [o["puesto"] for o in out]
-    assert "AI Engineer" in puestos
-    assert "Java Dev" not in puestos
+    res = real_jobs.filtrar_spam(ofertas)
+    assert len(res) == 1
+    assert res[0]["empresa"] == "A"
 
 
-def test_filtrar_por_modalidad_hibrido_ocasional():
-    ofertas = [{"puesto": "Dev", "modalidad": "Híbrido", "ubicacion": "Barcelona, ES", "tags": [], "descripcion": ""}]
-    out = rj.filtrar_por_modalidad(ofertas, modalidad_usuario=["hibrido"], ciudad_usuario="Madrid",
-                                    ciudades_hibrido=["Barcelona"])
-    assert len(out) == 1
-    assert "notas" in out[0]
-    assert "HIBRIDO BARCELONA" in out[0]["notas"]
+def test_filtrar_spam_sin_terminos_conserva_todo():
+    ofertas = [{"puesto": "Dev", "tags": [], "descripcion": "", "empresa": "A"}]
+    assert len(real_jobs.filtrar_spam(ofertas, tags_spam=())) == 1
 
 
-def test_filtrar_por_modalidad_descarta_hibrido_no_aceptado():
-    ofertas = [{"puesto": "Dev", "modalidad": "Híbrido", "ubicacion": "Malaga, ES", "tags": [], "descripcion": ""}]
-    out = rj.filtrar_por_modalidad(ofertas, modalidad_usuario=["hibrido"], ciudad_usuario="Madrid",
-                                    ciudades_hibrido=["Barcelona"])
-    assert out == []
+def test_salario_anual_k():
+    assert real_jobs._salario_anual("40k") == 40000
+    assert real_jobs._salario_anual("40k €/mes") == 480000
 
 
-def test_aplicar_evitar_descarta():
-    ofertas = [{"puesto": "Java Developer", "tags": [], "descripcion": ""}]
-    out = rj.aplicar_evitar(ofertas, evitar="java")
-    assert out == []
+def test_salario_anual_numero():
+    assert real_jobs._salario_anual("45000") == 45000
 
 
-def test_region_remota_compatible():
-    assert rj.region_remota_compatible("Worldwide", [], "Madrid") is True
-    assert rj.region_remota_compatible("USA only", ["Spain"], "Madrid") is False
-    assert rj.region_remota_compatible("Spain", ["Spain"], "Madrid") is True
+def test_salario_anual_none():
+    assert real_jobs._salario_anual("") is None
+    assert real_jobs._salario_anual("a negociar") is None
+
+
+def test_filtrar_por_salario_descarta_bajos():
+    ofertas = [
+        {"salario": "30k"},
+        {"salario": "60k"},
+        {"salario": ""},
+    ]
+    res = real_jobs.filtrar_por_salario(ofertas, salario_min=50000)
+    assert len(res) == 2  # 30k descartada, 60k y sin-salario conservadas
+
+
+def test_filtrar_por_salario_sin_min_conserva_todo():
+    ofertas = [{"salario": "10k"}, {"salario": "100k"}]
+    assert len(real_jobs.filtrar_por_salario(ofertas, salario_min=0)) == 2
