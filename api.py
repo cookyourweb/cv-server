@@ -528,14 +528,15 @@ async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: 
     if not autorizado and token:
         try:
             identidad = server.identificar(f"Bearer {token}", server.CONFIG_OIDC, server.CLAVES)
-            # El usuario_id del query debe coincidir con la identidad del token (evitar IDOR).
-            if (identidad.email or "").strip().lower() and usuario_id:
-                # Comparacion defensiva: el usuario_id es un UUID de Neon; el token da email.
-                # Aceptamos si el email del token esta registrado para ese usuario_id.
+            # The token says who the caller is: the search runs for the Neon user
+            # that owns the token's email, never for the usuario_id in the query
+            # (the panel sends its Google sub there). That also rules out IDOR.
+            if (identidad.email or "").strip().lower():
                 if base_de_datos.configurada():
                     with base_de_datos.transaccion() as conexion:
                         uid = usuarias.id_por_emails([identidad.email], conexion)
-                        if uid is not None and str(uid) == str(usuario_id):
+                        if uid is not None:
+                            usuario_id = str(uid)
                             autorizado = True
                 else:
                     # Modo heredado: aceptar si el email del token coincide con el param email.
