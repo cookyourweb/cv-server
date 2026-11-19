@@ -1,0 +1,19 @@
+# Overrides para un entorno tipo producción.
+# Uso: helm upgrade --install cv-server ./cv-server-chart -f values.prod.yaml
+#
+# Las claves NO se ponen aquí. Se usa un Secret existente (idealmente gestionado
+# por External Secrets Operator / Sealed Secrets / workload identity).
+replicaCount: 3
+
+image:
+  tag: "prod"
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 65

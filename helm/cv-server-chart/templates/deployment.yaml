@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-cv-server
+  labels:
+    app: cv-server
+    app.kubernetes.io/name: cv-server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: cv-server
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: cv-server
+        app.kubernetes.io/name: cv-server
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: cv-server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: CLAUDE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret }}
+              key: {{ .Values.secrets.keys.claudeApiKey }}
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret }}
+              key: {{ .Values.secrets.keys.groqApiKey }}
+        - name: NOTION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret }}
+              key: {{ .Values.secrets.keys.notionToken }}
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret }}
+              key: {{ .Values.secrets.keys.databaseUrl }}
+              # Sin DATABASE_URL el servicio funciona (modo sin base de datos).
+              optional: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          # readOnlyRootFilesystem: el contenedor no escribe en su propia imagen.
+          # Lo que necesite escribir va a /tmp (emptyDir, efímero).
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+      volumes:
+      - name: tmp
+        emptyDir: {}

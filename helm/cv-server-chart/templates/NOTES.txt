@@ -1,0 +1,17 @@
+{{- if .Values.autoscaling.enabled }}
+HPA activo: {{ .Values.autoscaling.minReplicas }}–{{ .Values.autoscaling.maxReplicas }} réplicas (CPU {{ .Values.autoscaling.targetCPUUtilizationPercentage }}%)
+{{- else }}
+HPA desactivado (replicaCount fijo: {{ .Values.replicaCount }})
+{{- end }}
+
+cv-server desplegado como {{ .Release.Name }}-cv-server
+Servicio: {{ .Values.service.type }} puerto {{ .Values.service.port }} → 8000
+
+Comprobar:
+  kubectl get pods -l app=cv-server
+  kubectl rollout status deployment/{{ .Release.Name }}-cv-server
+  kubectl port-forward svc/{{ .Release.Name }}-cv-server 8080:{{ .Values.service.port }}
+  curl localhost:8080/health
+
+Rollback:
+  helm rollback {{ .Release.Name }} 1

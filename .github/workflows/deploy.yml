@@ -1,0 +1,88 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permisos mínimos: solo lo que el job de deploy necesita.
+permissions:
+  contents: read
+  id-token: write # necesario para Workload Identity Federation (OIDC)
+
+env:
+  PROJECT_ID: cv-server-portfolio
+  REGION: europe-west1
+  CLUSTER_NAME: cv-server-cluster
+  REGISTRY: europe-west1-docker.pkg.dev
+  IMAGE_NAME: cv-server-portfolio/cv-server/cv-server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Solo desplegar si los tests pasan (workflow tests.yml debe estar verde).
+    # En un repo con required checks, esto se configura en Branch Protection.
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Autenticación sin claves estáticas (Workload Identity Federation) ──
+      # GitHub emite un token OIDC de corta duración; GCP lo intercambia por
+      # credenciales temporales para la service account github-actions@...
+      # No hay ningún secreto de larga duración en GitHub.
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/313716701671/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions@cv-server-portfolio.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configurar kubectl
+        run: gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone europe-west1-b --project ${{ env.PROJECT_ID }}
+
+      - name: Configurar Docker para Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # ── Build y push de la imagen ──────────────────────────────────────────
+      - name: Construir imagen
+        run: |
+          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+                       -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            .
+
+      - name: Subir imagen a Artifact Registry
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      # ── Despliegue con Helm ───────────────────────────────────────────────
+      - name: Desplegar con Helm
+        run: |
+          helm upgrade --install cv-server ./helm/cv-server-chart \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=${{ github.sha }} \
+            --set image.pullPolicy=Always \
+            --set service.type=LoadBalancer
+
+      # ── Verificación post-deploy ───────────────────────────────────────────
+      - name: Verificar /health
+        run: |
+          # Esperar a que el rollout termine
+          kubectl rollout status deployment/cv-server-cv-server --timeout=120s
+          # Obtener la IP del Ingress (NGINX)
+          INGRESS_IP=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "Ingress IP: $INGRESS_IP"
+          # Health check con reintentos (el certificado puede tardar)
+          for i in 1 2 3 4 5; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://api.cookyourwebai.es/health || echo "000")
+            echo "Intento $i: HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Deploy verificado"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "❌ Health check falló"
+          exit 1
