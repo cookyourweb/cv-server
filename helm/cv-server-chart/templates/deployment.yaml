@@ -8,6 +8,13 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Small nodes fit a single extra pod at most; maxSurge 0 replaces pods
+      # one by one instead of waiting forever for room that never comes.
+      maxSurge: {{ .Values.rollout.maxSurge }}
+      maxUnavailable: {{ .Values.rollout.maxUnavailable }}
   selector:
     matchLabels:
       app: cv-server
@@ -30,6 +37,14 @@ spec:
         ports:
         - containerPort: 8000
           name: http
+        {{- if .Values.secrets.envFromSecret }}
+        # All production config (the ~45 Render variables) comes from one Secret
+        # created with --from-env-file. No explicit env here: an explicit env
+        # entry would win over envFrom and hide the real values.
+        envFrom:
+        - secretRef:
+            name: {{ .Values.secrets.envFromSecret }}
+        {{- else }}
         env:
         - name: CLAUDE_API_KEY
           valueFrom:
@@ -53,6 +68,7 @@ spec:
               key: {{ .Values.secrets.keys.databaseUrl }}
               # Sin DATABASE_URL el servicio funciona (modo sin base de datos).
               optional: true
+        {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
           # readOnlyRootFilesystem: el contenedor no escribe en su propia imagen.

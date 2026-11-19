@@ -17,6 +17,10 @@ service:
 #     --from-literal=groq-api-key=... \
 #     --from-literal=notion-token=...
 secrets:
+  # When set, the pod loads EVERY variable from this Secret (envFrom) and
+  # ignores existingSecret/keys. Create it with:
+  #   kubectl create secret generic cv-env --from-env-file=<path to .env>
+  envFromSecret: ""
   existingSecret: cv-secrets
   keys:
     claudeApiKey: claude-api-key
@@ -24,6 +28,10 @@ secrets:
     notionToken: notion-token
     # Opcional: si no existe la clave, el pod arranca igual (optional: true).
     databaseUrl: database-url
+
+rollout:
+  maxSurge: 0
+  maxUnavailable: 1
 
 resources:
   limits:
