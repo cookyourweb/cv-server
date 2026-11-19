@@ -127,7 +127,12 @@ def test_S6_6_purity_no_io_network_llm_or_clock():
 
 
 def test_REQ_6_3_match_never_reaches_the_generators():
-    """Only real_jobs and the match routes may import match; the CV/letter generators must not."""
+    """Only the matching path may import match; the CV/letter generators must not.
+
+    real_jobs: the offer search. rutas_encaje: the match route. encaje_core: the pure
+    matching core the FastAPI route uses (extracted from rutas_encaje in the ADR-001
+    migration). None of the three generates a CV or a letter.
+    """
     importadores = set()
     for f in RAIZ.glob("*.py"):
         if f.name == "match.py":
@@ -141,7 +146,7 @@ def test_REQ_6_3_match_never_reaches_the_generators():
                 nombres = [(n.module or "").split(".")[0]]
             if "match" in nombres:
                 importadores.add(f.name)
-    assert importadores <= {"real_jobs.py", "rutas_encaje.py"}, importadores
+    assert importadores <= {"real_jobs.py", "rutas_encaje.py", "encaje_core.py"}, importadores
 
 
 def test_redos_whitespace_runs_in_the_offer_stay_fast():

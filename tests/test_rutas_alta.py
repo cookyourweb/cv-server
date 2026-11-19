@@ -27,6 +27,16 @@ PERFIL = {
     "idiomas": ["es", "en"], "ubicacion": "Madrid", "modalidad": ["remoto", "hibrido"],
     "salario_min": 45000, "salario_moneda": "EUR",
 }
+
+# Lo que el servidor guarda y devuelve: el stack se normaliza (split + minusculas,
+# f24a3b5) y los campos de busqueda por usuaria (migracion 0005) vuelven con sus
+# valores por defecto aunque el panel no los mande. Antes se exigia eco exacto y el
+# CI estuvo en rojo desde el 16-nov-2026.
+PERFIL_ESPERADO = {
+    **PERFIL,
+    "stack": ["angular", "typescript"],
+    "regiones_remoto": [], "ciudades_hibrido": [], "tarifa_dia_min": None, "evitar": None,
+}
 CONSENTIMIENTO = {"tipo": "enviar_cv_a_ia", "version": VERSION_DE_CONSENTIMIENTO}
 
 # Every route behind @con_usuaria that owns data. A new route in the blueprint must be
@@ -158,9 +168,9 @@ def test_there_is_no_profile_until_one_is_saved(cliente, personas):
 
 def test_a_saved_profile_is_returned_as_the_panel_sent_it(cliente, personas):
     r = _llamar(cliente, "PUT", "/perfil", personas["ana"], PERFIL)
-    assert r.status_code == 200 and r.get_json() == PERFIL
+    assert r.status_code == 200 and r.get_json() == PERFIL_ESPERADO
     leido = _llamar(cliente, "GET", "/perfil", personas["ana"])
-    assert leido.status_code == 200 and leido.get_json() == PERFIL
+    assert leido.status_code == 200 and leido.get_json() == PERFIL_ESPERADO
 
 
 def test_putting_again_replaces_the_profile(cliente, personas):
@@ -362,7 +372,7 @@ def test_S2_5_deleting_one_account_leaves_another_users_data_intact(cliente, per
     _llamar(cliente, "DELETE", "/cuenta", personas["ana"])
     assert _filas("perfil", personas["bea"]) == 1 and _filas("cv_master", personas["bea"]) == 1
     assert _filas("consentimientos", personas["bea"]) == 1
-    assert _llamar(cliente, "GET", "/perfil", personas["bea"]).get_json() == PERFIL
+    assert _llamar(cliente, "GET", "/perfil", personas["bea"]).get_json() == PERFIL_ESPERADO
 
 
 def test_REQ_2_5_the_token_of_a_deleted_user_is_rejected_and_creates_nothing(cliente, personas):
@@ -404,7 +414,7 @@ def test_S2_4_a_failure_during_deletion_is_a_503_and_everything_remains(cliente,
         assert _filas(tabla, personas["ana"]) == 1, tabla
     assert _invitaciones(personas["ana"].email) == [personas["ana"].email]      # rolled back with the rest
     assert _huerfanas()[0] == 0
-    assert _llamar(cliente, "GET", "/perfil", personas["ana"]).get_json() == PERFIL
+    assert _llamar(cliente, "GET", "/perfil", personas["ana"]).get_json() == PERFIL_ESPERADO
 
 
 def test_a_user_that_vanished_between_checks_is_the_generic_404(cliente, personas):

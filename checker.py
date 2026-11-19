@@ -5,6 +5,7 @@ import re
 import unicodedata
 
 from dataclasses import asdict, dataclass
+from datetime import date
 from enum import Enum
 from typing import Any
 
@@ -35,7 +36,8 @@ SECTIONS_CANONICAL = {
 }
 
 # Bump when detector rules change: invalidates cached analyses.
-REGLAS_VERSION = 2
+# 3 (18-nov-2026): gaps with month names; sections detected by heading, not by body.
+REGLAS_VERSION = 3
 
 SECCIONES_RECUPERABLES = {"experiencia", "habilidades", "educacion", "proyectos"}
 
@@ -59,9 +61,19 @@ def _seccion_canonica(encabezado: str) -> str | None:
 
 
 def detectar_secciones_recuperables(normalizado: dict[str, Any]) -> list[str]:
-    """Detecta secciones esperadas que faltan en el CV normalizado."""
+    """Detecta secciones esperadas que faltan en el CV normalizado.
+
+    Mira los encabezados que aparecen, no si la seccion tiene lineas propias. Un CV
+    real escribe "## EXPERIENCIA LABORAL" y cuelga todo de subencabezados
+    ("### 1. Empresa A"); entonces la seccion se quedaba vacia y se reportaba como
+    ausente aunque estuviera escrita (detectado con tests/test_checker_cv_master_real).
+    """
+    claves = normalizado.get("encabezados")
+    if claves is None:
+        claves = normalizado.get("secciones_presentes", [])
+
     presentes = set()
-    for key in normalizado.get("secciones_presentes", []):
+    for key in claves:
         canonica = _seccion_canonica(key)
         if canonica:
             presentes.add(canonica)
@@ -198,6 +210,7 @@ def normalizar_cv(texto: str) -> dict[str, Any]:
     """Convierte texto o Markdown a una estructura mínima."""
     texto = (texto or "").strip()
     sections = {}
+    encabezados: list[str] = []
 
     current = "general"
     sections[current] = []
@@ -227,6 +240,7 @@ def normalizar_cv(texto: str) -> dict[str, Any]:
             encabezado = raw
         if encabezado is not None:
             current = canonicalizar_titulo(encabezado)
+            encabezados.append(current)
             sections.setdefault(current, [])
         else:
             sections.setdefault(current, []).append(line)
@@ -241,6 +255,10 @@ def normalizar_cv(texto: str) -> dict[str, Any]:
         "secciones_presentes": sorted(
             key for key, value in sections_normalizadas.items() if value
         ),
+        # Encabezados vistos, tengan contenido propio o no. `secciones_presentes`
+        # responde a "¿hay algo escrito?" (CV vacio); `encabezados`, a "¿esta la
+        # seccion?". Un CV real suele colgar el contenido de subencabezados.
+        "encabezados": sorted(set(encabezados)),
         "experiencias": [],
         "skills": [],
         "fechas": [],
@@ -296,30 +314,79 @@ def obtener_analisis_por_hash(hash_cv: str, storage_dir=None):
     return json.loads(ruta.read_text(encoding="utf-8"))
 
 
-def _parsear_intervalos_anios(texto: str) -> list[tuple[int, int]]:
+_MESES = {
+    "enero": 1, "ene": 1, "january": 1, "jan": 1,
+    "febrero": 2, "feb": 2, "february": 2,
+    "marzo": 3, "mar": 3, "march": 3,
+    "abril": 4, "abr": 4, "april": 4, "apr": 4,
+    "mayo": 5, "may": 5,
+    "junio": 6, "jun": 6, "june": 6,
+    "julio": 7, "jul": 7, "july": 7,
+    "agosto": 8, "ago": 8, "august": 8, "aug": 8,
+    "septiembre": 9, "setiembre": 9, "sept": 9, "sep": 9, "september": 9,
+    "octubre": 10, "oct": 10, "october": 10,
+    "noviembre": 11, "nov": 11, "november": 11,
+    "diciembre": 12, "dic": 12, "december": 12, "dec": 12,
+}
+
+_FINALES_ABIERTOS = ("actualidad", "presente", "actual", "hoy", "current", "present", "now")
+
+_MES_RE = "|".join(sorted((re.escape(m) for m in _MESES), key=len, reverse=True))
+_FIN_RE = "|".join(sorted((re.escape(f) for f in _FINALES_ABIERTOS), key=len, reverse=True))
+_INICIO_RE = rf"(?:(?P<mes>{_MES_RE})\b\.?\s+(?:de\s+)?)?(?P<anio>(?:19|20)\d{{2}})"
+_RANGO_RE = re.compile(
+    rf"{_INICIO_RE}(?:\s*(?:[-–—]|\ba\b|\bal\b|\bto\b|\bhasta\b)\s*"
+    rf"(?:(?:(?P<mes_fin>{_MES_RE})\b\.?\s+(?:de\s+)?)?(?P<anio_fin>(?:19|20)\d{{2}})|(?P<actual>{_FIN_RE})))?",
+    re.IGNORECASE,
+)
+
+
+def _indice_mes(anio: int, mes: int) -> int:
+    return anio * 12 + (mes - 1)
+
+
+def _parsear_intervalos_meses(texto: str) -> list[tuple[int, int]]:
+    """Intervalos (inicio, fin) en meses absolutos: 2025-05 -> 2025*12+4.
+
+    Acepta nombres de mes en español e inglés y los finales abiertos
+    ("Actualidad", "Presente", "Present"), que antes se leían como un año suelto.
+    Un año suelto ("2002") cubre el año entero; una fecha suelta, doce meses.
+    """
     intervalos: list[tuple[int, int]] = []
-    patron = re.compile(r"(19\d{2}|20\d{2})(?:\s*[-–]\s*(19\d{2}|20\d{2}|presente|actualidad|current))?", re.IGNORECASE)
+    hoy = date.today()
 
-    for match in patron.finditer(texto or ""):
-        start = int(match.group(1))
-        end_raw = match.group(2) or match.group(1)
+    for match in _RANGO_RE.finditer(texto or ""):
+        mes_inicio = _MESES.get((match.group("mes") or "").lower(), 1)
+        inicio = _indice_mes(int(match.group("anio")), mes_inicio)
 
-        if str(end_raw).lower() in {"presente", "actualidad", "current"}:
-            import datetime
-            end = datetime.datetime.now().year
+        if match.group("actual"):
+            fin = _indice_mes(hoy.year, hoy.month)
+        elif match.group("anio_fin"):
+            mes_fin = _MESES.get((match.group("mes_fin") or "").lower(), 12)
+            fin = _indice_mes(int(match.group("anio_fin")), mes_fin)
         else:
-            end = int(end_raw)
+            fin = inicio + 11
 
-        if start > end:
-            start, end = end, start
-        intervalos.append((start, end))
+        if inicio > fin:
+            inicio, fin = fin, inicio
+        intervalos.append((inicio, fin))
 
     return intervalos
 
 
-def detectar_gaps_temporales(texto: str, umbral_meses: int = 6) -> list[str]:
-    """Detecta huecos mayores a `umbral_meses` entre intervalos de años."""
-    intervalos = sorted(_parsear_intervalos_anios(texto))
+def _etiqueta_mes(indice: int) -> str:
+    anio, mes = divmod(indice, 12)
+    return f"{anio}-{mes + 1:02d}"
+
+
+def detectar_gaps_temporales(texto: str, umbral_meses: int = 12) -> list[str]:
+    """Detecta huecos de mas de `umbral_meses` entre intervalos de fechas.
+
+    Con nombres de mes el hueco se mide en meses, pero menos de un año no se
+    reporta: entre "Septiembre 2016" y "Junio 2017" hay nueve meses, que es un
+    cambio de trabajo normal, no un hueco que merezca un aviso al usuario.
+    """
+    intervalos = sorted(_parsear_intervalos_meses(texto))
     if len(intervalos) < 2:
         return []
 
@@ -332,11 +399,11 @@ def detectar_gaps_temporales(texto: str, umbral_meses: int = 6) -> list[str]:
             merged.append((start, end))
 
     hallazgos: list[str] = []
-    for (start_prev, end_prev), (start_next, end_next) in zip(merged, merged[1:]):
-        gap_meses = (start_next - end_prev) * 12
+    for (_, end_prev), (start_next, _) in zip(merged, merged[1:]):
+        gap_meses = start_next - end_prev - 1
         if gap_meses > umbral_meses:
             hallazgos.append(
-                f"gap temporal de {gap_meses} meses aproximados entre {end_prev} y {start_next}"
+                f"gap temporal de {gap_meses} meses entre {_etiqueta_mes(end_prev)} y {_etiqueta_mes(start_next)}"
             )
 
     return hallazgos

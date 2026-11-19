@@ -1,11 +1,23 @@
 """Tests for the FastAPI layer (ADR-001)."""
-import os
 
-os.environ.setdefault("CLAVE_MAQUINA", "test-clave")
-
+import pytest
 from fastapi.testclient import TestClient
 
 import api
+import server
+
+
+@pytest.fixture(autouse=True)
+def clave_de_pruebas(monkeypatch):
+    """Fija la clave de maquina que esperan estos tests.
+
+    `server.py` lee `CLAVE_MAQUINA` al importarse, asi que fijarla con
+    `os.environ.setdefault` al principio de este fichero solo servia si este modulo
+    era el primero en importar `server`. Con otro fichero por delante la clave se
+    leia vacia y los 16 tests de endpoints respondian 401 (CI en rojo desde el
+    16-nov-2026). Ahora el valor se impone por test, sin depender del orden.
+    """
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "test-clave")
 
 
 def test_cv_master_check_shape():
@@ -515,11 +527,11 @@ def test_buscar_para_usuaria_devuelve_notion_page_ids(monkeypatch):
     assert all("notion_page_id" in o for o in r.json()["ofertas"])
 
 
-def test_sse_progress_requires_token():
+def test_sse_progress_requires_token(monkeypatch):
     from fastapi.testclient import TestClient
     import api
     import server
-    server.CLAVE_MAQUINA = "clave-test"
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-test")
     client = TestClient(api.app)
     r = client.get("/buscar-para-usuaria/progress?usuario_id=u1")
     # Sin token -> 401 (fail-closed)
@@ -589,10 +601,10 @@ def test_sse_progress_emits_events_in_order_threadsafe(monkeypatch):
     assert stages == ["searching", "filtering", "ranking", "done"]
 
 
-def test_ajustes_extraccion_sin_clave_401():
+def test_ajustes_extraccion_sin_clave_401(monkeypatch):
     from fastapi.testclient import TestClient
     import api, server
-    server.CLAVE_MAQUINA = "clave-test"
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-test")
     client = TestClient(api.app)
     r = client.put("/ajustes/extraccion", json={"activa": True})
     assert r.status_code == 401
@@ -601,7 +613,7 @@ def test_ajustes_extraccion_sin_clave_401():
 def test_ajustes_extraccion_sin_bd_503(monkeypatch):
     from fastapi.testclient import TestClient
     import api, server, base_de_datos, alta_core
-    server.CLAVE_MAQUINA = "clave-test"
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-test")
     monkeypatch.setattr(base_de_datos, "configurada", lambda: False)
     client = TestClient(api.app)
     r = client.put("/ajustes/extraccion", json={"activa": True}, headers={"X-Clave-Maquina": "clave-test"})
@@ -611,7 +623,7 @@ def test_ajustes_extraccion_sin_bd_503(monkeypatch):
 def test_ajustes_extraccion_ok(monkeypatch):
     from fastapi.testclient import TestClient
     import api, server, base_de_datos
-    server.CLAVE_MAQUINA = "clave-test"
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-test")
     monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
     monkeypatch.setattr(base_de_datos, "transaccion", lambda: _FakeTx())
     monkeypatch.setattr("extraccion.fijar_interruptor", lambda conexion, activa: None)
