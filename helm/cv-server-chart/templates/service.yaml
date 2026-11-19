@@ -6,6 +6,8 @@ metadata:
     app: cv-server
     app.kubernetes.io/name: cv-server
     app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
 spec:
   type: {{ .Values.service.type }}
   selector:
