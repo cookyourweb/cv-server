@@ -1,0 +1,4 @@
+# Test-only dependencies. Not installed in the Docker image.
+-r requirements.txt
+# Parses `helm template` output in tests/test_helm_*.py.
+pyyaml==6.0.3

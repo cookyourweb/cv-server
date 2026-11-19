@@ -1,0 +1,41 @@
+{{- if .Values.helmTest.enabled }}
+# `helm test cv-server` calls /health through the Service, from inside the
+# cluster. It reuses the app image (it already has Python), so the test adds no
+# new image to trust or scan.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "cv-server.fullname" . }}-test-health
+  labels:
+    app.kubernetes.io/component: helm-test
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    {{- include "cv-server.podSecurityContext" . | nindent 4 }}
+  containers:
+  - name: health
+    image: {{ include "cv-server.image" . | quote }}
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    command:
+    - python
+    - -c
+    - >-
+      import sys, urllib.request;
+      r = urllib.request.urlopen("http://{{ include "cv-server.fullname" . }}:{{ .Values.service.port }}/health", timeout=10);
+      print("GET /health ->", r.status);
+      sys.exit(0 if r.status == 200 else 1)
+    securityContext:
+      {{- include "cv-server.containerSecurityContext" . | nindent 6 }}
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+{{- end }}

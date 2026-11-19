@@ -1,46 +1,51 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-cv-server
+  name: {{ include "cv-server.fullname" . }}
   labels:
-    app: cv-server
-    app.kubernetes.io/name: cv-server
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "cv-server.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
+  # With the HPA on, the HPA owns the replica count: setting it here would reset
+  # the scale on every upgrade.
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      # Small nodes fit a single extra pod at most; maxSurge 0 replaces pods
-      # one by one instead of waiting forever for room that never comes.
       maxSurge: {{ .Values.rollout.maxSurge }}
       maxUnavailable: {{ .Values.rollout.maxUnavailable }}
   selector:
     matchLabels:
-      app: cv-server
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "cv-server.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: cv-server
-        app.kubernetes.io/name: cv-server
-        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "cv-server.labels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      automountServiceAccountToken: false
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        {{- include "cv-server.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
+        labelSelector:
+          matchLabels:
+            {{- include "cv-server.selectorLabels" . | nindent 12 }}
+      {{- end }}
       containers:
       - name: cv-server
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        image: {{ include "cv-server.image" . | quote }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: 8000
           name: http
         {{- if .Values.secrets.envFromSecret }}
-        # All production config (the ~45 Render variables) comes from one Secret
-        # created with --from-env-file. No explicit env here: an explicit env
-        # entry would win over envFrom and hide the real values.
+        # All production config comes from one Secret. No explicit env here: an
+        # explicit env entry would win over envFrom and hide the real values.
         envFrom:
         - secretRef:
             name: {{ .Values.secrets.envFromSecret }}
@@ -66,16 +71,11 @@ spec:
             secretKeyRef:
               name: {{ .Values.secrets.existingSecret }}
               key: {{ .Values.secrets.keys.databaseUrl }}
-              # Sin DATABASE_URL el servicio funciona (modo sin base de datos).
+              # Without DATABASE_URL the service still works (no-database mode).
               optional: true
         {{- end }}
         securityContext:
-          allowPrivilegeEscalation: false
-          # readOnlyRootFilesystem: el contenedor no escribe en su propia imagen.
-          # Lo que necesite escribir va a /tmp (emptyDir, efímero).
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop: ["ALL"]
+          {{- include "cv-server.containerSecurityContext" . | nindent 10 }}
         volumeMounts:
         - name: tmp
           mountPath: /tmp
