@@ -1,0 +1,112 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+# 1) Nothing in the namespace talks to anything unless a policy below allows it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-default-deny
+  labels:
+    {{- include "cv-server.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# 2) The API: in from the ingress controller (and helm test) on 8000; out to
+# DNS, and to public HTTPS/Postgres only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-allow
+  labels:
+    {{- include "cv-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cv-server.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ $np.ingressControllerNamespace }}
+      podSelector:
+        matchLabels:
+          {{- toYaml $np.ingressControllerPodLabels | nindent 10 }}
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: helm-test
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  # DNS to any destination: with NodeLocal DNSCache the resolver is a
+  # host-network pod that no podSelector can match.
+  - ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+          {{- toYaml $np.egressDenyCidrs | nindent 10 }}
+    ports:
+    {{- range $np.egressPorts }}
+    - protocol: TCP
+      port: {{ . }}
+    {{- end }}
+---
+# 3) The helm test pod may only call the API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-helm-test
+  labels:
+    {{- include "cv-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: helm-test
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          {{- include "cv-server.selectorLabels" . | nindent 10 }}
+    ports:
+    - protocol: TCP
+      port: 8000
+  - ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+{{- if $np.acmeSolver }}
+---
+# 4) Let's Encrypt renewals: cert-manager starts HTTP-01 solver pods here and
+# the ingress controller must reach them, or the certificate silently expires.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-acme-solver
+  labels:
+    {{- include "cv-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ $np.ingressControllerNamespace }}
+      podSelector:
+        matchLabels:
+          {{- toYaml $np.ingressControllerPodLabels | nindent 10 }}
+    ports:
+    - protocol: TCP
+      port: 8089
+{{- end }}
+{{- end }}

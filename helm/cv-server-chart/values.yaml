@@ -52,6 +52,25 @@ topologySpread:
   # ScheduleAnyway: prefer one pod per node, but never leave a pod Pending for it.
   whenUnsatisfiable: ScheduleAnyway
 
+# Enforced only when the cluster runs a NetworkPolicy engine (Calico on this
+# cluster, enabled by Terraform: see docs/RUNBOOK-gke.md). Without it the
+# objects exist but nothing applies them.
+networkPolicy:
+  enabled: false
+  ingressControllerNamespace: ingress-nginx
+  ingressControllerPodLabels:
+    app.kubernetes.io/name: ingress-nginx
+  # Destinations the pod may never reach on egressPorts: private ranges and,
+  # per cluster, the Service range (the Kubernetes API Service lives there).
+  egressDenyCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+  # HTTPS (Notion, LLM providers, Google JWKS) and Postgres (Neon).
+  egressPorts: [443, 5432]
+  # cert-manager HTTP-01 solver pods live in this namespace during renewals.
+  acmeSolver: true
+
 resources:
   limits:
     cpu: 500m

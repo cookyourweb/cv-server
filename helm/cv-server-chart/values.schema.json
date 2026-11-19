@@ -77,6 +77,18 @@
         "whenUnsatisfiable": { "enum": ["ScheduleAnyway", "DoNotSchedule"] }
       }
     },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingressControllerNamespace": { "type": "string", "minLength": 1 },
+        "ingressControllerPodLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "egressDenyCidrs": { "type": "array", "items": { "type": "string" } },
+        "egressPorts": { "type": "array", "items": { "type": "integer" } },
+        "acmeSolver": { "type": "boolean" }
+      }
+    },
     "resources": { "type": "object" },
     "autoscaling": {
       "type": "object",
