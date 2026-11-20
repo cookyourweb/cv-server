@@ -1,6 +1,6 @@
 # ADR-012: Run cv-server on GKE with Helm, keyless CI/CD and one env Secret, while Render keeps production traffic
 
-**Status:** Accepted · 19 Nov 2026
+**Status:** Accepted · 19 Nov 2026 · **Environment switched OFF on 20 Nov 2026** to stop costs; see [RUNBOOK-gke-on-off](RUNBOOK-gke-on-off.md)
 **Scope:** `cv-server`, `helm/cv-server-chart`, `helm/cargar-entorno-gke.sh`, `.github/workflows/deploy.yml`, `infra/terraform/gcp`, `infra/terraform/aws`
 
 > **For whoever picks this up (person or AI):** GKE is a second, fully configured home for the

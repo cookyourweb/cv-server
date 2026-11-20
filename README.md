@@ -483,8 +483,10 @@ The CV masters stay encrypted inside the dump: you also need the application key
 
 ## Deployment
 
-Production traffic runs on **Render**. The same image also runs on **Google Kubernetes Engine**,
-fully configured, as described in [ADR-012](docs/ADR-012-kubernetes-on-gke.md):
+Production traffic runs on **Render**. The same image ran on **Google Kubernetes Engine**, fully
+configured and validated end to end ([evidence](docs/evidence/gke-2026-11-20.md)), as described in
+[ADR-012](docs/ADR-012-kubernetes-on-gke.md). It is **switched off** to save cost and comes back in
+about 15 minutes with [RUNBOOK-gke-on-off](docs/RUNBOOK-gke-on-off.md):
 
 ```
 GitHub push (main)
