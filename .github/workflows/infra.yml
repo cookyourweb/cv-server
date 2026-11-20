@@ -1,0 +1,123 @@
+name: infra
+
+# Static checks for everything that describes infrastructure. Nothing here has
+# cloud or cluster credentials: no plan, no apply, no deploy.
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - "helm/**"
+      - ".github/workflows/**"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "helm/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: 1.9.8
+  TFLINT_VERSION: v0.66.0
+  HELM_VERSION: v3.22.1
+  KUBECONFORM_VERSION: v0.8.0
+  # Same minor as the live cluster (1.36.4-gke).
+  KUBERNETES_VERSION: 1.36.0
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [infra/terraform/gcp, infra/terraform/aws]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform -chdir=${{ matrix.dir }} fmt -check -diff
+
+      # -backend=false: validation needs the providers, not the remote state.
+      # -lockfile=readonly: fail if the committed lock file does not match.
+      - name: terraform init
+        run: terraform -chdir=${{ matrix.dir }} init -backend=false -input=false -lockfile=readonly
+
+      - name: terraform validate
+        run: terraform -chdir=${{ matrix.dir }} validate
+
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+
+      - name: tflint
+        env:
+          # Only to avoid GitHub API rate limits when downloading the pinned rulesets.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init --config "$GITHUB_WORKSPACE/infra/terraform/.tflint.hcl"
+          tflint --chdir=${{ matrix.dir }} --config "$GITHUB_WORKSPACE/infra/terraform/.tflint.hcl" --format=compact
+
+  helm:
+    runs-on: ubuntu-latest
+    env:
+      TEST_SHA: 0123456789abcdef0123456789abcdef01234567
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: helm lint
+        run: |
+          helm lint --strict helm/cv-server-chart \
+            -f helm/cv-server-chart/values.gke.yaml --set image.tag="$TEST_SHA"
+
+      - name: Install kubeconform
+        run: |
+          base="https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION"
+          curl -sSLo kubeconform.tar.gz "$base/kubeconform-linux-amd64.tar.gz"
+          curl -sSLo CHECKSUMS "$base/CHECKSUMS"
+          grep ' kubeconform-linux-amd64.tar.gz$' CHECKSUMS | sed 's/kubeconform-linux-amd64.tar.gz/kubeconform.tar.gz/' | sha256sum -c -
+          tar -xzf kubeconform.tar.gz kubeconform
+
+      # -strict rejects unknown fields. ESO kinds are validated against the
+      # vendored CRD schemas in helm/schemas instead of being skipped.
+      - name: kubeconform
+        run: |
+          helm template cv-server helm/cv-server-chart --namespace default \
+            -f helm/cv-server-chart/values.gke.yaml --set image.tag="$TEST_SHA" > rendered.yaml
+          ./kubeconform -strict -summary \
+            -kubernetes-version "$KUBERNETES_VERSION" \
+            -schema-location default \
+            -schema-location 'helm/schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            rendered.yaml
+
+  actions-pinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A tag like @v4 can be moved to different code by whoever controls the
+      # action repo. A 40-char commit SHA cannot.
+      - name: Every action is pinned to a commit SHA
+        run: |
+          if grep -rnE '^\s*-?\s*uses:\s*[^@[:space:]]+@' .github/workflows \
+               | grep -vE 'uses:\s*[^@[:space:]]+@[0-9a-f]{40}(\s|$)'; then
+            echo "::error::Pin the actions above to a full commit SHA (keep the tag as a comment)."
+            exit 1
+          fi
+          echo "All actions are pinned."
