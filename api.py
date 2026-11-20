@@ -514,6 +514,23 @@ def borrar_cuenta(user=Depends(get_current_user)):
     return ""
 
 
+def _oferta_para_el_panel(oferta: dict) -> dict:
+    """Only the fields the panel shows; a link that is not http(s) is dropped."""
+    link = str(oferta.get("link") or "")
+    if not link.startswith(("https://", "http://")):
+        link = ""
+    return {
+        "puesto": oferta.get("puesto") or "",
+        "empresa": oferta.get("empresa") or "",
+        "ubicacion": oferta.get("ubicacion") or "",
+        "modalidad": oferta.get("modalidad") or "",
+        "salario": oferta.get("salario") or "",
+        "link": link,
+        "score": oferta.get("score"),
+        "fuente": oferta.get("source") or "",
+    }
+
+
 @app.get("/buscar-para-usuaria/progress")
 async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: int = 5, token: str = ""):
     """SSE: emite progreso de la búsqueda en tiempo real.
@@ -528,14 +545,15 @@ async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: 
     if not autorizado and token:
         try:
             identidad = server.identificar(f"Bearer {token}", server.CONFIG_OIDC, server.CLAVES)
-            # El usuario_id del query debe coincidir con la identidad del token (evitar IDOR).
-            if (identidad.email or "").strip().lower() and usuario_id:
-                # Comparacion defensiva: el usuario_id es un UUID de Neon; el token da email.
-                # Aceptamos si el email del token esta registrado para ese usuario_id.
+            # The token says who the caller is: the search runs for the Neon user
+            # that owns the token's email, never for the usuario_id in the query
+            # (the panel sends its Google sub there). That also rules out IDOR.
+            if (identidad.email or "").strip().lower():
                 if base_de_datos.configurada():
                     with base_de_datos.transaccion() as conexion:
                         uid = usuarias.id_por_emails([identidad.email], conexion)
-                        if uid is not None and str(uid) == str(usuario_id):
+                        if uid is not None:
+                            usuario_id = str(uid)
                             autorizado = True
                 else:
                     # Modo heredado: aceptar si el email del token coincide con el param email.
@@ -570,7 +588,8 @@ async def buscar_para_usuaria_progress(usuario_id: str, email: str = "", top_n: 
                 enqueue({"stage": "error", "detail": "perfil no encontrado"})
                 return
             resultado = real_jobs.buscar_ofertas_reales(perfil=perfil, top_n=top_n, progress_cb=progress_cb)
-            enqueue({"stage": "done", "summary": {"ok": resultado.get("ok"), "creadas": len(resultado.get("ofertas", []))}})
+            ofertas = [_oferta_para_el_panel(o) for o in resultado.get("ofertas", [])]
+            enqueue({"stage": "done", "summary": {"ok": resultado.get("ok"), "creadas": len(ofertas), "ofertas": ofertas}})
         except Exception as e:
             enqueue({"stage": "error", "detail": "error interno"})
         finally:

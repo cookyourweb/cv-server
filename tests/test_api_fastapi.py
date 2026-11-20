@@ -857,3 +857,93 @@ def test_health_parity_with_flask():
     assert "fallbacks" in datos
     assert "deploy" in datos
 
+
+
+def _sse_con_jwt(monkeypatch, uid_en_neon):
+    """Prepares the SSE route for a Google JWT whose email maps to uid_en_neon."""
+    import threading
+    import contextlib
+    import api, base_de_datos, real_jobs, server, usuarias
+    from repositorio import RepositorioDeUsuaria
+
+    monkeypatch.setattr(server, "CLAVE_MAQUINA", "clave-maquina")
+    identidad = type("I", (), {"sub": "107679041318613204566", "email": "vero@ejemplo.test", "nombre": "Vero"})()
+    monkeypatch.setattr(server, "identificar", lambda *a, **k: identidad)
+    monkeypatch.setattr(base_de_datos, "configurada", lambda: True)
+    monkeypatch.setattr(base_de_datos, "transaccion", lambda: contextlib.nullcontext(object()))
+    conn = type("C", (), {"__enter__": lambda self: self, "__exit__": lambda self, *a: None})()
+    monkeypatch.setattr(base_de_datos, "motor", lambda: type("M", (), {"begin": lambda self: conn})())
+    monkeypatch.setattr(usuarias, "id_por_emails", lambda emails, conexion: uid_en_neon)
+
+    leidos = []
+
+    def obtener_perfil(self):
+        leidos.append(self._usuario_id if hasattr(self, "_usuario_id") else self.usuario_id)
+        return {"rol": "Dev", "stack": [], "modalidad": [], "ubicacion": "", "salario_min": 0}
+
+    monkeypatch.setattr(RepositorioDeUsuaria, "obtener_perfil", obtener_perfil)
+    monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", lambda **kw: {"ok": True, "ofertas": []})
+
+    class HiloInmediato:
+        def __init__(self, target=None, daemon=True, *a, **k):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    monkeypatch.setattr(threading, "Thread", HiloInmediato)
+    return api, leidos
+
+
+def test_sse_progress_jwt_uses_the_user_from_the_token_not_the_query(monkeypatch):
+    # The panel sends its Google sub as usuario_id; the server must search for
+    # the Neon user that owns the token's email, whatever the query says.
+    from fastapi.testclient import TestClient
+    api, leidos = _sse_con_jwt(monkeypatch, uid_en_neon="uuid-neon-1")
+
+    r = TestClient(api.app).get(
+        "/buscar-para-usuaria/progress?usuario_id=107679041318613204566&token=jwt-de-google"
+    )
+
+    assert r.status_code == 200
+    assert '"stage": "done"' in r.text
+    assert leidos == ["uuid-neon-1"]
+
+
+def test_sse_progress_jwt_of_an_unregistered_email_is_401(monkeypatch):
+    from fastapi.testclient import TestClient
+    api, leidos = _sse_con_jwt(monkeypatch, uid_en_neon=None)
+
+    r = TestClient(api.app).get("/buscar-para-usuaria/progress?usuario_id=cualquiera&token=jwt-de-google")
+
+    assert r.status_code == 401
+    assert leidos == []
+
+
+def test_sse_progress_done_event_carries_the_offers_with_safe_fields_only(monkeypatch):
+    # The panel showed "4 offers" and nothing else: the done event only had a
+    # count. It must carry the offers, trimmed to what the panel displays.
+    import json
+    import real_jobs
+    from fastapi.testclient import TestClient
+    api, _ = _sse_con_jwt(monkeypatch, uid_en_neon="uuid-neon-1")
+    oferta = {
+        "id": "remotive-1", "source": "remotive", "puesto": "AI Engineer",
+        "empresa": "Acme", "ubicacion": "Europe", "modalidad": "Remoto",
+        "salario": "70k", "link": "https://remotive.com/1", "score": 87,
+        "descripcion": "texto largo que no debe viajar", "logo_empresa": "x",
+    }
+    malo = dict(oferta, id="2", link="javascript:alert(1)")
+    monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", lambda **kw: {"ok": True, "ofertas": [oferta, malo]})
+
+    r = TestClient(api.app).get("/buscar-para-usuaria/progress?usuario_id=x&token=jwt-de-google")
+
+    done = [json.loads(l[6:]) for l in r.text.splitlines() if l.startswith("data: ")][-1]
+    assert done["stage"] == "done"
+    assert done["summary"]["creadas"] == 2
+    assert done["summary"]["ofertas"][0] == {
+        "puesto": "AI Engineer", "empresa": "Acme", "ubicacion": "Europe",
+        "modalidad": "Remoto", "salario": "70k", "link": "https://remotive.com/1",
+        "score": 87, "fuente": "remotive",
+    }
+    assert done["summary"]["ofertas"][1]["link"] == ""
