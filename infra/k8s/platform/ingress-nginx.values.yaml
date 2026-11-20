@@ -2,6 +2,18 @@
 controller:
   service:
     type: LoadBalancer # as installed on 19 Nov 2026
+  # Two controllers and a PDB: a node drain, upgrade or spot preemption must not
+  # take the only entry point down while the API itself has 2 replicas.
+  replicaCount: 2
+  minAvailable: 1
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+          app.kubernetes.io/component: controller
   config:
     # Access log WITHOUT the query string (ADR-016). The default format logs
     # "$request", which includes ?token=<Google JWT> on the SSE route. $uri is
