@@ -1,89 +1,129 @@
 name: deploy
 
+# The ONLY regular path to GKE (docs/ADR-013): a commit on main whose `tests`
+# run passed is built once, scanned, pushed under its full SHA and deployed
+# with the chart and values.gke.yaml from that same commit.
 on:
-  push:
+  workflow_run:
+    workflows: [tests]
+    types: [completed]
     branches: [main]
+  # Redeploy of the current main HEAD (for example after a cluster rebuild).
   workflow_dispatch:
 
-# Permisos mínimos: solo lo que el job de deploy necesita.
+# Least privilege: read the repo, mint the OIDC token for Workload Identity Federation.
 permissions:
   contents: read
-  id-token: write # necesario para Workload Identity Federation (OIDC)
+  id-token: write
+
+# Never two deploys at once, and never cancel one half-way.
+concurrency:
+  group: deploy-gke
+  cancel-in-progress: false
 
 env:
   PROJECT_ID: cv-server-portfolio
-  REGION: europe-west1
+  ZONE: europe-west1-b
   CLUSTER_NAME: cv-server-cluster
-  REGISTRY: europe-west1-docker.pkg.dev
-  IMAGE_NAME: cv-server-portfolio/cv-server/cv-server
+  IMAGE: europe-west1-docker.pkg.dev/cv-server-portfolio/cv-server/cv-server
+  HELM_VERSION: v3.22.1
+  TRIVY_VERSION: v0.76.2
 
 jobs:
   deploy:
+    if: >-
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push')
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    # Solo desplegar si los tests pasan (workflow tests.yml debe estar verde).
-    # En un repo con required checks, esto se configura en Branch Protection.
+    timeout-minutes: 30
+    env:
+      # The commit the tests ran on, not whatever main points to by now.
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
 
-      # ── Autenticación sin claves estáticas (Workload Identity Federation) ──
-      # GitHub emite un token OIDC de corta duración; GCP lo intercambia por
-      # credenciales temporales para la service account github-actions@...
-      # No hay ningún secreto de larga duración en GitHub.
+      # Keyless: GitHub's short-lived OIDC token is exchanged for temporary
+      # credentials of github-actions@. No long-lived secret lives in GitHub.
       - id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: projects/313716701671/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-actions@cv-server-portfolio.iam.gserviceaccount.com
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
         with:
           project_id: ${{ env.PROJECT_ID }}
+          # Without it kubectl/helm cannot authenticate: every deploy run on
+          # 19 Nov 2026 failed with "gke-gcloud-auth-plugin not found".
+          install_components: gke-gcloud-auth-plugin
 
-      - name: Configurar kubectl
-        run: gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone europe-west1-b --project ${{ env.PROJECT_ID }}
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: ${{ env.HELM_VERSION }}
 
-      - name: Configurar Docker para Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - name: Point kubectl at the cluster
+        run: gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$ZONE" --project "$PROJECT_ID"
 
-      # ── Build y push de la imagen ──────────────────────────────────────────
-      - name: Construir imagen
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+
+      # Tags are immutable in the registry: an image for this SHA is never
+      # rebuilt or overwritten. A re-run reuses the image already scanned and pushed.
+      - name: Check whether this SHA was already built
+        id: existe
         run: |
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-                       -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            .
+          if gcloud artifacts docker images describe "$IMAGE:$SHA" >/dev/null 2>&1; then
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Subir imagen a Artifact Registry
-        run: |
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+      - name: Build the image (tagged with the full SHA only)
+        if: steps.existe.outputs.built == 'false'
+        run: docker build -t "$IMAGE:$SHA" .
 
-      # ── Despliegue con Helm ───────────────────────────────────────────────
-      - name: Desplegar con Helm
+      # Blocks the push on any CRITICAL vulnerability that has a fix available.
+      # Unfixed ones are reported, not blocking: nothing can be done about them yet.
+      - name: Scan the image (Trivy)
+        if: steps.existe.outputs.built == 'false'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.SHA }}
+          version: ${{ env.TRIVY_VERSION }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "1"
+          format: table
+
+      - name: Push the image
+        if: steps.existe.outputs.built == 'false'
+        run: docker push "$IMAGE:$SHA"
+
+      # --atomic: if the new pods are not Ready within the timeout, Helm rolls
+      # the release back to the previous revision by itself.
+      - name: Deploy with Helm
         run: |
           helm upgrade --install cv-server ./helm/cv-server-chart \
-            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
-            --set image.tag=${{ github.sha }} \
-            --set image.pullPolicy=Always \
-            --set service.type=LoadBalancer \
-            --set secrets.envFromSecret=cv-env
+            --namespace default \
+            -f ./helm/cv-server-chart/values.gke.yaml \
+            --set image.tag="$SHA" \
+            --atomic --wait --timeout 5m
 
-      # ── Verificación post-deploy ───────────────────────────────────────────
-      - name: Verificar /health
+      - name: helm test (GET /health from inside the cluster)
+        run: helm test cv-server --namespace default --logs
+
+      - name: Check /health over HTTPS (ingress + TLS)
         run: |
-          # Esperar a que el rollout termine
-          kubectl rollout status deployment/cv-server-cv-server --timeout=120s
-          # Obtener la IP del Ingress (NGINX)
-          INGRESS_IP=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-          echo "Ingress IP: $INGRESS_IP"
-          # Health check con reintentos (el certificado puede tardar)
           for i in 1 2 3 4 5; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://api.cookyourwebai.es/health || echo "000")
-            echo "Intento $i: HTTP $HTTP_CODE"
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Deploy verificado"
-              exit 0
-            fi
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://api.cookyourwebai.es/health || echo "000")
+            echo "Attempt $i: HTTP $code"
+            [ "$code" = "200" ] && exit 0
             sleep 10
           done
-          echo "❌ Health check falló"
-          exit 1
+          echo "Public health check failed"; exit 1
