@@ -1,10 +1,11 @@
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.9.0, < 2.0.0"
 
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
+      source = "hashicorp/aws"
+      # Exact pin: the version `terraform validate` was run with (lock file committed).
+      version = "5.100.0"
     }
   }
 }
@@ -17,7 +18,7 @@ provider "aws" {
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
+  version = "5.21.0"
 
   name = "${var.project_name}-vpc"
   cidr = "10.0.0.0/16"
@@ -55,7 +56,7 @@ resource "aws_ecr_repository" "cv_server" {
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "20.37.2"
 
   cluster_name    = var.cluster_name
   cluster_version = "1.30"
