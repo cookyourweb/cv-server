@@ -483,26 +483,36 @@ The CV masters stay encrypted inside the dump: you also need the application key
 
 ## Deployment
 
-Production traffic runs on **Render**. The same image also runs on **Google Kubernetes Engine**,
-fully configured, as described in [ADR-012](docs/ADR-012-kubernetes-on-gke.md):
+Production traffic runs on **Render**. The same image also runs on **Google Kubernetes Engine**
+([ADR-012](docs/ADR-012-kubernetes-on-gke.md)). It receives no user traffic until the panel
+switches its API URL.
 
 ```
-GitHub push (main)
-  └─ Actions: tests ─▶ deploy (Workload Identity Federation, no stored keys)
-        └─ docker build ─▶ Artifact Registry ─▶ helm upgrade ─▶ GKE
-                                                     │
-              https://api.cookyourwebai.es ─▶ NGINX ingress + Let's Encrypt
-                                                     └─▶ Service ─▶ Pod(s) (HPA 1-5)
-                                                            └─ env from Secret cv-env
+push to main ─▶ Actions: tests ─(green)─▶ deploy  (Workload Identity Federation, no stored keys)
+                 docker build :<full sha> ─▶ Trivy (fails on fixable CRITICAL) ─▶ Artifact Registry (immutable tags)
+                 helm upgrade --atomic -f values.gke.yaml ─▶ helm test ─▶ HTTPS /health
+https://api.cookyourwebai.es ─▶ NGINX ingress + Let's Encrypt ─▶ Service (ClusterIP) ─▶ Pods (HPA 2-5, PDB)
+                                                         env from Secret Manager via External Secrets
 ```
 
-| Piece | Where |
+**What is applied and what is only written** (20 Nov 2026):
+
+| Piece | Status |
 |---|---|
-| Cluster, node pool, registry (Terraform, applied) | [`infra/terraform/gcp`](infra/terraform/gcp) |
-| Same architecture on EKS (Terraform, validated, not applied) | [`infra/terraform/aws`](infra/terraform/aws) |
-| Helm chart: Deployment, Service, HPA, probes, hardening | [`helm/cv-server-chart`](helm/cv-server-chart) |
-| Load the real config into the cluster | [`helm/cargar-entorno-gke.sh`](helm/cargar-entorno-gke.sh) |
-| Keyless deploy pipeline | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) |
+| GKE cluster, e2-small spot pool, registry ([`infra/terraform/gcp`](infra/terraform/gcp)) | APPLIED |
+| NGINX ingress, cert-manager, TLS for `api.cookyourwebai.es` | APPLIED (by hand). Recorded in [`infra/k8s/platform`](infra/k8s/platform) |
+| Release on GKE: 1 replica, image `:814a90b`, env from the hand-made Secret `cv-env` | APPLIED (Helm revision 5) |
+| Hardening PR: SHA-only images, ClusterIP + chart-owned ingress, 2 replicas + PDB, restricted pods, NetworkPolicy, External Secrets, `helm test` ([`helm/cv-server-chart`](helm/cv-server-chart) 0.2.0) | ONLY WRITTEN. Tested with `helm template`, `helm lint`, `kubeconform` |
+| Terraform: remote state, e2-medium pool, least-privilege nodes, Secret Manager, Calico, add-on trim | ONLY WRITTEN. `validate` + `tflint` clean |
+| CI: deploy only tested main SHAs, Trivy, `--atomic`; infra lint workflow; actions pinned to SHAs | ONLY WRITTEN until merged |
+| Same architecture on EKS ([`infra/terraform/aws`](infra/terraform/aws)) | Validated, never applied |
+
+How to apply it, step by step: [`docs/RUNBOOK-gke.md`](docs/RUNBOOK-gke.md). Decisions:
+[ADR-013](docs/ADR-013-one-source-of-deploys.md) (one source of deploys),
+[ADR-014](docs/ADR-014-secrets-external-secrets.md) (secrets),
+[ADR-015](docs/ADR-015-gke-capacity-and-cost.md) (capacity and cost),
+[ADR-016](docs/ADR-016-sse-token-in-url.md) (SSE token in the URL, proposed).
+Emergency deploys only: [`helm/desplegar-manual.sh`](helm/desplegar-manual.sh).
 
 ## Pre-production checklist
 
