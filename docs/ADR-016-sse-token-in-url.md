@@ -62,4 +62,4 @@ and it only opens that one stream.
 
 ## Tracking
 
-GitHub issue "SSE route takes credentials in the query string" (linked in the PR).
+GitHub issue [#11](https://github.com/cookyourweb/cv-server/issues/11).
