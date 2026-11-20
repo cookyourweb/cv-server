@@ -918,3 +918,32 @@ def test_sse_progress_jwt_of_an_unregistered_email_is_401(monkeypatch):
 
     assert r.status_code == 401
     assert leidos == []
+
+
+def test_sse_progress_done_event_carries_the_offers_with_safe_fields_only(monkeypatch):
+    # The panel showed "4 offers" and nothing else: the done event only had a
+    # count. It must carry the offers, trimmed to what the panel displays.
+    import json
+    import real_jobs
+    from fastapi.testclient import TestClient
+    api, _ = _sse_con_jwt(monkeypatch, uid_en_neon="uuid-neon-1")
+    oferta = {
+        "id": "remotive-1", "source": "remotive", "puesto": "AI Engineer",
+        "empresa": "Acme", "ubicacion": "Europe", "modalidad": "Remoto",
+        "salario": "70k", "link": "https://remotive.com/1", "score": 87,
+        "descripcion": "texto largo que no debe viajar", "logo_empresa": "x",
+    }
+    malo = dict(oferta, id="2", link="javascript:alert(1)")
+    monkeypatch.setattr(real_jobs, "buscar_ofertas_reales", lambda **kw: {"ok": True, "ofertas": [oferta, malo]})
+
+    r = TestClient(api.app).get("/buscar-para-usuaria/progress?usuario_id=x&token=jwt-de-google")
+
+    done = [json.loads(l[6:]) for l in r.text.splitlines() if l.startswith("data: ")][-1]
+    assert done["stage"] == "done"
+    assert done["summary"]["creadas"] == 2
+    assert done["summary"]["ofertas"][0] == {
+        "puesto": "AI Engineer", "empresa": "Acme", "ubicacion": "Europe",
+        "modalidad": "Remoto", "salario": "70k", "link": "https://remotive.com/1",
+        "score": 87, "fuente": "remotive",
+    }
+    assert done["summary"]["ofertas"][1]["link"] == ""
