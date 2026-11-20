@@ -2,5 +2,9 @@ apiVersion: v2
 name: cv-server
 description: Helm chart for cv-server (FastAPI)
 type: application
-version: 0.1.0
+# 0.2.0: ClusterIP + chart-owned ingress, SHA-only image tags (values.schema.json),
+# own ServiceAccount, seccomp RuntimeDefault, 2 replicas + PDB, surge-first
+# rollout, NetworkPolicy, External Secrets and a `helm test` on /health.
+version: 0.2.0
+# The deployed code version is the image tag (a commit SHA), not this field.
 appVersion: "1.0.0"

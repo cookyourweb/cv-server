@@ -1,0 +1,31 @@
+{{- if .Values.ingress.enabled }}
+# Same name as the Ingress created by hand on 19 Nov 2026, so Helm can adopt it
+# (see "Adopt the ingress" in docs/RUNBOOK-gke.md) instead of creating a second one.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  labels:
+    {{- include "cv-server.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+  - hosts:
+    - {{ required "ingress.host is required" .Values.ingress.host }}
+    secretName: {{ required "ingress.tlsSecretName is required" .Values.ingress.tlsSecretName }}
+  rules:
+  - host: {{ .Values.ingress.host }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "cv-server.fullname" . }}
+            port:
+              number: {{ .Values.service.port }}
+{{- end }}

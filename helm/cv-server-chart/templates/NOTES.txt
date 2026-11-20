@@ -1,17 +1,18 @@
+cv-server {{ .Values.image.tag }} deployed as {{ include "cv-server.fullname" . }} (chart {{ .Chart.Version }})
 {{- if .Values.autoscaling.enabled }}
-HPA activo: {{ .Values.autoscaling.minReplicas }}–{{ .Values.autoscaling.maxReplicas }} réplicas (CPU {{ .Values.autoscaling.targetCPUUtilizationPercentage }}%)
+HPA: {{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }} replicas (CPU {{ .Values.autoscaling.targetCPUUtilizationPercentage }}%)
 {{- else }}
-HPA desactivado (replicaCount fijo: {{ .Values.replicaCount }})
+Fixed replicas: {{ .Values.replicaCount }}
+{{- end }}
+Service: {{ .Values.service.type }} port {{ .Values.service.port }} -> 8000
+{{- if .Values.ingress.enabled }}
+Public URL: https://{{ .Values.ingress.host }}
 {{- end }}
 
-cv-server desplegado como {{ .Release.Name }}-cv-server
-Servicio: {{ .Values.service.type }} puerto {{ .Values.service.port }} → 8000
+Check:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }} --logs
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "cv-server.fullname" . }}
 
-Comprobar:
-  kubectl get pods -l app=cv-server
-  kubectl rollout status deployment/{{ .Release.Name }}-cv-server
-  kubectl port-forward svc/{{ .Release.Name }}-cv-server 8080:{{ .Values.service.port }}
-  curl localhost:8080/health
-
-Rollback:
-  helm rollback {{ .Release.Name }} 1
+Roll back (see docs/RUNBOOK-gke.md):
+  helm history {{ .Release.Name }} -n {{ .Release.Namespace }}
+  helm rollback {{ .Release.Name }} <revision> -n {{ .Release.Namespace }} --wait

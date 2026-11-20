@@ -1,84 +1,56 @@
-# Infraestructura como código — cv-server (GCP)
+# Infrastructure as code: cv-server on GCP
 
-Terraform que describe la infraestructura mínima para correr `cv-server` en GKE.
-**Aplicado** (proyecto `cv-server-portfolio`, europe-west1-b): crea el cluster que
-sirve `https://api.cookyourwebai.es`. El state vive fuera del repo; nunca se commitea.
+Terraform for the GKE cluster that serves `https://api.cookyourwebai.es` (project
+`cv-server-portfolio`, zone `europe-west1-b`). Production user traffic is still on Render.
 
-## Qué crea
+## Status, resource by resource (20 Nov 2026)
 
-| Recurso | Para qué |
+| Resource | Status |
 |---|---|
-| `google_project_service` | Habilita GKE, Artifact Registry y Cloud SQL. |
-| `google_artifact_registry_repository` | Registro privado donde se hace `docker push` de la imagen. |
-| `google_container_cluster` + `node_pool` | Cluster GKE **zonal** con node pool aparte (el default se elimina). |
-| `google_sql_database_instance` | Postgres para persistencia (futuro `PostgresSaver` del agente). |
+| APIs, Artifact Registry `cv-server`, cluster `cv-server-cluster`, pool `principal` (2 x e2-small spot) | **APPLIED** 19 Nov 2026 |
+| Cloud SQL `cv-server-db` | **APPLIED but UNUSED** (the app uses Neon). Removal proposed, not done: `cloudsql.tf` |
+| GCS remote state, pinned provider `5.45.2`, committed lock file | **ONLY WRITTEN** (runbook phase 0) |
+| Pool `general` (e2-medium spot, 30 GB disk, own node SA), drain and delete `principal` | **ONLY WRITTEN** (phase 2) |
+| Filestore CSI, Managed Prometheus and kube-state-metrics off; immutable image tags | **ONLY WRITTEN** (phase 1) |
+| NetworkPolicy enforcement (Calico) | **ONLY WRITTEN** (phase 5) |
+| Secret Manager `cv-server-env` + reader GSA bound to one KSA | **ONLY WRITTEN** (phase 3) |
 
-## Decisiones de diseño (y por qué)
+The ordered commands, expected output and rollback for each phase are in
+[`docs/RUNBOOK-gke.md`](../../../docs/RUNBOOK-gke.md). Costs and capacity: [ADR-015](../../../docs/ADR-015-gke-capacity-and-cost.md).
 
-- **Cluster zonal, no regional.** Un cluster regional multiplica el coste del
-  control plane. Para portfolio no aporta nada.
-- **`remove_default_node_pool = true`.** El node pool por defecto no se puede
-  configurar bien; se crea uno propio con autoscaling, `auto_repair` y
-  `auto_upgrade`.
-- **Nodos `spot`.** Hasta ~70% más baratos; aceptable porque el servicio tolera
-  reinicios (2+ réplicas detrás de un Service).
-- **Workload Identity (`GKE_METADATA`).** Los pods asumen una service account de
-  GCP sin ficheros de credenciales. Es la alternativa correcta a meter claves.
-- **`deletion_protection = true`** en cluster y base de datos: evita un
-  `terraform destroy` accidental.
-- **Backend GCS comentado.** El estado local no sirve para equipo/CI; se activa
-  cuando exista el bucket.
+## Files
 
-## Uso
+| File | What |
+|---|---|
+| `versions.tf` | Terraform and provider pins, GCS backend |
+| `main.tf` | APIs, registry, cluster (add-ons, monitoring, network policy), node pools |
+| `iam.tf` | Least-privilege node service account |
+| `secrets.tf` | Secret Manager secret (container only, no values) and its reader identity |
+| `cloudsql.tf` | The unused Cloud SQL instance, behind `cloud_sql_enabled` |
 
-```bash
-# 1. Autenticarse
-gcloud auth application-default login
+## Design decisions
 
-# 2. Configurar variables
-cp terraform.tfvars.example terraform.tfvars   # y editar project_id
+- **Zonal cluster.** One zonal cluster is covered by the GKE free tier; regional is not.
+- **Own node pool**, default pool removed, autoscaling with auto-repair and auto-upgrade.
+- **Spot nodes, at least 2.** Spot is about half the on-demand price here. Two nodes plus 2
+  replicas and a PDB mean that one preemption does not take the API down.
+- **Workload Identity everywhere.** No service-account keys exist: CI uses Workload Identity
+  Federation and External Secrets uses GKE Workload Identity.
+- **Deletion protection.** `deletion_protection = true` on the cluster (provider-side guard).
+  It was `false` until this PR, and this README used to say the opposite.
+- **Values never in state.** Terraform creates the Secret Manager secret, not its versions.
 
-# 3. Validar sin crear nada
-terraform init
-terraform validate
-terraform plan
+## CI checks
 
-# 4. Crear (⚠️ cuesta dinero)
-terraform apply
+`.github/workflows/infra.yml` runs `terraform fmt -check`, `terraform init -backend=false`,
+`terraform validate` and `tflint` (config in `../.tflint.hcl`) on every PR touching `infra/`.
+CI never runs `plan` or `apply`: those need project credentials and stay manual, reviewed steps.
 
-# 5. Apuntar kubectl al cluster
-terraform output -raw get_credentials_command | bash
+## Honest summary (for interviews)
 
-# 6. Construir y subir la imagen
-docker build -t "$(terraform output -raw artifact_registry_url)/cv-server:prod" ../cv-server
-docker push "$(terraform output -raw artifact_registry_url)/cv-server:prod"
+> "I wrote and applied Terraform for a zonal GKE cluster with its own spot node pool and
+> Artifact Registry, using Workload Identity instead of keys. Hardening it (remote state,
+> least-privilege nodes, Secret Manager, network policy) is written, linted and validated
+> in CI, and applied through a step-by-step runbook."
 
-# 7. Desplegar con el chart de Helm
-helm upgrade --install cv-server ../cv-server-helm/cv-server-chart -f ../cv-server-helm/cv-server-chart/values.prod.yaml \
-  --set image.repository="$(terraform output -raw artifact_registry_url)/cv-server"
-
-# 8. Destruir (⚠️ primero quitar deletion_protection)
-terraform destroy
-```
-
-## Coste aproximado (dev)
-
-- Control plane zonal de GKE: gratis (GCP cobra el regional).
-- 1 nodo `e2-small` spot: ~5–10 €/mes.
-- Cloud SQL `db-f1-micro`: ~8–10 €/mes.
-- Artifact Registry: céntimos por GB.
-
-Total orientativo: **< 25 €/mes** si se deja encendido; se puede parar/destruir.
-
-## Honestidad (para entrevista)
-
-> "I wrote the Terraform for my service's infrastructure: a zonal GKE cluster
-> with a dedicated autoscaling node pool, Artifact Registry, and Cloud SQL,
-> using Workload Identity instead of service-account keys. I validated it with
-> `terraform validate` and `plan`; I have not run it at production scale."
-
-## Pendiente
-
-- `terraform init/validate/plan` requieren Terraform y credenciales de GCP.
-- Módulo remoto / workspaces por entorno si crece.
-- Añadir `google_sql_user` + password en Secret Manager (nunca en estado plano).
+Only say the last part is applied once the runbook phases have been run.

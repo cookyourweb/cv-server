@@ -7,6 +7,15 @@
 > API. It does NOT receive user traffic until the panel's `urlApi` change (panel-empleo PR #3)
 > is merged. Render stays the production host until then. Do not claim otherwise.
 
+> **Partly superseded (20 Nov 2026), once the hardening PR is applied** (until then this ADR
+> describes what runs):
+> decision 5, the hand-made `cv-env` Secret, becomes the fallback of [ADR-014](ADR-014-secrets-external-secrets.md);
+> decision 6, deploys, is tightened by [ADR-013](ADR-013-one-source-of-deploys.md);
+> decision 7, `maxSurge: 0`, is replaced by 2 replicas + PDB + surge on bigger nodes ([ADR-015](ADR-015-gke-capacity-and-cost.md)).
+> Two facts found later: the chart's Service was `type: LoadBalancer`, a second public IP
+> serving plain HTTP next to the TLS ingress. And no CI deploy ever succeeded: every revision
+> came from a laptop, and both CI runs failed on a missing `gke-gcloud-auth-plugin`.
+
 ---
 
 ## Context

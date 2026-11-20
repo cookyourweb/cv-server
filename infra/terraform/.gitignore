@@ -1,7 +1,7 @@
-# Terraform state and real variables never go to git
+# Terraform state and real variables never go to git.
+# .terraform.lock.hcl IS committed: it pins the exact provider builds (hashes).
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
 terraform.tfvars
 *.tfvars.free

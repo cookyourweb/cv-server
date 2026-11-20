@@ -1,0 +1,38 @@
+# The GKE release (project cv-server-portfolio, cluster cv-server-cluster).
+# Single source of truth for every deploy: CI and helm/desplegar-manual.sh use
+# this file plus `--set image.tag=<commit SHA>`, nothing else.
+image:
+  repository: europe-west1-docker.pkg.dev/cv-server-portfolio/cv-server/cv-server
+
+ingress:
+  enabled: true
+  className: nginx
+  host: api.cookyourwebai.es
+  tlsSecretName: cv-server-tls
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+networkPolicy:
+  enabled: true
+  egressDenyCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    # servicesIpv4Cidr of cv-server-cluster (gcloud container clusters describe).
+    - 34.118.224.0/20
+
+secrets:
+  # Synced from Secret Manager by External Secrets Operator. The hand-made
+  # `cv-env` Secret (helm/cargar-entorno-gke.sh) stays in the cluster as the
+  # documented fallback: switching back is `--set secrets.envFromSecret=cv-env`.
+  envFromSecret: cv-env-sm
+
+externalSecrets:
+  enabled: true
+  projectID: cv-server-portfolio
+  clusterName: cv-server-cluster
+  clusterLocation: europe-west1-b
+  readerServiceAccount:
+    name: cv-server-secrets
+    gcpServiceAccount: cv-server-secrets@cv-server-portfolio.iam.gserviceaccount.com

@@ -1,0 +1,16 @@
+{{- if and .Values.podDisruptionBudget.enabled (include "cv-server.multiReplica" .) }}
+# Node drains (upgrades, autoscaler, spot replacement by GKE) evict one pod at a
+# time and wait for it to be Ready elsewhere. Only rendered with 2+ replicas:
+# with one pod, minAvailable 1 would block every drain.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cv-server.fullname" . }}
+  labels:
+    {{- include "cv-server.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "cv-server.selectorLabels" . | nindent 6 }}
+{{- end }}

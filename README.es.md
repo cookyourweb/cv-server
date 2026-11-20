@@ -261,6 +261,28 @@ export CORS_ORIGENES=http://localhost:4200
 
 La decisión de diseño completa está en el ADR-003 del repo `buscartrabajo`.
 
+## Despliegue
+
+El tráfico de producción va a **Render**. La misma imagen corre también en **Google Kubernetes
+Engine** ([ADR-012](docs/ADR-012-kubernetes-on-gke.md)), sin tráfico de usuarias hasta que el
+panel cambie su URL de la API.
+
+**Qué está aplicado y qué solo está escrito** (20 nov 2026):
+
+| Pieza | Estado |
+|---|---|
+| Cluster GKE, pool e2-small spot, registro ([`infra/terraform/gcp`](infra/terraform/gcp)) | APLICADO |
+| Ingress NGINX, cert-manager, TLS de `api.cookyourwebai.es` | APLICADO (a mano). Registrado en [`infra/k8s/platform`](infra/k8s/platform) |
+| Release en GKE: 1 réplica, imagen `:814a90b`, entorno desde el Secret manual `cv-env` | APLICADO (revisión 5 de Helm) |
+| PR de endurecimiento: imágenes solo por SHA, ClusterIP + ingress en el chart, 2 réplicas + PDB, pods `restricted`, NetworkPolicy, External Secrets, `helm test` (chart 0.2.0) | SOLO ESCRITO. Probado con `helm template`, `helm lint`, `kubeconform` |
+| Terraform: estado remoto, pool e2-medium, nodos con mínimo privilegio, Secret Manager, Calico, menos add-ons | SOLO ESCRITO. `validate` + `tflint` limpios |
+| CI: despliega solo SHAs de main con tests en verde, Trivy, `--atomic`; workflow de lint de infra; actions fijadas por SHA | SOLO ESCRITO hasta que se fusione |
+| Misma arquitectura en EKS ([`infra/terraform/aws`](infra/terraform/aws)) | Validado, nunca aplicado |
+
+Cómo aplicarlo paso a paso: [`docs/RUNBOOK-gke.md`](docs/RUNBOOK-gke.md). Decisiones: ADR-013
+(un solo origen de despliegues), ADR-014 (secretos), ADR-015 (capacidad y coste), ADR-016
+(token del SSE en la URL, propuesta).
+
 ## Tests
 
 ```bash

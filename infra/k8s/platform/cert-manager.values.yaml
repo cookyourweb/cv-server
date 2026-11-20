@@ -1,0 +1,3 @@
+# cert-manager, release `cert-manager` in namespace `cert-manager`.
+crds:
+  enabled: true # as installed on 19 Nov 2026
