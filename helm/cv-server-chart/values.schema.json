@@ -53,6 +53,27 @@
         "keys": { "type": "object", "additionalProperties": { "type": "string" } }
       }
     },
+    "externalSecrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "projectID": { "type": "string" },
+        "clusterName": { "type": "string" },
+        "clusterLocation": { "type": "string" },
+        "remoteKey": { "type": "string", "minLength": 1 },
+        "targetSecret": { "type": "string", "minLength": 1 },
+        "refreshInterval": { "type": "string" },
+        "readerServiceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "gcpServiceAccount": { "type": "string" }
+          }
+        }
+      }
+    },
     "rollout": {
       "type": "object",
       "additionalProperties": false,

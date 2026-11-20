@@ -38,6 +38,22 @@ secrets:
     # Optional: the pod starts without it (optional: true).
     databaseUrl: database-url
 
+# External Secrets Operator: sync one JSON secret from GCP Secret Manager into
+# the Kubernetes Secret named in `targetSecret` (ADR-014). Needs the ESO CRDs,
+# so it is off by default.
+externalSecrets:
+  enabled: false
+  projectID: ""
+  clusterName: ""
+  clusterLocation: ""
+  remoteKey: cv-server-env
+  targetSecret: cv-env-sm
+  refreshInterval: 1h
+  readerServiceAccount:
+    # Only ESO requests a token for this account; no pod runs as it.
+    name: cv-server-secrets
+    gcpServiceAccount: ""
+
 rollout:
   # Surge first: the new pod must be Ready before an old one goes away.
   maxSurge: 1
