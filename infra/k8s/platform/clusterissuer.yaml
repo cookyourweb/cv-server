@@ -1,0 +1,17 @@
+# The Let's Encrypt issuer applied by hand on 19 Nov 2026, recorded so the
+# cluster can be rebuilt. The contact email is not stored in git:
+#   ACME_EMAIL=<email> envsubst < infra/k8s/platform/clusterissuer.yaml | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ${ACME_EMAIL}
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx

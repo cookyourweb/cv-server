@@ -1,0 +1,14 @@
+# ingress-nginx, release `ingress-nginx` in namespace `ingress-nginx`.
+controller:
+  service:
+    type: LoadBalancer # as installed on 19 Nov 2026
+  config:
+    # Access log WITHOUT the query string (ADR-016). The default format logs
+    # "$request", which includes ?token=<Google JWT> on the SSE route. $uri is
+    # the path only. Everything else matches the upstream default format.
+    log-format-upstream: >-
+      $remote_addr - $remote_user [$time_local] "$request_method $uri $server_protocol"
+      $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length
+      $request_time [$proxy_upstream_name] [$proxy_alternative_upstream_name]
+      $upstream_addr $upstream_response_length $upstream_response_time
+      $upstream_status $req_id
