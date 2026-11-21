@@ -64,7 +64,8 @@ jobs:
             --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
             --set image.tag=${{ github.sha }} \
             --set image.pullPolicy=Always \
-            --set service.type=LoadBalancer
+            --set service.type=LoadBalancer \
+            --set secrets.envFromSecret=cv-env
 
       # ── Verificación post-deploy ───────────────────────────────────────────
       - name: Verificar /health

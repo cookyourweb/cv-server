@@ -1,0 +1,6 @@
+region            = "us-east-1"
+project_name      = "cv-server"
+env               = "demo"
+node_instance_type = "t3.small"
+db_instance_class  = "db.t3.micro"
+# db_password = "TU_PASSWORD_SEGURA"  # mejor: export TF_VAR_db_password="..."

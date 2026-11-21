@@ -206,6 +206,9 @@ Documented as ADRs in [`docs/`](docs/):
 - **[ADR-010](docs/ADR-010-owner-paid-generation-quota.md)**. Invited users generate CVs and
   letters on the owner's keys: 8 applications per user and UTC month (CV 0.7 + letter 0.3) and a
   20 EUR monthly cap, both reserved before any model is called; refusals are 429 with `motivo`.
+- **[ADR-012](docs/ADR-012-kubernetes-on-gke.md)**. A second home on GKE: Terraform, a Helm
+  chart with HPA and hardened pods, Let's Encrypt TLS, keyless CI/CD with Workload Identity
+  Federation and one env Secret. Render keeps production traffic until the panel switches.
 
 > **Authentication is covered in ADR-003 of the `buscartrabajo` repo**
 > (`docs/adr/ADR-003-authentication.md`), which is not the ADR-003 above.
@@ -478,6 +481,31 @@ Then point `DATABASE_URL_PRUEBAS` or a local check at that branch and compare ro
 The CV masters stay encrypted inside the dump: you also need the application keyring
 (`CV_CLAVES`) to read them. Delete `restore.dump` afterwards.
 
+## Deployment
+
+Production traffic runs on **Render**. The same image ran on **Google Kubernetes Engine**, fully
+configured and validated end to end ([evidence](docs/evidence/gke-2026-11-20.md)), as described in
+[ADR-012](docs/ADR-012-kubernetes-on-gke.md). It is **switched off** to save cost and comes back in
+about 15 minutes with [RUNBOOK-gke-on-off](docs/RUNBOOK-gke-on-off.md):
+
+```
+GitHub push (main)
+  └─ Actions: tests ─▶ deploy (Workload Identity Federation, no stored keys)
+        └─ docker build ─▶ Artifact Registry ─▶ helm upgrade ─▶ GKE
+                                                     │
+              https://api.cookyourwebai.es ─▶ NGINX ingress + Let's Encrypt
+                                                     └─▶ Service ─▶ Pod(s) (HPA 1-5)
+                                                            └─ env from Secret cv-env
+```
+
+| Piece | Where |
+|---|---|
+| Cluster, node pool, registry (Terraform, applied) | [`infra/terraform/gcp`](infra/terraform/gcp) |
+| Same architecture on EKS (Terraform, validated, not applied) | [`infra/terraform/aws`](infra/terraform/aws) |
+| Helm chart: Deployment, Service, HPA, probes, hardening | [`helm/cv-server-chart`](helm/cv-server-chart) |
+| Load the real config into the cluster | [`helm/cargar-entorno-gke.sh`](helm/cargar-entorno-gke.sh) |
+| Keyless deploy pipeline | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) |
+
 ## Pre-production checklist
 
 Environment variables Render MUST have before deploying a change that needs them. A
@@ -515,7 +543,8 @@ prompted it**, with a date, not a hypothetical case.
 ## Stack
 
 `Python` · `Flask` and `FastAPI` · `Pydantic` · `Claude API` · `Notion API` ·
-`Google Drive API` · `python-docx` · `pytest` · `Render`
+`Google Drive API` · `python-docx` · `pytest` · `Docker` · `Kubernetes (GKE)` · `Helm` ·
+`Terraform` · `GitHub Actions` · `Render`
 
 ## License
 

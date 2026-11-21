@@ -1,0 +1,7 @@
+# Terraform state and real variables never go to git
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars.free
