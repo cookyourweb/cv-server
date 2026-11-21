@@ -101,3 +101,4 @@ docs/privado/
 
 # Local analysis output of the CV master checker (contains CV text).
 data/
+.claude/
