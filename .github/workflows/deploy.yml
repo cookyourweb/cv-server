@@ -38,6 +38,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Configurar kubectl
         run: gcloud container clusters get-credentials ${{ env.CLUSTER_NAME }} --zone europe-west1-b --project ${{ env.PROJECT_ID }}
@@ -64,8 +65,7 @@ jobs:
             --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
             --set image.tag=${{ github.sha }} \
             --set image.pullPolicy=Always \
-            --set service.type=LoadBalancer \
-            --set secrets.envFromSecret=cv-env
+            --set service.type=LoadBalancer
 
       # ── Verificación post-deploy ───────────────────────────────────────────
       - name: Verificar /health
